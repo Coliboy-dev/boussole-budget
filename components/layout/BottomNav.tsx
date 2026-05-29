@@ -15,6 +15,7 @@ const moreNavItems = [
   { href: '/mediation', label: 'Médiation', icon: '🤝' },
   { href: '/enfants', label: 'Enfants', icon: '👨‍👧‍👦' },
   { href: '/objectifs', label: 'Objectifs', icon: '🎯' },
+  { href: '/projection', label: 'Projection', icon: '📅' },
   { href: '/conseils', label: 'Conseils', icon: '💡' },
   { href: '/documents', label: 'Documents', icon: '📄' },
 ];
@@ -39,7 +40,7 @@ export default function BottomNav() {
       {/* More menu panel */}
       {showMore && (
         <div className="fixed bottom-20 left-0 right-0 z-50 max-w-2xl mx-auto px-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-2 grid grid-cols-5 gap-1">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-2 grid grid-cols-3 gap-1">
             {moreNavItems.map((item) => (
               <Link
                 key={item.href}
