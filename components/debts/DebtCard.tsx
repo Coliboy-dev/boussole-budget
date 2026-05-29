@@ -1,3 +1,5 @@
+'use client';
+
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import ProgressBar from '@/components/ui/ProgressBar';
@@ -6,9 +8,14 @@ import type { Debt, DebtStatus } from '@/lib/types';
 
 interface DebtCardProps {
   debt: Debt;
+  onEdit?: (debt: Debt) => void;
+  onDelete?: (id: string) => void;
 }
 
-const statusConfig: Record<DebtStatus, { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'accent' }> = {
+const statusConfig: Record<
+  DebtStatus,
+  { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'accent' }
+> = {
   to_pay: { label: 'À rembourser', variant: 'neutral' },
   late: { label: 'En retard', variant: 'danger' },
   contested: { label: 'Contestée', variant: 'warning' },
@@ -18,7 +25,7 @@ const statusConfig: Record<DebtStatus, { label: string; variant: 'success' | 'wa
   completed: { label: 'Remboursée', variant: 'success' },
 };
 
-export default function DebtCard({ debt }: DebtCardProps) {
+export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
   const status = statusConfig[debt.status];
   const progressPercent =
     debt.initialAmount > 0
@@ -29,10 +36,10 @@ export default function DebtCard({ debt }: DebtCardProps) {
     debt.status === 'completed'
       ? 'success'
       : debt.status === 'late'
-      ? 'danger'
-      : debt.status === 'in_mediation'
-      ? 'accent'
-      : 'primary';
+        ? 'danger'
+        : debt.status === 'in_mediation'
+          ? 'accent'
+          : 'primary';
 
   return (
     <Card>
@@ -41,12 +48,8 @@ export default function DebtCard({ debt }: DebtCardProps) {
           <p className="text-sm font-bold text-gray-800 truncate">{debt.creditor}</p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Badge variant={status.variant}>{status.label}</Badge>
-            {debt.type === 'shared' && (
-              <Badge variant="info">Partagée</Badge>
-            )}
-            {debt.isMediationIncluded && (
-              <Badge variant="accent">Médiation</Badge>
-            )}
+            {debt.type === 'shared' && <Badge variant="info">Partagée</Badge>}
+            {debt.isMediationIncluded && <Badge variant="accent">Médiation</Badge>}
           </div>
         </div>
         <div className="text-right flex-shrink-0">
@@ -55,7 +58,6 @@ export default function DebtCard({ debt }: DebtCardProps) {
         </div>
       </div>
 
-      {/* Progress */}
       {debt.initialAmount > 0 && (
         <div className="mb-3">
           <div className="flex justify-between text-xs text-gray-400 mb-1">
@@ -66,24 +68,42 @@ export default function DebtCard({ debt }: DebtCardProps) {
         </div>
       )}
 
-      {/* Footer info */}
       <div className="flex items-center justify-between text-xs text-gray-500 flex-wrap gap-2">
         {debt.monthlyPayment > 0 ? (
-          <span className="font-medium">
-            💳 {formatCurrency(debt.monthlyPayment)}/mois
-          </span>
+          <span className="font-medium">💳 {formatCurrency(debt.monthlyPayment)}/mois</span>
         ) : (
           <span className="text-gray-400">Aucun paiement mensuel</span>
         )}
-        {debt.nextDueDate && (
-          <span>Prochaine: {formatShortDate(debt.nextDueDate)}</span>
-        )}
+        {debt.nextDueDate && <span>Prochaine: {formatShortDate(debt.nextDueDate)}</span>}
       </div>
 
       {debt.notes && (
         <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-50 italic">
           {debt.notes}
         </p>
+      )}
+
+      {(onEdit || onDelete) && (
+        <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
+          {onEdit && (
+            <button
+              onClick={() => onEdit(debt)}
+              className="text-xs text-teal-600 font-semibold hover:underline"
+            >
+              Modifier
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={() => {
+                if (confirm('Supprimer cette dette ?')) onDelete(debt.id);
+              }}
+              className="text-xs text-red-400 font-semibold hover:underline"
+            >
+              Supprimer
+            </button>
+          )}
+        </div>
       )}
     </Card>
   );

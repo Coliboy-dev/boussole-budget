@@ -1,3 +1,5 @@
+'use client';
+
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
@@ -5,6 +7,8 @@ import type { Expense, ExpenseCategory } from '@/lib/types';
 
 interface ExpenseListProps {
   expenses: Expense[];
+  onEdit?: (expense: Expense) => void;
+  onDelete?: (id: string) => void;
 }
 
 const categoryConfig: Record<ExpenseCategory, { label: string; icon: string; color: string }> = {
@@ -20,18 +24,25 @@ const categoryConfig: Record<ExpenseCategory, { label: string; icon: string; col
   other: { label: 'Autre', icon: '💸', color: 'bg-gray-100' },
 };
 
-// Group by category
 function groupByCategory(expenses: Expense[]) {
   const groups: Record<string, Expense[]> = {};
   expenses.forEach((expense) => {
-    const cat = expense.category;
-    if (!groups[cat]) groups[cat] = [];
-    groups[cat].push(expense);
+    if (!groups[expense.category]) groups[expense.category] = [];
+    groups[expense.category].push(expense);
   });
   return groups;
 }
 
-export default function ExpenseList({ expenses }: ExpenseListProps) {
+export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListProps) {
+  if (expenses.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-400">
+        <p className="text-4xl mb-2">📋</p>
+        <p className="text-sm">Aucune charge enregistrée.</p>
+      </div>
+    );
+  }
+
   const groups = groupByCategory(expenses);
 
   return (
@@ -52,7 +63,9 @@ export default function ExpenseList({ expenses }: ExpenseListProps) {
             <div className="space-y-2">
               {items.map((expense) => (
                 <Card key={expense.id} className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${config.color}`}>
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${config.color}`}
+                  >
                     {config.icon}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -73,12 +86,32 @@ export default function ExpenseList({ expenses }: ExpenseListProps) {
                       ) : (
                         <Badge variant="neutral">À payer</Badge>
                       )}
-                      {expense.isRecurring && (
-                        <Badge variant="neutral">Récurrent</Badge>
-                      )}
+                      {expense.isRecurring && <Badge variant="neutral">Récurrent</Badge>}
                     </div>
                     {expense.notes && (
                       <p className="text-xs text-gray-400 mt-0.5 italic">{expense.notes}</p>
+                    )}
+                    {(onEdit || onDelete) && (
+                      <div className="flex gap-2 mt-1.5 pt-1.5 border-t border-gray-50">
+                        {onEdit && (
+                          <button
+                            onClick={() => onEdit(expense)}
+                            className="text-xs text-teal-600 font-semibold hover:underline"
+                          >
+                            Modifier
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button
+                            onClick={() => {
+                              if (confirm('Supprimer cette charge ?')) onDelete(expense.id);
+                            }}
+                            className="text-xs text-red-400 font-semibold hover:underline"
+                          >
+                            Supprimer
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </Card>
