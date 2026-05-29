@@ -1,0 +1,195 @@
+// User profile
+export interface UserProfile {
+  id: string;
+  firstName: string;
+  situation: 'separated' | 'single' | 'divorced' | 'other';
+  hasChildren: boolean;
+  numberOfChildren?: number;
+  isInMediation: boolean;
+  safetyReserve: number; // default 50€
+  currency: string; // default 'EUR'
+}
+
+// Income types
+export type IncomeType = 'mutual_insurance' | 'allocation' | 'alimony' | 'salary' | 'freelance' | 'other';
+export type Frequency = 'monthly' | 'weekly' | 'bi_monthly' | 'quarterly' | 'annual' | 'one_time';
+
+export interface Income {
+  id: string;
+  label: string;
+  type: IncomeType;
+  amount: number;
+  frequency: Frequency;
+  expectedDate?: string; // ISO date
+  isConfirmed: boolean;
+  notes?: string;
+}
+
+// Expense types
+export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions' | 'other';
+
+export interface Expense {
+  id: string;
+  label: string;
+  category: ExpenseCategory;
+  amount: number;
+  frequency: Frequency;
+  dueDate?: string; // ISO date for next occurrence
+  isPaid: boolean;
+  isRecurring: boolean;
+  notes?: string;
+}
+
+// Debt types
+export type DebtStatus = 'to_pay' | 'late' | 'contested' | 'in_mediation' | 'plan_accepted' | 'suspended' | 'completed';
+export type DebtType = 'personal' | 'shared';
+
+export interface Debt {
+  id: string;
+  creditor: string;
+  type: DebtType;
+  initialAmount: number;
+  remainingAmount: number;
+  monthlyPayment: number;
+  status: DebtStatus;
+  nextDueDate?: string; // ISO date
+  notes?: string;
+  isMediationIncluded: boolean;
+}
+
+// Mediation
+export type MediationStepStatus = 'pending' | 'done' | 'in_progress' | 'cancelled';
+
+export interface MediationStep {
+  id: string;
+  date: string; // ISO date
+  title: string;
+  description: string;
+  status: MediationStepStatus;
+  creditorName?: string;
+  documentRequired?: string;
+  notes?: string;
+}
+
+export interface MediationFile {
+  mediatorName?: string;
+  mediatorOrganization?: string;
+  startDate?: string;
+  nextAppointment?: string;
+  status: 'not_started' | 'in_progress' | 'plan_proposed' | 'plan_accepted' | 'completed' | 'failed';
+  steps: MediationStep[];
+  questionsForMediator: string[];
+  proposedPlan?: {
+    totalAmount: number;
+    monthlyPayment: number;
+    duration: number; // months
+    acceptedCreditors: string[];
+    refusedCreditors: string[];
+  };
+}
+
+// Child expenses
+export type ChildExpenseStatus = 'paid' | 'pending' | 'reimbursed' | 'receipt_sent';
+export type ChildExpenseCategory = 'school' | 'clothing' | 'activities' | 'health' | 'transport' | 'other';
+
+export interface ChildExpense {
+  id: string;
+  childName?: string;
+  label: string;
+  category: ChildExpenseCategory;
+  totalAmount: number;
+  paidByUser: number;
+  shareAmount: number; // amount to be shared / reimbursed
+  status: ChildExpenseStatus;
+  date: string; // ISO date
+  notes?: string;
+  receiptSent: boolean;
+}
+
+// Goals
+export type GoalStatus = 'realistic' | 'fragile' | 'to_postpone';
+
+export interface Goal {
+  id: string;
+  label: string;
+  targetAmount: number;
+  savedAmount: number;
+  targetDate?: string; // ISO date
+  weeklyContribution?: number;
+  monthlyContribution?: number;
+  status: GoalStatus;
+  notes?: string;
+}
+
+// Documents (mocked for MVP)
+export type DocumentCategory = 'invoice' | 'letter' | 'payment_proof' | 'mediation' | 'income_proof' | 'child_related' | 'other';
+
+export interface DocumentItem {
+  id: string;
+  label: string;
+  category: DocumentCategory;
+  date: string; // ISO date
+  fileUrl?: string; // future
+  notes?: string;
+  isConfidential: boolean;
+}
+
+// Budget summary (computed)
+export interface BudgetSummary {
+  currentBalance: number;
+  totalMonthlyIncome: number;
+  totalMonthlyExpenses: number;
+  totalMonthlyDebts: number;
+  totalMonthlyChildExpenses: number;
+  safetyReserve: number;
+  trueAvailable: number; // vraiDisponible
+  savingsCapacity: number;
+  riskLevel: 'safe' | 'fragile' | 'danger';
+  riskScore: number; // 0-100
+}
+
+// Advice
+export interface AdviceItem {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'positive' | 'action';
+  priority: number; // 1 = high
+  requiresMediatorValidation?: boolean;
+}
+
+// Future Open Banking (architecture placeholder)
+export interface FutureBankConnection {
+  id: string;
+  bankName: string;
+  iban?: string;
+  consentGiven: boolean;
+  consentExpiresAt?: string; // ISO date
+  lastSyncAt?: string; // ISO date
+  provider?: 'gocardless' | 'powens' | 'tink' | 'bridge' | 'other';
+  // FUTURE: actual connection not implemented in MVP
+}
+
+export interface FutureBankTransaction {
+  id: string;
+  bankConnectionId: string;
+  date: string; // ISO date
+  description: string;
+  amount: number; // negative = debit
+  category?: ExpenseCategory;
+  matchedDebtId?: string;
+  matchedExpenseId?: string;
+  isRecognized: boolean;
+  // FUTURE: not used in MVP, placeholder for PSD2/Open Banking integration
+}
+
+// Reminder
+export interface Reminder {
+  id: string;
+  label: string;
+  dueDate: string; // ISO date
+  amount?: number;
+  type: 'expense' | 'debt' | 'mediation' | 'child' | 'income';
+  refId?: string;
+  isUrgent: boolean;
+}
