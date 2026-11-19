@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context/AppContext';
 import SummaryCard from '@/components/dashboard/SummaryCard';
+import BudgetOnboarding, { OnboardingResult } from '@/components/onboarding/BudgetOnboarding';
 import BudgetChart from '@/components/dashboard/BudgetChart';
 import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
@@ -17,6 +18,19 @@ import { isLocalDate } from '@/lib/local-date';
 import { fromCents, toCents } from '@/lib/money';
 
 export default function DashboardPage() {
+  const { isBudgetLoading, needsOnboarding } = useApp();
+  const [showFirstResult, setShowFirstResult] = useState(false);
+
+  if (isBudgetLoading) {
+    return <p role="status" className="px-4 py-6 text-sm text-gray-600">Chargement du budget…</p>;
+  }
+  if (showFirstResult) return <OnboardingResult onContinue={() => setShowFirstResult(false)} />;
+  if (needsOnboarding) return <BudgetOnboarding onComplete={() => setShowFirstResult(true)} />;
+
+  return <SavedBudgetDashboard />;
+}
+
+function SavedBudgetDashboard() {
   const {
     summary, advice, userProfile, expenses, debts, currentBalance, setBalance,
     balanceDate, storageBlocked, today, updateProfile,
@@ -191,7 +205,7 @@ export default function DashboardPage() {
       )}
 
       {/* Summary cards */}
-      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments} />
+      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments} hasRecordedBalance={Boolean(balanceDate)} />
 
       {/* Budget breakdown */}
       <BudgetChart summary={summary} />

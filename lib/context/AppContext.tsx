@@ -29,9 +29,10 @@ import {
 } from '@/lib/budget-state';
 import { todayInBrussels } from '@/lib/local-date';
 import { fromCents, toCents } from '@/lib/money';
+import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
 
 type RuntimeState = AppState & {
-  storageStatus: 'loading' | 'ready' | 'unreadable' | 'unsaved';
+  storageStatus: 'loading' | 'fresh' | 'ready' | 'unreadable' | 'unsaved';
   storageRevision: number;
 };
 
@@ -85,6 +86,9 @@ function uid(): string {
 function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
   if (action.type === 'HYDRATE') return action.payload;
   if (state.storageStatus === 'loading') return state;
+
+  // Saisir des données depuis un autre écran démarre également le budget.
+  if (state.storageStatus === 'fresh') state = { ...state, storageStatus: 'ready' };
 
   switch (action.type) {
     case 'SAVE_FAILED':
@@ -193,9 +197,11 @@ export interface AppContextType extends AppState {
   today: string;
   storageBlocked: boolean;
   isBudgetLoading: boolean;
+  needsOnboarding: boolean;
   canExportBudget: boolean;
   exportBudget: () => string;
   restoreBudget: (budget: AppState) => void;
+  finishOnboarding: (input?: FirstBudgetInput) => void;
   setBalance: (amount: number) => void;
   updateProfile: (data: Partial<UserProfile>) => void;
   addIncome: (income: Omit<Income, 'id'>) => void;
@@ -236,7 +242,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const { current, legacy } = snapshot;
       const budget = current !== null ? deserializeBudget(current)
         : legacy !== null ? migrateLegacyBudget(legacy, emptyBudgetState, todayInBrussels()) : emptyBudgetState;
-      const loaded: RuntimeState = { ...budget, storageStatus: 'ready', storageRevision: 0 };
+      const loaded: RuntimeState = {
+        ...budget,
+        storageStatus: current === null && legacy === null ? 'fresh' : 'ready',
+        storageRevision: 0,
+      };
       persistence.current = { snapshot, saved: loaded, needsMigration: legacy !== null };
       dispatch({ type: 'HYDRATE', payload: loaded });
     } catch {
@@ -262,7 +272,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state]);
 
   const { storageStatus, storageRevision, ...budget } = state;
-  const canExportBudget = storageStatus === 'ready' || storageStatus === 'unsaved';
+  const canExportBudget = storageStatus === 'fresh' || storageStatus === 'ready' || storageStatus === 'unsaved';
 
   function exportBudget(): string {
     if (!canExportBudget) throw new Error('Le budget doit être chargé pour être exporté.');
@@ -286,6 +296,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'HYDRATE', payload: restored });
   }
 
+  function finishOnboarding(input?: FirstBudgetInput): void {
+    if (storageStatus !== 'fresh') throw new Error('Un budget existe déjà sur cet appareil.');
+    restoreBudget(input ? createFirstBudget(budget, input, today) : budget);
+  }
+
   const summary = calculateBudgetSummary(
     state.currentBalance,
     state.incomes,
@@ -304,9 +319,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     today,
     storageBlocked: storageStatus === 'unreadable' || storageStatus === 'unsaved',
     isBudgetLoading: storageStatus === 'loading',
+    needsOnboarding: storageStatus === 'fresh',
     canExportBudget,
     exportBudget,
     restoreBudget,
+    finishOnboarding,
     setBalance: (amount) => dispatch({ type: 'SET_BALANCE', payload: { amount, today } }),
     updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
     addIncome: (income) => dispatch({ type: 'ADD_INCOME', payload: income }),

@@ -39,7 +39,9 @@ Le disponible correspond au plus bas des soldes projetés en fin de journée sur
 
 ## Première ouverture et conseils
 
-Un nouveau navigateur démarre avec un budget vide. Le tableau de bord permet de régler la réserve de sécurité et d'ouvrir la démo en lecture seule. Un budget déjà enregistré est chargé avec ses propres données. Les conseils du tableau de bord et de la page Conseils utilisent ce budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
+Un nouveau navigateur propose trois questions sur le solde bancaire, la prochaine rentrée certaine et les factures à payer. Le solde et les échéances saisies sont enregistrés ensemble, puis le premier vrai disponible s’affiche avec le détail du calcul. Le revenu et les factures saisis sont ponctuels. Un budget déjà enregistré ou restauré ouvre directement le tableau de bord. La démo en lecture seule et la restauration sont accessibles dès le premier écran.
+
+Le tableau de bord permet de régler la réserve de sécurité. Les conseils utilisent les données du budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
 
 ## Sauvegarde du budget
 

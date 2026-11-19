@@ -33,6 +33,7 @@ import {
   mockUser,
 } from '../../lib/mock-data.ts';
 import { buildProjection } from '../../lib/projection.ts';
+import { createFirstBudget, parseAmountInput } from '../../lib/onboarding.ts';
 
 process.env.TZ = 'Europe/Brussels';
 
@@ -418,6 +419,61 @@ test('Le premier budget reste vide, y compris après enregistrement', () => {
   assert.deepEqual(blank.documents, []);
   assert.deepEqual(blank.mediationFile.steps, []);
   assert.deepEqual(generateAdvice(summary, blank.incomes, blank.debts), []);
+});
+
+test('Les montants saisis au démarrage acceptent la virgule, les centimes et les découverts', () => {
+  assert.equal(parseAmountInput(' 1\u202f234,56 '), 1234.56);
+  assert.equal(parseAmountInput('-12,50'), -12.5);
+  assert.equal(parseAmountInput('12.50'), 12.5);
+  for (const invalid of ['', '1,234', '1 2,00', '1e3', '10 euros']) {
+    assert.equal(Number.isNaN(parseAmountInput(invalid)), true);
+  }
+});
+
+test('Le premier budget conserve les dates et calcule le vrai disponible avant le prochain versement', () => {
+  const today = '2026-11-19';
+  const budget = createFirstBudget(emptyBudgetState, {
+    balance: 800,
+    income: { amount: 1000, date: '2026-11-25' },
+    bills: [
+      { label: 'Loyer', amount: 300, date: '2026-11-20' },
+      { label: 'Électricité', amount: 50, date: '2026-11-21' },
+    ],
+  }, today);
+  const restored = deserializeBudget(serializeBudget(budget));
+  const summary = calculateBudgetSummary(
+    restored.currentBalance, restored.incomes, restored.expenses, restored.debts, restored.childExpenses,
+    restored.userProfile.safetyReserve, restored.goals, today,
+  );
+
+  assert.equal(restored.balanceDate, today);
+  assert.equal(restored.incomes[0].isConfirmed, true);
+  assert.equal(restored.incomes[0].frequency, 'one_time');
+  assert.deepEqual(restored.expenses.map(({ frequency, dueDate }) => [frequency, dueDate]), [
+    ['one_time', '2026-11-20'], ['one_time', '2026-11-21'],
+  ]);
+  assert.equal(summary.availableForecast.date, '2026-11-21');
+  assert.equal(summary.trueAvailable, 400);
+  assert.deepEqual(emptyBudgetState.incomes, []);
+  assert.deepEqual(emptyBudgetState.expenses, []);
+});
+
+test('Le démarrage accepte un solde nul sans échéances et refuse une saisie incomplète', () => {
+  const today = '2026-11-19';
+  const input = { balance: 0, bills: [] };
+  const budget = createFirstBudget(emptyBudgetState, input, today);
+  assert.equal(budget.currentBalance, 0);
+  assert.equal(budget.balanceDate, today);
+  assert.deepEqual(budget.incomes, []);
+  assert.deepEqual(budget.expenses, []);
+  assert.throws(
+    () => createFirstBudget(emptyBudgetState, { ...input, income: { amount: 100, date: '2026-11-18' } }, today),
+    /prochaine rentrée/,
+  );
+  assert.throws(
+    () => createFirstBudget(emptyBudgetState, { ...input, bills: [{ label: '', amount: 20, date: today }] }, today),
+    /tes factures/,
+  );
 });
 
 test('Une charge ancrée au 31 mai revient en juin, juillet et août sans dériver', () => {

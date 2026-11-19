@@ -5,6 +5,7 @@ import type { BudgetSummary } from '@/lib/types';
 interface SummaryCardProps {
   summary: BudgetSummary;
   hasUndatedPayments: boolean;
+  hasRecordedBalance?: boolean;
 }
 
 const riskConfig = {
@@ -31,7 +32,7 @@ const riskConfig = {
   },
 };
 
-export default function SummaryCard({ summary, hasUndatedPayments }: SummaryCardProps) {
+export default function SummaryCard({ summary, hasUndatedPayments, hasRecordedBalance = false }: SummaryCardProps) {
   const risk = riskConfig[summary.riskLevel];
   const forecast = summary.availableForecast;
   const causes = forecast.causes.slice(0, 2).join(', ');
@@ -51,7 +52,9 @@ export default function SummaryCard({ summary, hasUndatedPayments }: SummaryCard
               {formatCurrency(summary.trueAvailable)}
             </p>
             {summary.emptyBudget ? (
-              <p className="text-xs text-gray-500 mt-1">Saisis ton solde et tes échéances pour obtenir la projection.</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {hasRecordedBalance ? 'Aucune échéance saisie pour l’instant.' : 'Saisis ton solde et tes échéances pour obtenir la projection.'}
+              </p>
             ) : (
               <p className="text-xs text-gray-500 mt-1">
                 Point bas sur {forecast.horizon} jours le {formatDate(forecast.date)} à{' '}
