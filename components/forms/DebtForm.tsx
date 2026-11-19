@@ -165,8 +165,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
 
       {(form.status === 'contested' || form.status === 'in_mediation') && (
         <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2 mb-4">
-          ⚠️ Pour toute action sur une dette en médiation ou contestée, valide d&apos;abord avec ton
-          médiateur ou le CPAS.
+          Renseigne les montants et les dates du plan de remboursement lorsqu&apos;ils sont connus.
         </p>
       )}
 

@@ -12,12 +12,10 @@ const mainNavItems = [
 ];
 
 const moreNavItems = [
-  { href: '/mediation', label: 'Médiation', icon: '🤝' },
   { href: '/enfants', label: 'Enfants', icon: '👨‍👧‍👦' },
   { href: '/objectifs', label: 'Objectifs', icon: '🎯' },
   { href: '/projection', label: 'Projection', icon: '📅' },
   { href: '/conseils', label: 'Conseils', icon: '💡' },
-  { href: '/documents', label: 'Documents', icon: '📄' },
 ];
 
 export default function BottomNav() {

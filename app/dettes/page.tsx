@@ -72,8 +72,7 @@ export default function DettesPage() {
           <AlertBanner variant="danger" title="Dettes en retard">
             {lateDebts.length === 1
               ? 'Une dette est en retard de paiement.'
-              : `${lateDebts.length} dettes sont en retard.`}{' '}
-            Contacte ton médiateur avant d&apos;agir seul(e).
+              : `${lateDebts.length} dettes sont en retard.`}
           </AlertBanner>
         )}
 

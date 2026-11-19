@@ -10,16 +10,19 @@ import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import AlertBanner from '@/components/ui/AlertBanner';
 import Card from '@/components/ui/Card';
 import { getUpcomingReminders, formatCurrency, formatDate } from '@/lib/budget-calculations';
-import { generateAdvice } from '@/lib/advice-engine';
 import { isLocalDate } from '@/lib/local-date';
+import { fromCents, toCents } from '@/lib/money';
 
 export default function DashboardPage() {
-  const { summary, userProfile, expenses, debts, mediationFile, currentBalance, setBalance, balanceDate, storageBlocked, today } = useApp();
+  const {
+    summary, advice, userProfile, expenses, debts, currentBalance, setBalance,
+    balanceDate, storageBlocked, today, updateProfile,
+  } = useApp();
   const [editingBalance, setEditingBalance] = useState(false);
   const [balanceInput, setBalanceInput] = useState('');
+  const firstName = userProfile.firstName?.trim();
 
-  const reminders = getUpcomingReminders(expenses, debts, mediationFile.steps, today);
-  const advice = summary.emptyBudget ? [] : generateAdvice(summary, debts, mediationFile, today);
+  const reminders = getUpcomingReminders(expenses, debts, [], today);
   const hasUndatedPayments = expenses.some((expense) => !expense.isPaid && !isLocalDate(expense.dueDate))
     || debts.some((debt) => debt.monthlyPayment > 0 && debt.remainingAmount > 0
       && debt.status !== 'suspended' && debt.status !== 'completed' && debt.status !== 'late'
@@ -37,13 +40,20 @@ export default function DashboardPage() {
     setEditingBalance(true);
   }
 
+  function handleReserveSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = String(new FormData(event.currentTarget).get('reserve') ?? '');
+    const cents = toCents(Number(value));
+    if (value === '' || !Number.isSafeInteger(cents) || cents < 0) return;
+    updateProfile({ safetyReserve: fromCents(cents) });
+  }
+
   const quickLinks = [
     { href: '/revenus', label: 'Revenus', icon: '💰' },
     { href: '/charges', label: 'Charges', icon: '📋' },
     { href: '/dettes', label: 'Dettes', icon: '💳' },
-    { href: '/mediation', label: 'Médiation', icon: '🤝' },
     { href: '/objectifs', label: 'Objectifs', icon: '🎯' },
-    { href: '/documents', label: 'Documents', icon: '📄' },
+    { href: '/conseils', label: 'Conseils', icon: '💡' },
   ];
 
   return (
@@ -52,7 +62,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-800">
-            Bonjour {userProfile.firstName} 👋
+            {firstName ? `Bonjour ${firstName}` : 'Bonjour'} 👋
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Voici ta situation financière</p>
         </div>
@@ -116,10 +126,39 @@ export default function DashboardPage() {
         </p>
       </Card>
 
+      <Card className="space-y-2">
+        <details>
+          <summary className="cursor-pointer text-sm font-medium text-gray-700">
+            Réserve de sécurité · {formatCurrency(userProfile.safetyReserve)}
+          </summary>
+          <form onSubmit={handleReserveSubmit} className="mt-3 flex flex-wrap items-end gap-2">
+            <label className="text-xs font-medium text-gray-700">
+              Montant de la réserve (€)
+              <input
+                key={userProfile.safetyReserve}
+                name="reserve"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                defaultValue={userProfile.safetyReserve}
+                className="mt-1 block w-36 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <button type="submit" className="rounded-lg bg-teal-700 px-3 py-2 text-xs font-medium text-white">
+              Enregistrer la réserve
+            </button>
+          </form>
+        </details>
+        <Link href="/demo" prefetch={false} className="text-xs font-medium text-teal-700 underline">
+          Voir un budget de démonstration
+        </Link>
+      </Card>
+
       {/* Alert banners */}
       {summary.riskLevel === 'danger' && (
         <AlertBanner variant="danger" title="Situation critique">
-          Ton budget est en déficit ce mois-ci. Contacte ton médiateur dès que possible.
+          Le solde prévisionnel passe sous zéro sur la période.
         </AlertBanner>
       )}
       {summary.riskLevel === 'fragile' && (
@@ -157,15 +196,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Mediation alert */}
-      {userProfile.isInMediation && mediationFile.nextAppointment && (
-        <AlertBanner variant="info" title="Médiation en cours">
-          Prochain rendez-vous avec {mediationFile.mediatorName || 'ton médiateur'} prévu.{' '}
-          <Link href="/mediation" className="underline font-medium">
-            Voir le dossier →
-          </Link>
-        </AlertBanner>
-      )}
     </div>
   );
 }

@@ -19,6 +19,26 @@ export interface AppState {
   documents: DocumentItem[];
 }
 
+export const emptyBudgetState: AppState = {
+  currentBalance: 0,
+  userProfile: {
+    id: 'local',
+    firstName: '',
+    situation: 'other',
+    hasChildren: false,
+    isInMediation: false,
+    safetyReserve: 50,
+    currency: 'EUR',
+  },
+  incomes: [],
+  expenses: [],
+  debts: [],
+  childExpenses: [],
+  goals: [],
+  mediationFile: { status: 'not_started', steps: [], questionsForMediator: [] },
+  documents: [],
+};
+
 function convertAmounts(state: AppState, convert: (amount: number) => number): AppState {
   const plan = state.mediationFile.proposedPlan;
   return {

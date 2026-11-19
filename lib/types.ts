@@ -171,7 +171,6 @@ export interface AdviceItem {
   message: string;
   type: 'info' | 'warning' | 'positive' | 'action';
   priority: number; // 1 = high
-  requiresMediatorValidation?: boolean;
 }
 
 // Future Open Banking (architecture placeholder)

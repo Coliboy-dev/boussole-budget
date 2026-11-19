@@ -12,6 +12,7 @@ import {
 import {
   cancelExpenseOccurrence,
   deserializeBudget,
+  emptyBudgetState,
   migrateLegacyBudget,
   recordPayment,
   serializeBudget,
@@ -175,7 +176,7 @@ test('S6 — la capacité d’épargne est fondée sur la marge mensuelle certai
   const withPension = calculateBudgetSummary(
     mockCurrentBalance, confirmedIncomes, mockExpenses, mockDebts, mockChildExpenses, 50,
   );
-  const advice = generateAdvice(summary, mockDebts, mockMediationFile);
+  const advice = generateAdvice(summary, mockIncomes, mockDebts);
 
   assert.deepEqual(
     {
@@ -189,20 +190,28 @@ test('S6 — la capacité d’épargne est fondée sur la marge mensuelle certai
 });
 
 test('S7 — les conseils tiennent compte des revenus et de la réserve de l’utilisateur', () => {
-  const incomes = [income(3000)];
-  const expenses = [expense(1000)];
+  const incomes = [income(3000, { expectedDate: '2026-06-05' })];
+  const expenses = [expense(1000, { dueDate: '2026-06-01' })];
   const highBalance = calculateBudgetSummary(5000, incomes, expenses, [], [], 500);
   const lowerBalance = calculateBudgetSummary(1000, incomes, expenses, [], [], 500);
-  const advice = generateAdvice(highBalance, [], null);
-  const reserveAdvice = generateAdvice(lowerBalance, [], null).filter(({ id }) => id === 'adv-reserve');
+  const advice = generateAdvice(highBalance, incomes, []);
+  const reserveAdvice = generateAdvice(lowerBalance, incomes, []).find(({ id }) => id === 'adv-reserve');
+  assert.equal(advice.some(({ id }) => id === 'adv-income-confirm' || id === 'adv-reserve'), false);
+  assert.match(reserveAdvice?.message ?? '', /\b500,00\s*€/);
 
-  assert.deepEqual(
-    {
-      mentionsUncertainIncome: advice.some(({ id }) => id === 'adv-income-confirm'),
-      reserveMatchesSettings: reserveAdvice.every(({ message }) => /\b500\s*€/.test(message)),
-    },
-    { mentionsUncertainIncome: false, reserveMatchesSettings: true },
-  );
+  const uncertainIncome = income(200, {
+    id: 'variable', isConfirmed: false, expectedDate: '2026-06-03', frequency: 'one_time',
+  });
+  const withUncertain = [...incomes, uncertainIncome];
+  const expected = calculateBudgetSummary(1000, withUncertain, expenses, [], [], 500);
+  assert.equal(generateAdvice(expected, withUncertain, []).some(({ id }) => id === 'adv-income-confirm'), true);
+  const received = [...incomes, { ...uncertainIncome, occurrenceStatuses: { '2026-06-03': 'paid' } }];
+  assert.equal(generateAdvice(expected, received, []).some(({ id }) => id === 'adv-income-confirm'), false);
+
+  const deficit = calculateBudgetSummary(100, incomes, expenses, [], [], 500);
+  const deficitAdvice = generateAdvice(deficit, incomes, []);
+  assert.equal(deficitAdvice.some(({ id }) => id === 'adv-danger'), true);
+  assert.doesNotMatch(deficitAdvice.map(({ message }) => message).join(' '), /médiateur|pension/i);
 });
 
 test('S8 — la projection applique les charges de J0, J7 et J30 à leur date locale', () => {
@@ -390,6 +399,20 @@ const emptyState = {
   mediationFile: mockMediationFile,
   documents: [],
 };
+
+test('Le premier budget reste vide, y compris après enregistrement', () => {
+  const blank = deserializeBudget(serializeBudget(emptyBudgetState));
+  const summary = calculateBudgetSummary(
+    blank.currentBalance, blank.incomes, blank.expenses, blank.debts, blank.childExpenses, blank.userProfile.safetyReserve,
+  );
+
+  assert.equal(blank.userProfile.firstName, '');
+  assert.equal(summary.emptyBudget, true);
+  assert.deepEqual(blank.goals, []);
+  assert.deepEqual(blank.documents, []);
+  assert.deepEqual(blank.mediationFile.steps, []);
+  assert.deepEqual(generateAdvice(summary, blank.incomes, blank.debts), []);
+});
 
 test('Une charge ancrée au 31 mai revient en juin, juillet et août sans dériver', () => {
   const rent = expense(50, {
