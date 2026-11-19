@@ -9,258 +9,186 @@ import type {
   Frequency,
   GoalStatus,
   MediationStep,
-} from './types';
+} from './types.ts';
+import { addDays, daysBetween, isLocalDate, monthsBetween, parseLocalDate, todayInBrussels } from './local-date.ts';
+import { fromCents, toCents } from './money.ts';
+import { forecastOccurrences } from './occurrences.ts';
+import { AVAILABLE_HORIZON, buildProjection } from './projection.ts';
 
-// Convert any frequency to monthly equivalent
-export function toMonthlyAmount(amount: number, frequency: Frequency): number {
+function monthlyCents(amount: number, frequency: Frequency): number {
+  const cents = toCents(amount);
   switch (frequency) {
-    case 'monthly':
-      return amount;
     case 'weekly':
-      return amount * 4.33;
+      return Math.round(cents * 52 / 12);
     case 'bi_monthly':
-      return amount / 2;
+      return Math.round(cents / 2);
     case 'quarterly':
-      return amount / 3;
+      return Math.round(cents / 3);
     case 'annual':
-      return amount / 12;
+      return Math.round(cents / 12);
     case 'one_time':
       return 0;
     default:
-      return amount;
+      return cents;
   }
 }
 
-// Total monthly income
-export function calculateTotalMonthlyIncome(incomes: Income[]): number {
-  return incomes.reduce((sum, income) => {
-    return sum + toMonthlyAmount(income.amount, income.frequency);
-  }, 0);
+export function toMonthlyAmount(amount: number, frequency: Frequency): number {
+  return fromCents(monthlyCents(amount, frequency));
 }
 
-// Total monthly expenses
-export function calculateTotalMonthlyExpenses(expenses: Expense[]): number {
-  return expenses.reduce((sum, expense) => {
-    return sum + toMonthlyAmount(expense.amount, expense.frequency);
-  }, 0);
+function monthlyIncomeCents(incomes: Income[]): number {
+  return incomes.reduce((sum, income) => sum + monthlyCents(income.amount, income.frequency), 0);
 }
 
-// Total monthly debt payments
-export function calculateTotalMonthlyDebts(debts: Debt[]): number {
+function monthlyExpenseCents(expenses: Expense[]): number {
+  return expenses.reduce(
+    (sum, expense) => sum + monthlyCents(expense.amount, expense.isRecurring ? expense.frequency : 'one_time'),
+    0,
+  );
+}
+
+function monthlyDebtCents(debts: Debt[]): number {
   return debts.reduce((sum, debt) => {
     if (debt.status === 'completed' || debt.status === 'suspended') return sum;
-    return sum + debt.monthlyPayment;
+    return sum + Math.max(0, Math.min(toCents(debt.remainingAmount), toCents(debt.monthlyPayment)));
   }, 0);
 }
 
-// Total monthly child expenses (estimated monthly from all child expenses)
-export function calculateTotalMonthlyChildExpenses(childExpenses: ChildExpense[]): number {
-  return childExpenses.reduce((sum, expense) => {
-    return sum + expense.paidByUser;
-  }, 0);
+export function calculateTotalMonthlyIncome(incomes: Income[]): number {
+  return fromCents(monthlyIncomeCents(incomes));
 }
 
-// "Vrai disponible" = currentBalance + expectedIncome - upcomingExpenses - monthlyDebts - childExpenses - safetyReserve
-export function calculateTrueAvailable(
-  currentBalance: number,
-  expectedIncome: number,
-  upcomingExpenses: number,
-  monthlyDebts: number,
-  childExpenses: number,
-  safetyReserve: number
-): number {
-  return currentBalance + expectedIncome - upcomingExpenses - monthlyDebts - childExpenses - safetyReserve;
+export function calculateTotalMonthlyExpenses(expenses: Expense[]): number {
+  return fromCents(monthlyExpenseCents(expenses));
 }
 
-// Risk level based on true available vs expenses
-export function calculateRiskLevel(trueAvailable: number, totalMonthlyExpenses: number): 'safe' | 'fragile' | 'danger' {
-  if (trueAvailable < 0) return 'danger';
-  if (trueAvailable < totalMonthlyExpenses * 0.1) return 'danger';
-  if (trueAvailable < totalMonthlyExpenses * 0.2) return 'fragile';
-  return 'safe';
+export function calculateTotalMonthlyDebts(debts: Debt[]): number {
+  return fromCents(monthlyDebtCents(debts));
 }
 
-// Savings capacity
-export function calculateSavingsCapacity(trueAvailable: number, goals: Goal[]): number {
-  const totalGoalContributions = goals.reduce((sum, goal) => {
-    return sum + (goal.monthlyContribution || 0);
-  }, 0);
-
-  const capacity = trueAvailable - totalGoalContributions;
-  return Math.max(0, capacity);
+export function calculateSavingsCapacity(monthlyMargin: number, goals: Goal[]): number {
+  const provisions = goals.reduce((sum, goal) => sum + toCents(goal.monthlyContribution ?? 0), 0);
+  return fromCents(Math.max(0, toCents(monthlyMargin) - provisions));
 }
 
-// Goal feasibility
 export function calculateGoalFeasibility(goal: Goal, monthlySavings: number): GoalStatus {
-  if (monthlySavings <= 0) return 'to_postpone';
+  const savings = toCents(monthlySavings);
+  const contribution = toCents(goal.monthlyContribution ?? 0);
+  if (savings <= 0 || contribution <= 0) return 'to_postpone';
+  if (contribution > savings * 0.8) return 'fragile';
 
-  const remaining = goal.targetAmount - goal.savedAmount;
-  const monthlyContrib = goal.monthlyContribution || 0;
-
-  if (monthlyContrib <= 0) return 'to_postpone';
-  if (monthlyContrib > monthlySavings * 0.8) return 'fragile';
-
-  if (goal.targetDate) {
-    const targetDate = new Date(goal.targetDate);
-    const today = new Date();
-    const monthsLeft = Math.max(0, (targetDate.getFullYear() - today.getFullYear()) * 12 + (targetDate.getMonth() - today.getMonth()));
-    const projectedSavings = goal.savedAmount + monthlyContrib * monthsLeft;
-    if (projectedSavings < remaining * 0.8) return 'fragile';
+  if (isLocalDate(goal.targetDate)) {
+    const months = Math.max(0, monthsBetween(todayInBrussels(), goal.targetDate));
+    const saved = toCents(goal.savedAmount);
+    const remaining = toCents(goal.targetAmount) - saved;
+    if (saved + contribution * months < remaining * 0.8) return 'fragile';
   }
 
   return 'realistic';
 }
 
-// Full budget summary
 export function calculateBudgetSummary(
   currentBalance: number,
   incomes: Income[],
   expenses: Expense[],
   debts: Debt[],
   childExpenses: ChildExpense[],
-  safetyReserve: number
+  safetyReserve: number,
+  goals: Goal[] = [],
+  today = todayInBrussels(),
 ): BudgetSummary {
-  const totalMonthlyIncome = calculateTotalMonthlyIncome(incomes);
-  const totalMonthlyExpenses = calculateTotalMonthlyExpenses(expenses);
-  const totalMonthlyDebts = calculateTotalMonthlyDebts(debts);
-  const totalMonthlyChildExpenses = calculateTotalMonthlyChildExpenses(childExpenses);
+  const totalMonthlyIncome = monthlyIncomeCents(incomes);
+  const totalMonthlyExpenses = monthlyExpenseCents(expenses);
+  const totalMonthlyDebts = monthlyDebtCents(debts);
+  const monthlyMargin = monthlyIncomeCents(incomes.filter((income) => income.isConfirmed))
+    - totalMonthlyExpenses - totalMonthlyDebts;
 
-  const trueAvailable = calculateTrueAvailable(
-    currentBalance,
-    totalMonthlyIncome,
-    totalMonthlyExpenses,
-    totalMonthlyDebts,
-    totalMonthlyChildExpenses,
-    safetyReserve
-  );
-
-  const riskLevel = calculateRiskLevel(trueAvailable, totalMonthlyExpenses);
-
-  // Risk score 0-100 (0 = safe, 100 = danger)
-  let riskScore: number;
-  if (riskLevel === 'safe') {
-    riskScore = Math.max(0, 30 - (trueAvailable / totalMonthlyExpenses) * 10);
-  } else if (riskLevel === 'fragile') {
-    riskScore = 50 + (1 - trueAvailable / totalMonthlyExpenses / 0.2) * 20;
-  } else {
-    riskScore = Math.min(100, 70 + Math.abs(trueAvailable) / 100 * 5);
-  }
-
-  const savingsCapacity = Math.max(0, trueAvailable - 0);
+  const forecast = buildProjection(currentBalance, incomes, expenses, debts, childExpenses, safetyReserve, {
+    today,
+    horizon: AVAILABLE_HORIZON,
+  });
+  const reserve = toCents(safetyReserve);
+  const empty = currentBalance === 0 && incomes.length === 0 && expenses.length === 0
+    && debts.length === 0 && childExpenses.length === 0;
+  const trueAvailable = empty ? 0 : fromCents(toCents(forecast.lowestBalance) - reserve);
 
   return {
     currentBalance,
-    totalMonthlyIncome,
-    totalMonthlyExpenses,
-    totalMonthlyDebts,
-    totalMonthlyChildExpenses,
+    totalMonthlyIncome: fromCents(totalMonthlyIncome),
+    totalMonthlyExpenses: fromCents(totalMonthlyExpenses),
+    totalMonthlyDebts: fromCents(totalMonthlyDebts),
+    totalMonthlyChildExpenses: 0,
     safetyReserve,
     trueAvailable,
-    savingsCapacity,
-    riskLevel,
-    riskScore: Math.round(Math.max(0, Math.min(100, riskScore))),
+    savingsCapacity: calculateSavingsCapacity(fromCents(monthlyMargin), goals),
+    emptyBudget: empty,
+    riskLevel: empty ? 'safe' : forecast.lowestRisk,
+    availableForecast: {
+      date: forecast.lowestDate,
+      balance: forecast.lowestBalance,
+      causes: forecast.lowestCauses,
+      horizon: AVAILABLE_HORIZON,
+      optimisticAvailable: empty ? 0 : fromCents(toCents(forecast.optimisticLowestBalance) - reserve),
+    },
   };
 }
 
-// Upcoming reminders (next 30 days)
 export function getUpcomingReminders(
   expenses: Expense[],
   debts: Debt[],
-  mediationSteps: MediationStep[]
+  mediationSteps: MediationStep[],
+  today = todayInBrussels(),
 ): Reminder[] {
-  const today = new Date();
-  const in30Days = new Date();
-  in30Days.setDate(in30Days.getDate() + 30);
+  const end = addDays(today, 30);
+  const reminders = forecastOccurrences([], expenses, debts, [], today, end).map((occurrence): Reminder => ({
+    id: `rem-${occurrence.type}-${occurrence.sourceId}-${occurrence.dueDate}`,
+    label: occurrence.label,
+    dueDate: occurrence.dueDate,
+    amount: fromCents(-occurrence.amountCents),
+    type: occurrence.type,
+    refId: occurrence.sourceId,
+    isUrgent: daysBetween(today, occurrence.dueDate) <= 7,
+    isLate: occurrence.status === 'late',
+  }));
 
-  const reminders: Reminder[] = [];
+  for (const step of mediationSteps) {
+    if (step.status !== 'pending' || !isLocalDate(step.date) || step.date < today || step.date > end) continue;
+    reminders.push({
+      id: `rem-med-${step.id}`,
+      label: step.title,
+      dueDate: step.date,
+      type: 'mediation',
+      refId: step.id,
+      isUrgent: daysBetween(today, step.date) <= 7,
+    });
+  }
 
-  // From expenses
-  expenses.forEach((expense) => {
-    if (expense.dueDate) {
-      const due = new Date(expense.dueDate);
-      if (due >= today && due <= in30Days) {
-        const daysUntil = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        reminders.push({
-          id: `rem-exp-${expense.id}`,
-          label: expense.label,
-          dueDate: expense.dueDate,
-          amount: expense.amount,
-          type: 'expense',
-          refId: expense.id,
-          isUrgent: daysUntil <= 7,
-        });
-      }
-    }
-  });
-
-  // From debts
-  debts.forEach((debt) => {
-    if (debt.nextDueDate && debt.monthlyPayment > 0) {
-      const due = new Date(debt.nextDueDate);
-      if (due >= today && due <= in30Days) {
-        const daysUntil = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        reminders.push({
-          id: `rem-debt-${debt.id}`,
-          label: `Remboursement ${debt.creditor}`,
-          dueDate: debt.nextDueDate,
-          amount: debt.monthlyPayment,
-          type: 'debt',
-          refId: debt.id,
-          isUrgent: daysUntil <= 7 || debt.status === 'late',
-        });
-      }
-    }
-  });
-
-  // From mediation steps
-  mediationSteps.forEach((step) => {
-    if (step.status === 'pending') {
-      const due = new Date(step.date);
-      if (due >= today && due <= in30Days) {
-        const daysUntil = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        reminders.push({
-          id: `rem-med-${step.id}`,
-          label: step.title,
-          dueDate: step.date,
-          type: 'mediation',
-          refId: step.id,
-          isUrgent: daysUntil <= 7,
-        });
-      }
-    }
-  });
-
-  // Sort by due date, urgent first
-  return reminders.sort((a, b) => {
-    if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
-    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-  });
+  return reminders.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
 
-// Format currency (Belgian/French format)
+const currencyFormatter = new Intl.NumberFormat('fr-BE', {
+  style: 'currency',
+  currency: 'EUR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('fr-BE', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return currencyFormatter.format(amount);
 }
 
-// Format date in French locale
 export function formatDate(dateStr: string): string {
+  if (!isLocalDate(dateStr)) return 'Date à vérifier';
   return new Intl.DateTimeFormat('fr-BE', {
     weekday: 'short',
     day: 'numeric',
-    month: 'long',
+    month: 'short',
     year: 'numeric',
-  }).format(new Date(dateStr));
+  }).format(parseLocalDate(dateStr));
 }
 
-// Format short date
 export function formatShortDate(dateStr: string): string {
-  return new Intl.DateTimeFormat('fr-BE', {
-    day: 'numeric',
-    month: 'short',
-  }).format(new Date(dateStr));
+  if (!isLocalDate(dateStr)) return 'Date à vérifier';
+  return new Intl.DateTimeFormat('fr-BE', { day: 'numeric', month: 'short' }).format(parseLocalDate(dateStr));
 }

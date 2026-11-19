@@ -14,7 +14,15 @@ export interface UserProfile {
 export type IncomeType = 'mutual_insurance' | 'allocation' | 'alimony' | 'salary' | 'freelance' | 'other';
 export type Frequency = 'monthly' | 'weekly' | 'bi_monthly' | 'quarterly' | 'annual' | 'one_time';
 
-export interface Income {
+export type OccurrenceStatus = 'planned' | 'paid' | 'late' | 'cancelled';
+
+export interface Schedule {
+  endDate?: string;
+  trackedFrom?: string;
+  occurrenceStatuses?: Record<string, 'paid' | 'cancelled'>;
+}
+
+export interface Income extends Schedule {
   id: string;
   label: string;
   type: IncomeType;
@@ -28,7 +36,7 @@ export interface Income {
 // Expense types
 export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions' | 'other';
 
-export interface Expense {
+export interface Expense extends Schedule {
   id: string;
   label: string;
   category: ExpenseCategory;
@@ -44,7 +52,7 @@ export interface Expense {
 export type DebtStatus = 'to_pay' | 'late' | 'contested' | 'in_mediation' | 'plan_accepted' | 'suspended' | 'completed';
 export type DebtType = 'personal' | 'shared';
 
-export interface Debt {
+export interface Debt extends Schedule {
   id: string;
   creditor: string;
   type: DebtType;
@@ -102,6 +110,7 @@ export interface ChildExpense {
   shareAmount: number; // amount to be shared / reimbursed
   status: ChildExpenseStatus;
   date: string; // ISO date
+  reimbursementDate?: string;
   notes?: string;
   receiptSent: boolean;
 }
@@ -144,8 +153,15 @@ export interface BudgetSummary {
   safetyReserve: number;
   trueAvailable: number; // vraiDisponible
   savingsCapacity: number;
+  emptyBudget: boolean;
   riskLevel: 'safe' | 'fragile' | 'danger';
-  riskScore: number; // 0-100
+  availableForecast: {
+    date: string;
+    balance: number;
+    causes: string[];
+    horizon: number;
+    optimisticAvailable: number;
+  };
 }
 
 // Advice
@@ -155,7 +171,6 @@ export interface AdviceItem {
   message: string;
   type: 'info' | 'warning' | 'positive' | 'action';
   priority: number; // 1 = high
-  requiresMediatorValidation?: boolean;
 }
 
 // Future Open Banking (architecture placeholder)
@@ -192,4 +207,5 @@ export interface Reminder {
   type: 'expense' | 'debt' | 'mediation' | 'child' | 'income';
   refId?: string;
   isUrgent: boolean;
+  isLate?: boolean;
 }

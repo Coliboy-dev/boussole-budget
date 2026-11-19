@@ -37,11 +37,6 @@ export default function AdviceWidget({ advice }: AdviceWidgetProps) {
                 <div>
                   <p className={`text-xs font-semibold mb-0.5 ${config.text}`}>{item.title}</p>
                   <p className="text-xs text-gray-600 leading-relaxed">{item.message}</p>
-                  {item.requiresMediatorValidation && (
-                    <p className="text-xs text-indigo-500 mt-1 font-medium">
-                      🤝 À valider avec ton médiateur
-                    </p>
-                  )}
                 </div>
               </div>
             </div>

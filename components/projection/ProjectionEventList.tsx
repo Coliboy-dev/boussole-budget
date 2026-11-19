@@ -1,12 +1,15 @@
 'use client';
 
 import { formatCurrency } from '@/lib/budget-calculations';
+import { daysBetween, parseLocalDate } from '@/lib/local-date';
+import { fromCents, toCents } from '@/lib/money';
 import type { ProjectionEvent } from '@/lib/projection';
 
 const typeConfig = {
-  income: { icon: '💰', color: 'text-green-600', bg: 'bg-green-50', sign: '+' },
-  expense: { icon: '📋', color: 'text-gray-700', bg: 'bg-gray-50', sign: '-' },
-  debt: { icon: '💳', color: 'text-amber-700', bg: 'bg-amber-50', sign: '-' },
+  income: { icon: '💰', color: 'text-green-600', bg: 'bg-green-50' },
+  expense: { icon: '📋', color: 'text-gray-700', bg: 'bg-gray-50' },
+  child: { icon: '👨‍👧‍👦', color: 'text-green-600', bg: 'bg-green-50' },
+  debt: { icon: '💳', color: 'text-amber-700', bg: 'bg-amber-50' },
 };
 
 function formatEventDate(dateStr: string): string {
@@ -14,30 +17,26 @@ function formatEventDate(dateStr: string): string {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
-  }).format(new Date(dateStr));
+  }).format(parseLocalDate(dateStr));
 }
 
-function daysUntilLabel(dateStr: string): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const d = new Date(dateStr);
-  d.setHours(0, 0, 0, 0);
-  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-  if (diff === 0) return "Aujourd'hui";
-  if (diff === 1) return 'Demain';
-  return `J+${diff}`;
+function daysUntilLabel(days: number): string {
+  if (days === 0) return "Aujourd'hui";
+  if (days === 1) return 'Demain';
+  return `J+${days}`;
 }
 
 interface Props {
   events: ProjectionEvent[];
+  today: string;
 }
 
-export default function ProjectionEventList({ events }: Props) {
+export default function ProjectionEventList({ events, today }: Props) {
   if (events.length === 0) {
     return (
       <div className="text-center py-8 text-gray-400">
         <p className="text-3xl mb-2">📅</p>
-        <p className="text-sm">Aucun événement financier prévu dans les 30 prochains jours.</p>
+        <p className="text-sm">Aucun événement financier sur cette période.</p>
         <p className="text-xs mt-1">Ajoute des dates d&apos;échéance à tes charges et dettes.</p>
       </div>
     );
@@ -53,14 +52,8 @@ export default function ProjectionEventList({ events }: Props) {
   return (
     <div className="space-y-4">
       {Object.entries(grouped).map(([date, dayEvents]) => {
-        const dayTotal = dayEvents.reduce((s, e) => s + e.amount, 0);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const eventDate = new Date(date);
-        eventDate.setHours(0, 0, 0, 0);
-        const isToday = eventDate.getTime() === today.getTime();
-        const isTomorrow =
-          eventDate.getTime() === today.getTime() + 86400000;
+        const dayTotal = fromCents(dayEvents.reduce((sum, event) => sum + toCents(event.amount), 0));
+        const days = daysBetween(today, date);
 
         return (
           <div key={date}>
@@ -69,14 +62,14 @@ export default function ProjectionEventList({ events }: Props) {
               <div className="flex items-center gap-2">
                 <span
                   className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    isToday
+                    days === 0
                       ? 'bg-teal-100 text-teal-700'
-                      : isTomorrow
+                      : days === 1
                         ? 'bg-blue-100 text-blue-700'
                         : 'bg-gray-100 text-gray-500'
                   }`}
                 >
-                  {daysUntilLabel(date)}
+                  {daysUntilLabel(days)}
                 </span>
                 <span className="text-xs text-gray-500 capitalize">{formatEventDate(date)}</span>
               </div>
@@ -106,6 +99,9 @@ export default function ProjectionEventList({ events }: Props) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <p className="text-sm font-medium text-gray-800 truncate">{event.label}</p>
+                        {event.isLate && (
+                          <span className="text-xs text-red-700">En retard depuis le {formatEventDate(event.dueDate)}</span>
+                        )}
                         {event.isEstimated && (
                           <span className="text-xs text-gray-400 flex-shrink-0">~estimé</span>
                         )}

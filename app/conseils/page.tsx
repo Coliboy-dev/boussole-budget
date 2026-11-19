@@ -1,15 +1,8 @@
+'use client';
+
+import Link from 'next/link';
 import Card from '@/components/ui/Card';
-import { calculateBudgetSummary } from '@/lib/budget-calculations';
-import { generateAdvice } from '@/lib/advice-engine';
-import {
-  mockUser,
-  mockCurrentBalance,
-  mockIncomes,
-  mockExpenses,
-  mockDebts,
-  mockChildExpenses,
-  mockMediationFile,
-} from '@/lib/mock-data';
+import { useApp } from '@/lib/context/AppContext';
 
 const typeConfig: Record<string, { icon: string; bg: string; border: string; text: string; label: string }> = {
   info: { icon: 'ℹ️', bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-700', label: 'Info' },
@@ -19,28 +12,31 @@ const typeConfig: Record<string, { icon: string; bg: string; border: string; tex
 };
 
 export default function ConseilsPage() {
-  const summary = calculateBudgetSummary(
-    mockCurrentBalance,
-    mockIncomes,
-    mockExpenses,
-    mockDebts,
-    mockChildExpenses,
-    mockUser.safetyReserve
-  );
-
-  const advice = generateAdvice(summary, mockDebts, mockMediationFile);
+  const { advice, summary } = useApp();
 
   return (
     <div className="px-4 py-4 space-y-4">
       <div>
         <h1 className="text-xl font-bold text-gray-800">💡 Conseils personnalisés</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {advice.length} conseil{advice.length > 1 ? 's' : ''} basé{advice.length > 1 ? 's' : ''} sur ta situation
-        </p>
       </div>
 
+      {advice.length === 0 && (
+        <Card className="space-y-2">
+          <p className="text-sm text-gray-600">
+            {summary.emptyBudget
+              ? 'Renseigne ton solde et tes échéances pour obtenir des conseils.'
+              : 'Aucun conseil pour le moment.'}
+          </p>
+          {summary.emptyBudget && (
+            <Link href="/dashboard" className="text-sm font-medium text-teal-700 underline">
+              Renseigner mon solde
+            </Link>
+          )}
+        </Card>
+      )}
+
       <div className="space-y-3">
-        {advice.map((item, index) => {
+        {advice.map((item) => {
           const config = typeConfig[item.type] || typeConfig.info;
           return (
             <Card key={item.id} className={`border ${config.border} ${config.bg}`}>
@@ -53,20 +49,9 @@ export default function ConseilsPage() {
                     <span className={`text-xs font-bold uppercase tracking-wide ${config.text}`}>
                       {config.label}
                     </span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${config.bg} ${config.text} font-medium`}>
-                      #{index + 1}
-                    </span>
                   </div>
                   <p className={`text-sm font-semibold mb-1 ${config.text}`}>{item.title}</p>
                   <p className="text-sm text-gray-600 leading-relaxed">{item.message}</p>
-                  {item.requiresMediatorValidation && (
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <span className="text-base">🤝</span>
-                      <p className="text-xs text-indigo-600 font-medium">
-                        À valider avec ton médiateur avant d&apos;agir
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
             </Card>
@@ -74,13 +59,6 @@ export default function ConseilsPage() {
         })}
       </div>
 
-      {/* Disclaimer */}
-      <Card className="border-dashed border-gray-200 bg-gray-50">
-        <p className="text-xs text-gray-400 leading-relaxed text-center">
-          Ces conseils sont générés automatiquement. Ils ne remplacent pas l&apos;avis d&apos;un
-          professionnel. En cas de doute, consulte ton médiateur ou un conseiller financier.
-        </p>
-      </Card>
     </div>
   );
 }

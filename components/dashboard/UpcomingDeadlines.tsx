@@ -18,7 +18,7 @@ export default function UpcomingDeadlines({ reminders }: UpcomingDeadlinesProps)
   if (reminders.length === 0) {
     return (
       <Card>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Échéances à venir</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">Échéances et retards</h3>
         <p className="text-sm text-gray-400 text-center py-4">Aucune échéance dans les 30 prochains jours.</p>
       </Card>
     );
@@ -27,7 +27,7 @@ export default function UpcomingDeadlines({ reminders }: UpcomingDeadlinesProps)
   return (
     <Card padding="none">
       <div className="px-4 pt-4 pb-2">
-        <h3 className="text-sm font-semibold text-gray-700">Échéances à venir</h3>
+        <h3 className="text-sm font-semibold text-gray-700">Échéances et retards</h3>
       </div>
       <div className="divide-y divide-gray-50">
         {reminders.slice(0, 6).map((reminder) => {
@@ -43,7 +43,7 @@ export default function UpcomingDeadlines({ reminders }: UpcomingDeadlinesProps)
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">{reminder.label}</p>
                 <p className={`text-xs ${reminder.isUrgent ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                  {reminder.isUrgent && '⚡ '}
+                  {reminder.isLate ? 'En retard depuis le ' : reminder.isUrgent ? '⚡ ' : ''}
                   {formatShortDate(reminder.dueDate)}
                 </p>
               </div>

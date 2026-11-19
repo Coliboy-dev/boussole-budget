@@ -2,19 +2,20 @@
 
 import { useState } from 'react';
 import { useApp } from '@/lib/context/AppContext';
-import { buildProjection } from '@/lib/projection';
-import { formatCurrency } from '@/lib/budget-calculations';
+import { AVAILABLE_HORIZON, buildProjection } from '@/lib/projection';
+import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
+import { fromCents, toCents } from '@/lib/money';
 import ProjectionTimeline from '@/components/projection/ProjectionTimeline';
 import ProjectionEventList from '@/components/projection/ProjectionEventList';
 import Card from '@/components/ui/Card';
 import AlertBanner from '@/components/ui/AlertBanner';
 
-const HORIZONS = [7, 15, 30] as const;
+const HORIZONS = [7, 15, 30, AVAILABLE_HORIZON] as const;
 type Horizon = (typeof HORIZONS)[number];
 
 export default function ProjectionPage() {
-  const { currentBalance, incomes, expenses, debts, childExpenses, userProfile } = useApp();
-  const [horizon, setHorizon] = useState<Horizon>(30);
+  const { currentBalance, incomes, expenses, debts, childExpenses, userProfile, today } = useApp();
+  const [horizon, setHorizon] = useState<Horizon>(AVAILABLE_HORIZON);
 
   const projection = buildProjection(
     currentBalance,
@@ -22,38 +23,27 @@ export default function ProjectionPage() {
     expenses,
     debts,
     childExpenses,
-    userProfile.safetyReserve
+    userProfile.safetyReserve,
+    { today, horizon },
   );
 
-  // Filter events by selected horizon
-  const visibleEvents = projection.events.filter((e) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const d = new Date(e.date);
-    d.setHours(0, 0, 0, 0);
-    const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-    return diff >= 0 && diff <= horizon;
-  });
-
-  // Milestones to show depend on horizon
-  const visibleMilestones = projection.milestones.filter((m) => m.daysFromNow <= horizon);
-
-  const endMilestone = projection.milestones.find((m) => m.daysFromNow === horizon);
+  const { events, milestones } = projection;
+  const endMilestone = milestones.at(-1);
   const endBalance = endMilestone?.balance ?? currentBalance;
   const endRisk = endMilestone?.riskLevel ?? 'safe';
 
-  const confirmedIncome = visibleEvents
-    .filter((e) => e.type === 'income' && !e.isEstimated)
-    .reduce((s, e) => s + e.amount, 0);
-  const estimatedIncome = visibleEvents
-    .filter((e) => e.type === 'income' && e.isEstimated)
-    .reduce((s, e) => s + e.amount, 0);
-  const totalExpenses = visibleEvents
-    .filter((e) => e.type === 'expense')
-    .reduce((s, e) => s + Math.abs(e.amount), 0);
-  const totalDebts = visibleEvents
-    .filter((e) => e.type === 'debt')
-    .reduce((s, e) => s + Math.abs(e.amount), 0);
+  const confirmedIncome = events
+    .filter((event) => event.amount > 0 && !event.isEstimated)
+    .reduce((sum, event) => sum + toCents(event.amount), 0);
+  const estimatedIncome = events
+    .filter((event) => event.amount > 0 && event.isEstimated)
+    .reduce((sum, event) => sum + toCents(event.amount), 0);
+  const totalExpenses = events
+    .filter((event) => event.type === 'expense')
+    .reduce((sum, event) => sum - toCents(event.amount), 0);
+  const totalDebts = events
+    .filter((event) => event.type === 'debt')
+    .reduce((sum, event) => sum - toCents(event.amount), 0);
 
   return (
     <div className="px-4 py-4 space-y-4">
@@ -70,9 +60,7 @@ export default function ProjectionPage() {
           Ton solde pourrait descendre sous{' '}
           <strong>{formatCurrency(userProfile.safetyReserve)}</strong> aux alentours du{' '}
           <strong>
-            {new Intl.DateTimeFormat('fr-BE', { day: 'numeric', month: 'long' }).format(
-              new Date(projection.lowestDate)
-            )}
+            {formatShortDate(projection.lowestDate)}
           </strong>
           . Garde ce montant de côté si possible.
         </AlertBanner>
@@ -101,7 +89,7 @@ export default function ProjectionPage() {
       {/* Visual timeline */}
       <Card>
         <h2 className="text-sm font-semibold text-gray-600 mb-4">Évolution du solde</h2>
-        <ProjectionTimeline milestones={visibleMilestones} />
+        <ProjectionTimeline milestones={milestones} />
       </Card>
 
       {/* End balance summary */}
@@ -115,7 +103,7 @@ export default function ProjectionPage() {
         }
       >
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-          Solde estimé dans {horizon} jours
+          Solde prudent dans {horizon} jours
         </p>
         <p
           className={`text-3xl font-bold mb-2 ${
@@ -136,23 +124,23 @@ export default function ProjectionPage() {
             <p className="font-bold text-gray-700">{formatCurrency(currentBalance)}</p>
           </div>
           <div>
-            <p className="text-gray-400">Revenus attendus</p>
+            <p className="text-gray-400">Revenus certains</p>
             <p className="font-bold text-green-600">
-              +{formatCurrency(confirmedIncome + estimatedIncome)}
+              +{formatCurrency(fromCents(confirmedIncome))}
               {estimatedIncome > 0 && (
                 <span className="text-gray-400 font-normal ml-1">
-                  (dont ~{formatCurrency(estimatedIncome)} estimés)
+                  (+{formatCurrency(fromCents(estimatedIncome))} incertains)
                 </span>
               )}
             </p>
           </div>
           <div>
             <p className="text-gray-400">Charges prévues</p>
-            <p className="font-bold text-gray-600">-{formatCurrency(totalExpenses)}</p>
+            <p className="font-bold text-gray-600">-{formatCurrency(fromCents(totalExpenses))}</p>
           </div>
           <div>
             <p className="text-gray-400">Remboursements dettes</p>
-            <p className="font-bold text-amber-600">-{formatCurrency(totalDebts)}</p>
+            <p className="font-bold text-amber-600">-{formatCurrency(fromCents(totalDebts))}</p>
           </div>
         </div>
       </Card>
@@ -162,7 +150,7 @@ export default function ProjectionPage() {
         <h2 className="text-sm font-semibold text-gray-700 mb-3 px-1">
           Événements dans les {horizon} prochains jours
         </h2>
-        <ProjectionEventList events={visibleEvents} />
+        <ProjectionEventList events={events} today={projection.startDate} />
       </div>
 
       {/* Disclaimer */}

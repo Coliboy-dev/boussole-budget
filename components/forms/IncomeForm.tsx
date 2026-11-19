@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import type { Income, IncomeType, Frequency } from '@/lib/types';
+import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { isLocalDate } from '@/lib/local-date';
 import FormField from './FormField';
+import { useFormValidation } from './useFormValidation';
 
 const cls =
   'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 bg-white';
@@ -14,12 +17,14 @@ interface Props {
 }
 
 export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
+  const { errors, validate, clearFieldError } = useFormValidation();
   const [form, setForm] = useState({
     label: initial?.label ?? '',
     type: (initial?.type ?? 'other') as IncomeType,
     amount: initial?.amount?.toString() ?? '',
     frequency: (initial?.frequency ?? 'monthly') as Frequency,
     expectedDate: initial?.expectedDate ?? '',
+    endDate: initial?.endDate ?? '',
     isConfirmed: initial?.isConfirmed ?? true,
     notes: initial?.notes ?? '',
   });
@@ -27,26 +32,33 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const amount = parseFloat(form.amount);
-    if (!form.label.trim() || isNaN(amount) || amount <= 0) return;
+    if (!validate(e.currentTarget, {
+      label: form.label.trim() ? undefined : 'Renseigne l’intitulé du revenu.',
+      amount: isNonNegativeBudgetAmount(amount) && amount > 0 ? undefined : 'Saisis un montant valide supérieur à zéro.',
+      expectedDate: isLocalDate(form.expectedDate) ? undefined : 'Renseigne une date de versement valide.',
+      endDate: form.endDate && !isLocalDate(form.endDate) ? 'Renseigne une date de fin valide.' : undefined,
+    })) return;
     onSubmit({
       label: form.label.trim(),
       type: form.type,
       amount,
       frequency: form.frequency,
-      expectedDate: form.expectedDate || undefined,
+      expectedDate: form.expectedDate,
+      endDate: form.frequency === 'one_time' ? undefined : form.endDate || undefined,
       isConfirmed: form.isConfirmed,
       notes: form.notes.trim() || undefined,
     });
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
-      <FormField label="Intitulé" required>
+    <form onSubmit={handleSubmit} onChange={clearFieldError} noValidate>
+      <FormField label="Intitulé" required error={errors.label}>
         <input
           className={cls}
+          name="label"
           value={form.label}
           onChange={(e) => set('label', e.target.value)}
           placeholder="Ex : Indemnité mutuelle"
@@ -70,12 +82,13 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
       </FormField>
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="Montant (€)" required>
+        <FormField label="Montant (€)" required error={errors.amount}>
           <input
             className={cls}
             type="number"
             min="0"
             step="0.01"
+            name="amount"
             value={form.amount}
             onChange={(e) => set('amount', e.target.value)}
             placeholder="0,00"
@@ -98,14 +111,29 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
         </FormField>
       </div>
 
-      <FormField label="Prochain versement attendu" hint="Optionnel">
+      <FormField label={form.frequency === 'one_time' ? 'Date du versement' : 'Date du premier versement'} required error={errors.expectedDate}>
         <input
           className={cls}
           type="date"
+          required
+          name="expectedDate"
           value={form.expectedDate}
           onChange={(e) => set('expectedDate', e.target.value)}
         />
       </FormField>
+
+      {form.frequency !== 'one_time' && (
+        <FormField label="Fin de la récurrence" hint="Optionnel" error={errors.endDate}>
+          <input
+            className={cls}
+            type="date"
+            min={form.expectedDate || undefined}
+            name="endDate"
+            value={form.endDate}
+            onChange={(e) => set('endDate', e.target.value)}
+          />
+        </FormField>
+      )}
 
       <div className="flex items-center gap-3 mb-4">
         <input

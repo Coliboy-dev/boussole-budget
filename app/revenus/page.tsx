@@ -86,15 +86,15 @@ export default function RevenusPage() {
 
         {unconfirmedTotal > 0 && (
           <AlertBanner variant="warning" title="Revenus incertains">
-            Certains de tes revenus (ex : pension alimentaire) ne sont pas toujours versés à temps.
-            Planifie ton budget en priorité sur les revenus confirmés ({formatCurrency(confirmedTotal)}).
+            Ton budget mensuel compte {formatCurrency(unconfirmedTotal)} de revenus incertains.
+            Les revenus confirmés représentent {formatCurrency(confirmedTotal)} par mois.
           </AlertBanner>
         )}
 
         <IncomeList
           incomes={incomes}
           onEdit={handleEdit}
-          onDelete={(id) => { if (confirm('Supprimer ce revenu ?')) deleteIncome(id); }}
+          onDelete={deleteIncome}
         />
 
         {incomes.length === 0 && (

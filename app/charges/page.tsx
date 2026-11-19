@@ -31,11 +31,13 @@ export default function ChargesPage() {
   const totalIncome = calculateTotalMonthlyIncome(incomes);
   const ratio = totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0;
 
-  const byCategory: Record<string, number> = {};
-  expenses.forEach((e) => {
-    byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
-  });
-  const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
+  const topCategory = Object.keys(categoryNames)
+    .map((category) => ({
+      name: categoryNames[category as ExpenseCategory],
+      amount: calculateTotalMonthlyExpenses(expenses.filter((expense) => expense.category === category)),
+    }))
+    .filter(({ amount }) => amount > 0)
+    .sort((a, b) => b.amount - a.amount)[0];
 
   function handleEdit(expense: Expense) {
     setEditItem(expense);
@@ -113,9 +115,9 @@ export default function ChargesPage() {
             <p className="text-xs text-gray-500 mt-2">
               Poste principal :{' '}
               <strong>
-                {categoryNames[topCategory[0] as ExpenseCategory] || topCategory[0]}
+                {topCategory.name}
               </strong>{' '}
-              ({formatCurrency(topCategory[1])})
+              ({formatCurrency(topCategory.amount)})
             </p>
           )}
         </Card>
@@ -123,7 +125,7 @@ export default function ChargesPage() {
         <ExpenseList
           expenses={expenses}
           onEdit={handleEdit}
-          onDelete={(id) => { if (confirm('Supprimer cette charge ?')) deleteExpense(id); }}
+          onDelete={deleteExpense}
         />
 
         {expenses.length === 0 && (

@@ -4,6 +4,10 @@ import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import { formatCurrency, formatShortDate, toMonthlyAmount } from '@/lib/budget-calculations';
 import type { Income } from '@/lib/types';
+import { useApp } from '@/lib/context/AppContext';
+import { addDays } from '@/lib/local-date';
+import { incomeOccurrences, isOpenOccurrence } from '@/lib/occurrences';
+import OccurrencePayment from './OccurrencePayment';
 
 interface IncomeListProps {
   incomes: Income[];
@@ -30,6 +34,8 @@ const freqLabels: Record<string, string> = {
 };
 
 export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProps) {
+  const { today } = useApp();
+  const nextYear = addDays(today, 366);
   if (incomes.length === 0) {
     return (
       <div className="text-center py-8 text-gray-400">
@@ -43,6 +49,8 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
     <div className="space-y-3">
       {incomes.map((income) => {
         const monthlyEquiv = toMonthlyAmount(income.amount, income.frequency);
+        const end = income.expectedDate && income.expectedDate > nextYear ? income.expectedDate : nextYear;
+        const next = incomeOccurrences(income, today, end).find(isOpenOccurrence);
         return (
           <Card key={income.id} className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-xl flex-shrink-0">
@@ -73,11 +81,13 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
                   </span>
                 )}
               </div>
-              {income.expectedDate && (
+              {next && (
                 <p className="text-xs text-gray-400 mt-1">
-                  Prochain versement : {formatShortDate(income.expectedDate)}
+                  Prochain versement : {formatShortDate(next.dueDate)}
                 </p>
               )}
+              {!income.expectedDate && <p className="text-xs text-amber-700 mt-1">Date à renseigner</p>}
+              {next && <OccurrencePayment key={next.dueDate} occurrence={next} />}
               {income.notes && (
                 <p className="text-xs text-gray-400 mt-1 italic">{income.notes}</p>
               )}

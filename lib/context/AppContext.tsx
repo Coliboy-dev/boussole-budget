@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef, useSyncExternalStore } from 'react';
 import type {
   Income,
   Expense,
@@ -9,51 +9,55 @@ import type {
   Goal,
   MediationFile,
   UserProfile,
-  DocumentItem,
   BudgetSummary,
+  AdviceItem,
 } from '@/lib/types';
 import { calculateBudgetSummary } from '@/lib/budget-calculations';
+import { generateAdvice } from '@/lib/advice-engine';
 import {
-  mockUser,
-  mockCurrentBalance,
-  mockIncomes,
-  mockExpenses,
-  mockDebts,
-  mockMediationFile,
-  mockChildExpenses,
-  mockGoals,
-  mockDocuments,
-} from '@/lib/mock-data';
+  cancelExpenseOccurrence,
+  deserializeBudget,
+  emptyBudgetState,
+  migrateLegacyBudget,
+  readBudgetSnapshot,
+  recordPayment,
+  serializeBudget,
+  writeBudgetSnapshot,
+  type AppState,
+  type BudgetStorageSnapshot,
+  type Payment,
+} from '@/lib/budget-state';
+import { todayInBrussels } from '@/lib/local-date';
+import { fromCents, toCents } from '@/lib/money';
 
-const STORAGE_KEY = 'boussole-budget-v1';
-
-export interface AppState {
-  currentBalance: number;
-  userProfile: UserProfile;
-  incomes: Income[];
-  expenses: Expense[];
-  debts: Debt[];
-  childExpenses: ChildExpense[];
-  goals: Goal[];
-  mediationFile: MediationFile;
-  documents: DocumentItem[];
-}
-
-const defaultState: AppState = {
-  currentBalance: mockCurrentBalance,
-  userProfile: mockUser,
-  incomes: mockIncomes,
-  expenses: mockExpenses,
-  debts: mockDebts,
-  childExpenses: mockChildExpenses,
-  goals: mockGoals,
-  mediationFile: mockMediationFile,
-  documents: mockDocuments,
+type RuntimeState = AppState & {
+  storageStatus: 'loading' | 'ready' | 'unreadable' | 'unsaved';
+  storageRevision: number;
 };
 
+type BudgetPersistence = {
+  snapshot: BudgetStorageSnapshot;
+  saved: RuntimeState;
+  needsMigration: boolean;
+};
+
+function subscribeToCalendar(listener: () => void): () => void {
+  const timer = window.setInterval(listener, 60_000);
+  window.addEventListener('focus', listener);
+  return () => {
+    window.clearInterval(timer);
+    window.removeEventListener('focus', listener);
+  };
+}
+
+function serverDate(): string {
+  return '2026-05-29';
+}
+
 type AppAction =
-  | { type: 'HYDRATE'; payload: AppState }
-  | { type: 'SET_BALANCE'; payload: number }
+  | { type: 'HYDRATE'; payload: RuntimeState }
+  | { type: 'SAVE_FAILED'; revision: number }
+  | { type: 'SET_BALANCE'; payload: { amount: number; today: string } }
   | { type: 'UPDATE_PROFILE'; payload: Partial<UserProfile> }
   | { type: 'ADD_INCOME'; payload: Omit<Income, 'id'> }
   | { type: 'UPDATE_INCOME'; payload: { id: string; data: Partial<Income> } }
@@ -71,18 +75,26 @@ type AppAction =
   | { type: 'UPDATE_GOAL'; payload: { id: string; data: Partial<Goal> } }
   | { type: 'DELETE_GOAL'; payload: string }
   | { type: 'UPDATE_MEDIATION'; payload: Partial<MediationFile> }
-  | { type: 'RESET_TO_DEMO' };
+  | { type: 'RECORD_PAYMENT'; payload: Payment }
+  | { type: 'CANCEL_EXPENSE_OCCURRENCE'; payload: { id: string; dueDate: string; today: string } };
 
 function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function appReducer(state: AppState, action: AppAction): AppState {
+function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
+  if (action.type === 'HYDRATE') return action.payload;
+  if (state.storageStatus === 'loading') return state;
+
   switch (action.type) {
-    case 'HYDRATE':
-      return action.payload;
+    case 'SAVE_FAILED':
+      return action.revision === state.storageRevision ? { ...state, storageStatus: 'unsaved' } : state;
     case 'SET_BALANCE':
-      return { ...state, currentBalance: action.payload };
+      return {
+        ...state,
+        currentBalance: fromCents(toCents(action.payload.amount)),
+        balanceDate: action.payload.today,
+      };
     case 'UPDATE_PROFILE':
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
     case 'ADD_INCOME':
@@ -97,23 +109,41 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'DELETE_INCOME':
       return { ...state, incomes: state.incomes.filter((i) => i.id !== action.payload) };
     case 'ADD_EXPENSE':
-      return { ...state, expenses: [...state.expenses, { ...action.payload, id: uid() }] };
+      return {
+        ...state,
+        expenses: [...state.expenses, { trackedFrom: action.payload.dueDate, ...action.payload, id: uid() }],
+      };
     case 'UPDATE_EXPENSE':
       return {
         ...state,
         expenses: state.expenses.map((e) =>
-          e.id === action.payload.id ? { ...e, ...action.payload.data } : e
+          e.id === action.payload.id ? {
+            ...e,
+            ...action.payload.data,
+            trackedFrom: action.payload.data.dueDate && action.payload.data.dueDate !== e.dueDate
+              ? action.payload.data.dueDate
+              : e.trackedFrom,
+          } : e
         ),
       };
     case 'DELETE_EXPENSE':
       return { ...state, expenses: state.expenses.filter((e) => e.id !== action.payload) };
     case 'ADD_DEBT':
-      return { ...state, debts: [...state.debts, { ...action.payload, id: uid() }] };
+      return {
+        ...state,
+        debts: [...state.debts, { trackedFrom: action.payload.nextDueDate, ...action.payload, id: uid() }],
+      };
     case 'UPDATE_DEBT':
       return {
         ...state,
         debts: state.debts.map((d) =>
-          d.id === action.payload.id ? { ...d, ...action.payload.data } : d
+          d.id === action.payload.id ? {
+            ...d,
+            ...action.payload.data,
+            trackedFrom: action.payload.data.nextDueDate && action.payload.data.nextDueDate !== d.nextDueDate
+              ? action.payload.data.nextDueDate
+              : d.trackedFrom,
+          } : d
         ),
       };
     case 'DELETE_DEBT':
@@ -145,8 +175,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, goals: state.goals.filter((g) => g.id !== action.payload) };
     case 'UPDATE_MEDIATION':
       return { ...state, mediationFile: { ...state.mediationFile, ...action.payload } };
-    case 'RESET_TO_DEMO':
-      return defaultState;
+    case 'RECORD_PAYMENT':
+      return { ...state, ...recordPayment(state, action.payload) };
+    case 'CANCEL_EXPENSE_OCCURRENCE':
+      return {
+        ...state,
+        ...cancelExpenseOccurrence(state, action.payload.id, action.payload.dueDate, action.payload.today),
+      };
     default:
       return state;
   }
@@ -154,6 +189,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
 export interface AppContextType extends AppState {
   summary: BudgetSummary;
+  advice: AdviceItem[];
+  today: string;
+  storageBlocked: boolean;
+  isBudgetLoading: boolean;
+  canExportBudget: boolean;
+  exportBudget: () => string;
+  restoreBudget: (budget: AppState) => void;
   setBalance: (amount: number) => void;
   updateProfile: (data: Partial<UserProfile>) => void;
   addIncome: (income: Omit<Income, 'id'>) => void;
@@ -172,33 +214,77 @@ export interface AppContextType extends AppState {
   updateGoal: (id: string, data: Partial<Goal>) => void;
   deleteGoal: (id: string) => void;
   updateMediation: (data: Partial<MediationFile>) => void;
-  resetToDemo: () => void;
+  recordPayment: (payment: Omit<Payment, 'today'>) => void;
+  cancelExpenseOccurrence: (id: string, dueDate: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, defaultState);
+  const [state, dispatch] = useReducer(appReducer, {
+    ...emptyBudgetState,
+    storageStatus: 'loading',
+    storageRevision: 0,
+  });
+  const persistence = useRef<BudgetPersistence | null>(null);
+  const today = useSyncExternalStore(subscribeToCalendar, todayInBrussels, serverDate);
 
   useEffect(() => {
+    let snapshot: BudgetStorageSnapshot | undefined;
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Partial<AppState>;
-        dispatch({ type: 'HYDRATE', payload: { ...defaultState, ...parsed } });
-      }
+      snapshot = readBudgetSnapshot(localStorage);
+      const { current, legacy } = snapshot;
+      const budget = current !== null ? deserializeBudget(current)
+        : legacy !== null ? migrateLegacyBudget(legacy, emptyBudgetState, todayInBrussels()) : emptyBudgetState;
+      const loaded: RuntimeState = { ...budget, storageStatus: 'ready', storageRevision: 0 };
+      persistence.current = { snapshot, saved: loaded, needsMigration: legacy !== null };
+      dispatch({ type: 'HYDRATE', payload: loaded });
     } catch {
-      // localStorage unavailable or corrupt — use defaults
+      const unavailable: RuntimeState = { ...emptyBudgetState, storageStatus: 'unreadable', storageRevision: 0 };
+      persistence.current = snapshot ? { snapshot, saved: unavailable, needsMigration: false } : null;
+      dispatch({ type: 'HYDRATE', payload: unavailable });
     }
   }, []);
 
   useEffect(() => {
+    const { storageStatus, storageRevision, ...budget } = state;
+    const previous = persistence.current;
+    if (storageStatus !== 'ready' || !previous || storageRevision !== previous.saved.storageRevision
+      || (state === previous.saved && !previous.needsMigration)) return;
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const contents = serializeBudget(budget);
+      writeBudgetSnapshot(localStorage, previous.snapshot, contents);
+      persistence.current = { snapshot: { current: contents, legacy: null }, saved: state, needsMigration: false };
     } catch {
-      // ignore write failures
+      dispatch({ type: 'SAVE_FAILED', revision: storageRevision });
     }
   }, [state]);
+
+  const { storageStatus, storageRevision, ...budget } = state;
+  const canExportBudget = storageStatus === 'ready' || storageStatus === 'unsaved';
+
+  function exportBudget(): string {
+    if (!canExportBudget) throw new Error('Le budget doit être chargé pour être exporté.');
+    return serializeBudget(budget);
+  }
+
+  function restoreBudget(imported: AppState): void {
+    const previous = persistence.current;
+    if (!previous || storageStatus === 'loading') throw new Error('Le stockage du navigateur est indisponible.');
+    if (storageRevision !== previous.saved.storageRevision) throw new Error('Une restauration est déjà en cours.');
+
+    const contents = serializeBudget(imported);
+    writeBudgetSnapshot(localStorage, previous.snapshot, contents);
+    const restored: RuntimeState = {
+      ...imported,
+      storageStatus: 'ready',
+      storageRevision: storageRevision + 1,
+    };
+    // A save queued before restoration must not overwrite the newly imported version.
+    persistence.current = { snapshot: { current: contents, legacy: null }, saved: restored, needsMigration: false };
+    dispatch({ type: 'HYDRATE', payload: restored });
+  }
 
   const summary = calculateBudgetSummary(
     state.currentBalance,
@@ -206,13 +292,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     state.expenses,
     state.debts,
     state.childExpenses,
-    state.userProfile.safetyReserve
+    state.userProfile.safetyReserve,
+    state.goals,
+    today,
   );
 
   const ctx: AppContextType = {
-    ...state,
+    ...budget,
     summary,
-    setBalance: (amount) => dispatch({ type: 'SET_BALANCE', payload: amount }),
+    advice: generateAdvice(summary, state.incomes, state.debts, today),
+    today,
+    storageBlocked: storageStatus === 'unreadable' || storageStatus === 'unsaved',
+    isBudgetLoading: storageStatus === 'loading',
+    canExportBudget,
+    exportBudget,
+    restoreBudget,
+    setBalance: (amount) => dispatch({ type: 'SET_BALANCE', payload: { amount, today } }),
     updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
     addIncome: (income) => dispatch({ type: 'ADD_INCOME', payload: income }),
     updateIncome: (id, data) => dispatch({ type: 'UPDATE_INCOME', payload: { id, data } }),
@@ -231,7 +326,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateGoal: (id, data) => dispatch({ type: 'UPDATE_GOAL', payload: { id, data } }),
     deleteGoal: (id) => dispatch({ type: 'DELETE_GOAL', payload: id }),
     updateMediation: (data) => dispatch({ type: 'UPDATE_MEDIATION', payload: data }),
-    resetToDemo: () => dispatch({ type: 'RESET_TO_DEMO' }),
+    recordPayment: (payment) => dispatch({ type: 'RECORD_PAYMENT', payload: { ...payment, today } }),
+    cancelExpenseOccurrence: (id, dueDate) => dispatch({ type: 'CANCEL_EXPENSE_OCCURRENCE', payload: { id, dueDate, today } }),
   };
 
   return <AppContext.Provider value={ctx}>{children}</AppContext.Provider>;

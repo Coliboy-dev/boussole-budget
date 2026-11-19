@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import './globals.css';
 import TopHeader from '@/components/layout/TopHeader';
 import BottomNav from '@/components/layout/BottomNav';
@@ -9,11 +10,13 @@ export const metadata: Metadata = {
   description: 'Reprends le contrôle de ton budget',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Les scripts de chaque réponse utilisent le nonce de cette requête.
+  await connection();
   return (
     <html lang="fr" className="h-full">
       <body className="h-full bg-[#F8F7F5] text-[#1A1A2E] antialiased">

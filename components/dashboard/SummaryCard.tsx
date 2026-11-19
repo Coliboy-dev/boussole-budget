@@ -1,9 +1,10 @@
 import Card from '@/components/ui/Card';
-import { formatCurrency } from '@/lib/budget-calculations';
+import { formatCurrency, formatDate } from '@/lib/budget-calculations';
 import type { BudgetSummary } from '@/lib/types';
 
 interface SummaryCardProps {
   summary: BudgetSummary;
+  hasUndatedPayments: boolean;
 }
 
 const riskConfig = {
@@ -30,21 +31,13 @@ const riskConfig = {
   },
 };
 
-export default function SummaryCard({ summary }: SummaryCardProps) {
+export default function SummaryCard({ summary, hasUndatedPayments }: SummaryCardProps) {
   const risk = riskConfig[summary.riskLevel];
+  const forecast = summary.availableForecast;
+  const causes = forecast.causes.slice(0, 2).join(', ');
 
   return (
-    <div className="space-y-3">
-      {/* Balance actuelle */}
-      <Card className="bg-teal-600 border-0 text-white">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm text-teal-100 font-medium">Solde bancaire</span>
-          <span className="text-xs text-teal-200">Mis à jour aujourd&apos;hui</span>
-        </div>
-        <p className="text-3xl font-bold tracking-tight">{formatCurrency(summary.currentBalance)}</p>
-      </Card>
-
-      {/* Vrai disponible */}
+    <div>
       <Card className={`border ${risk.border} ${risk.bg}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
@@ -57,9 +50,26 @@ export default function SummaryCard({ summary }: SummaryCardProps) {
             <p className={`text-2xl font-bold ${risk.color}`}>
               {formatCurrency(summary.trueAvailable)}
             </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Après charges, dettes et réserve de {formatCurrency(summary.safetyReserve)}
-            </p>
+            {summary.emptyBudget ? (
+              <p className="text-xs text-gray-500 mt-1">Saisis ton solde et tes échéances pour obtenir la projection.</p>
+            ) : (
+              <p className="text-xs text-gray-500 mt-1">
+                Point bas sur {forecast.horizon} jours le {formatDate(forecast.date)} à{' '}
+                {formatCurrency(forecast.balance)}{causes && ` après ${causes}`}.
+                Réserve déduite de {formatCurrency(summary.safetyReserve)}.
+              </p>
+            )}
+            {forecast.optimisticAvailable > summary.trueAvailable && (
+              <p className="text-xs text-gray-600 mt-1">
+                Si les revenus incertains arrivent aux dates prévues{' '}
+                <strong>{formatCurrency(forecast.optimisticAvailable)}</strong>.
+              </p>
+            )}
+            {hasUndatedPayments && (
+              <p className="text-xs text-amber-800 mt-2">
+                Projection partielle. Renseigne les dates des charges et mensualités pour les inclure.
+              </p>
+            )}
           </div>
           <div className="text-right">
             <span className={`text-xs font-medium px-2 py-1 rounded-full ${risk.bg} ${risk.color} border ${risk.border}`}>

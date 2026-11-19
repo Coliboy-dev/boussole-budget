@@ -5,6 +5,10 @@ import Badge from '@/components/ui/Badge';
 import ProgressBar from '@/components/ui/ProgressBar';
 import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
 import type { Debt, DebtStatus } from '@/lib/types';
+import { useApp } from '@/lib/context/AppContext';
+import { addDays } from '@/lib/local-date';
+import { debtOccurrences, isOpenOccurrence } from '@/lib/occurrences';
+import OccurrencePayment from '@/components/budget/OccurrencePayment';
 
 interface DebtCardProps {
   debt: Debt;
@@ -26,6 +30,10 @@ const statusConfig: Record<
 };
 
 export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
+  const { today } = useApp();
+  const nextYear = addDays(today, 366);
+  const end = debt.nextDueDate && debt.nextDueDate > nextYear ? debt.nextDueDate : nextYear;
+  const next = debtOccurrences(debt, today, end).find(isOpenOccurrence);
   const status = statusConfig[debt.status];
   const progressPercent =
     debt.initialAmount > 0
@@ -74,8 +82,16 @@ export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
         ) : (
           <span className="text-gray-400">Aucun paiement mensuel</span>
         )}
-        {debt.nextDueDate && <span>Prochaine: {formatShortDate(debt.nextDueDate)}</span>}
+        {next && (
+          <span>
+            {next.status === 'late' ? 'En retard depuis le ' : 'Échéance du '}
+            {formatShortDate(next.dueDate)}
+          </span>
+        )}
+        {!debt.nextDueDate && debt.monthlyPayment > 0 && !next && <span>Date à renseigner</span>}
       </div>
+
+      {next && <OccurrencePayment key={next.dueDate} occurrence={next} />}
 
       {debt.notes && (
         <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-50 italic">
