@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useApp } from '@/lib/context/AppContext';
 import SummaryCard from '@/components/dashboard/SummaryCard';
 import BudgetOnboarding, { OnboardingResult } from '@/components/onboarding/BudgetOnboarding';
-import BudgetChart from '@/components/dashboard/BudgetChart';
+import DailyBalanceCurve from '@/components/dashboard/DailyBalanceCurve';
 import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import FormField from '@/components/forms/FormField';
@@ -39,9 +39,8 @@ function SavedBudgetDashboard() {
   const [balanceInput, setBalanceInput] = useState('');
   const balanceValidation = useFormValidation();
   const reserveValidation = useFormValidation();
-  const firstName = userProfile.firstName?.trim();
 
-  const reminders = getUpcomingReminders(expenses, debts, [], today);
+  const reminders = getUpcomingReminders(expenses, debts, [], today, summary.availableForecast.horizon);
   const hasUndatedPayments = expenses.some((expense) => !expense.isPaid && !isLocalDate(expense.dueDate))
     || debts.some((debt) => debt.monthlyPayment > 0 && debt.remainingAmount > 0
       && debt.status !== 'suspended' && debt.status !== 'completed' && debt.status !== 'late'
@@ -82,23 +81,27 @@ function SavedBudgetDashboard() {
   ];
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      {/* Greeting */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">
-            {firstName ? `Bonjour ${firstName}` : 'Bonjour'} 👋
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Voici ta situation financière</p>
-        </div>
-      </div>
+    <div className="space-y-4 px-4 py-4">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="text-xl font-bold text-gray-900">Aujourd’hui</h1>
+        <time dateTime={today} className="text-sm text-gray-600">{formatDate(today)}</time>
+      </header>
 
-      {/* Balance card — editable */}
       {storageBlocked && (
         <AlertBanner variant="warning" title="Stockage indisponible">
           Les données enregistrées ne peuvent pas être mises à jour dans ce navigateur.
         </AlertBanner>
       )}
+      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments} hasRecordedBalance={Boolean(balanceDate)} />
+      {!summary.emptyBudget && <UpcomingDeadlines reminders={reminders} horizon={summary.availableForecast.horizon} />}
+      {(!summary.emptyBudget || balanceDate) && (
+        <DailyBalanceCurve
+          points={summary.availableForecast.dailyBalances}
+          lowestDate={summary.availableForecast.date}
+          reserve={summary.safetyReserve}
+        />
+      )}
+
       <Card className="bg-white border-gray-100">
         <div className="flex items-center justify-between">
           <div>
@@ -203,15 +206,6 @@ function SavedBudgetDashboard() {
           Ta marge est très limitée ce mois-ci. Évite les dépenses imprévues.
         </AlertBanner>
       )}
-
-      {/* Summary cards */}
-      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments} hasRecordedBalance={Boolean(balanceDate)} />
-
-      {/* Budget breakdown */}
-      <BudgetChart summary={summary} />
-
-      {/* Upcoming deadlines */}
-      {reminders.length > 0 && <UpcomingDeadlines reminders={reminders} />}
 
       {/* Advice */}
       {advice.length > 0 && <AdviceWidget advice={advice} />}

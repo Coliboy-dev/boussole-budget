@@ -129,6 +129,7 @@ export function calculateBudgetSummary(
       balance: forecast.lowestBalance,
       causes: forecast.lowestCauses,
       horizon: AVAILABLE_HORIZON,
+      dailyBalances: forecast.dailyBalances,
       optimisticAvailable: empty ? 0 : fromCents(toCents(forecast.optimisticLowestBalance) - reserve),
     },
   };
@@ -139,8 +140,9 @@ export function getUpcomingReminders(
   debts: Debt[],
   mediationSteps: MediationStep[],
   today = todayInBrussels(),
+  horizon = 30,
 ): Reminder[] {
-  const end = addDays(today, 30);
+  const end = addDays(today, horizon);
   const reminders = forecastOccurrences([], expenses, debts, [], today, end).map((occurrence): Reminder => ({
     id: `rem-${occurrence.type}-${occurrence.sourceId}-${occurrence.dueDate}`,
     label: occurrence.label,

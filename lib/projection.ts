@@ -1,4 +1,4 @@
-import type { Income, Expense, Debt, ChildExpense } from './types.ts';
+import type { Income, Expense, Debt, ChildExpense, DailyBalance } from './types.ts';
 import { addDays, daysBetween, todayInBrussels } from './local-date.ts';
 import { fromCents, toCents } from './money.ts';
 import { forecastOccurrences, type Occurrence } from './occurrences.ts';
@@ -17,17 +17,16 @@ export interface ProjectionEvent {
   isLate: boolean;
 }
 
-export interface ProjectionMilestone {
+export interface ProjectionMilestone extends DailyBalance {
   label: string;
-  date: string;
   daysFromNow: number;
-  balance: number;
   riskLevel: RiskLevel;
 }
 
 export interface ProjectionResult {
   startDate: string;
   milestones: ProjectionMilestone[];
+  dailyBalances: DailyBalance[];
   events: ProjectionEvent[];
   lowestBalance: number;
   lowestDate: string;
@@ -82,6 +81,7 @@ export function buildProjection(
   let lowest = Infinity;
   let optimisticLowest = Infinity;
   let lowestDate = today;
+  const dailyBalances: DailyBalance[] = [];
   const milestones: ProjectionMilestone[] = [];
   const milestoneDays = new Set([0, 7, 15, 30, horizon]);
 
@@ -97,13 +97,14 @@ export function buildProjection(
       lowestDate = date;
     }
     optimisticLowest = Math.min(optimisticLowest, optimisticBalance);
+    const point = { date, balance: fromCents(balance) };
+    dailyBalances.push(point);
 
     if (milestoneDays.has(offset)) {
       milestones.push({
+        ...point,
         label: offset === 0 ? "Aujourd'hui" : `Dans ${offset} jours`,
-        date,
         daysFromNow: offset,
-        balance: fromCents(balance),
         riskLevel: riskFor(balance, reserve),
       });
     }
@@ -117,6 +118,7 @@ export function buildProjection(
   return {
     startDate: today,
     milestones,
+    dailyBalances,
     events,
     lowestBalance: fromCents(lowest),
     lowestDate,

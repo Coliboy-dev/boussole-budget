@@ -43,6 +43,10 @@ Un nouveau navigateur propose trois questions sur le solde bancaire, la prochain
 
 Le tableau de bord permet de régler la réserve de sécurité. Les conseils utilisent les données du budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
 
+## Écran Aujourd’hui
+
+Le premier écran du budget affiche le vrai disponible, la date de fin de la projection et l’explication du point bas. Il présente ensuite les trois prochaines échéances et indique le nombre de retards. La courbe montre le solde prudent en fin de journée sur le même horizon. Le curseur permet de lire le solde à une date précise.
+
 ## Sauvegarde du budget
 
 Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui contient le budget complet en centimes. Pour le restaurer, choisis le fichier puis confirme le remplacement du budget sur cet appareil.

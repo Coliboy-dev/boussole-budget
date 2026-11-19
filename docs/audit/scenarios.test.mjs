@@ -458,6 +458,40 @@ test('Le premier budget conserve les dates et calcule le vrai disponible avant l
   assert.deepEqual(emptyBudgetState.expenses, []);
 });
 
+test('La courbe du solde et le vrai disponible partagent la projection prudente sur 35 jours', () => {
+  const today = '2026-11-19';
+  const budget = createFirstBudget(emptyBudgetState, {
+    balance: 800,
+    income: { amount: 1000, date: '2026-11-25' },
+    bills: [{ label: 'Loyer', amount: 350, date: '2026-11-21' }],
+  }, today);
+  const incomes = [...budget.incomes, income(200, {
+    id: 'incertain',
+    frequency: 'one_time',
+    expectedDate: '2026-11-20',
+    isConfirmed: false,
+  })];
+  const summary = calculateBudgetSummary(
+    budget.currentBalance, incomes, budget.expenses, [], [], budget.userProfile.safetyReserve, [], today,
+  );
+  const { dailyBalances, date, balance, optimisticAvailable } = summary.availableForecast;
+
+  assert.equal(dailyBalances.length, 36);
+  assert.deepEqual(dailyBalances[0], { date: today, balance: 800 });
+  assert.deepEqual(dailyBalances[1], { date: '2026-11-20', balance: 800 });
+  assert.deepEqual(dailyBalances[2], { date, balance });
+  assert.deepEqual(dailyBalances.at(-1), { date: '2026-12-24', balance: 1450 });
+  assert.equal(summary.trueAvailable, 400);
+  assert.equal(optimisticAvailable, 600);
+});
+
+test('Les prochaines échéances peuvent reprendre l’horizon du vrai disponible', () => {
+  const expenseAtEnd = expense(20, { frequency: 'one_time', dueDate: '2026-12-24' });
+  const today = '2026-11-19';
+  assert.deepEqual(getUpcomingReminders([expenseAtEnd], [], [], today), []);
+  assert.equal(getUpcomingReminders([expenseAtEnd], [], [], today, 35)[0].dueDate, '2026-12-24');
+});
+
 test('Le démarrage accepte un solde nul sans échéances et refuse une saisie incomplète', () => {
   const today = '2026-11-19';
   const input = { balance: 0, bills: [] };
