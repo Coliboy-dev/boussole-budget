@@ -10,18 +10,24 @@ import {
   toMonthlyAmount,
 } from '../../lib/budget-calculations.ts';
 import {
+  BUDGET_STORAGE_KEY,
+  LEGACY_BUDGET_STORAGE_KEY,
   cancelExpenseOccurrence,
   deserializeBudget,
   emptyBudgetState,
   migrateLegacyBudget,
+  readBudgetSnapshot,
   recordPayment,
   serializeBudget,
+  writeBudgetSnapshot,
 } from '../../lib/budget-state.ts';
 import {
   mockChildExpenses,
   mockCurrentBalance,
   mockDebts,
+  mockDocuments,
   mockExpenses,
+  mockGoals,
   mockIncomes,
   mockMediationFile,
   mockUser,
@@ -507,4 +513,97 @@ test('Le disponible inclut le jour 35 de la projection', () => {
 
   assert.equal(summary.trueAvailable, 0);
   assert.equal(summary.availableForecast.date, '2026-07-03');
+});
+
+test('La sauvegarde v2 restaure le budget complet avec les centimes et les statuts', () => {
+  const budget = {
+    currentBalance: -12.34,
+    balanceDate: '2026-05-29',
+    userProfile: mockUser,
+    incomes: mockIncomes,
+    expenses: [
+      expense(59.90, {
+        dueDate: '2026-05-29',
+        occurrenceStatuses: { '2026-05-29': 'paid', '2026-06-29': 'cancelled' },
+      }),
+      ...mockExpenses,
+    ],
+    debts: mockDebts,
+    childExpenses: mockChildExpenses,
+    goals: mockGoals,
+    mediationFile: {
+      ...mockMediationFile,
+      proposedPlan: {
+        totalAmount: 120.50,
+        monthlyPayment: 20.10,
+        duration: 6,
+        acceptedCreditors: ['A'],
+        refusedCreditors: [],
+      },
+    },
+    documents: mockDocuments,
+  };
+  const contents = serializeBudget(budget);
+  assert.equal(JSON.parse(contents).version, 2);
+  assert.equal(JSON.parse(contents).state.currentBalance, -1234);
+  assert.deepEqual(JSON.parse(JSON.stringify(deserializeBudget(contents))), budget);
+  assert.equal(serializeBudget(deserializeBudget(contents)), contents);
+});
+
+test('Un fichier tronqué, incompatible ou incohérent est refusé', () => {
+  const contents = serializeBudget(emptyBudgetState);
+  assert.throws(() => deserializeBudget(contents.slice(0, -1)), /JSON valide/);
+  assert.throws(() => deserializeBudget('{}'), /sauvegarde Boussole/);
+  assert.throws(
+    () => deserializeBudget(JSON.stringify({ ...JSON.parse(contents), version: 3 })),
+    /version de sauvegarde/,
+  );
+
+  const invalidFields = [
+    [{ incomes: null }, /budget\.incomes/],
+    [{ balanceDate: '2026-02-30' }, /budget\.balanceDate/],
+    [{ userProfile: { ...emptyBudgetState.userProfile, safetyReserve: 5.25 } }, /safetyReserve/],
+    [{ expenses: [expense(200, { occurrenceStatuses: { '2026-05-29': 'remboursé' } })] }, /occurrenceStatuses/],
+    [{ debts: [debt('d1', -1, 100, '2026-05-29')] }, /remainingAmount/],
+    [{ goals: [{ ...mockGoals[0], status: 'inconnu' }] }, /budget\.goals\[0\]\.status/],
+    [{ documents: [mockDocuments[0], mockDocuments[0]] }, /Identifiants en double/],
+  ];
+  for (const [fields, error] of invalidFields) {
+    const raw = JSON.parse(contents);
+    Object.assign(raw.state, fields);
+    assert.throws(() => deserializeBudget(JSON.stringify(raw)), error);
+  }
+});
+
+test('Les montants négatifs des dettes sont refusés en v1 et à l’enregistrement', () => {
+  const invalid = {
+    ...emptyBudgetState,
+    debts: [debt('d1', 40, -10, '2026-05-29')],
+  };
+  assert.throws(() => serializeBudget(invalid), /monthlyPayment/);
+  assert.throws(() => migrateLegacyBudget(JSON.stringify(invalid), emptyBudgetState, '2026-05-29'), /monthlyPayment/);
+});
+
+test('Une sauvegarde devenue obsolète ne peut pas écraser le stockage', () => {
+  const legacy = '{"currentBalance":321.45}';
+  const map = new Map([[LEGACY_BUDGET_STORAGE_KEY, legacy]]);
+  const storage = {
+    getItem: (key) => map.get(key) ?? null,
+    setItem: (key, value) => map.set(key, value),
+  };
+  const contents = serializeBudget(emptyBudgetState);
+  const first = readBudgetSnapshot(storage);
+  writeBudgetSnapshot(storage, first, contents);
+  assert.equal(map.get(LEGACY_BUDGET_STORAGE_KEY), legacy);
+  assert.equal(map.get(BUDGET_STORAGE_KEY), contents);
+
+  const second = readBudgetSnapshot(storage);
+  const concurrent = serializeBudget({ ...emptyBudgetState, currentBalance: 42 });
+  map.set(BUDGET_STORAGE_KEY, concurrent);
+  assert.throws(() => writeBudgetSnapshot(storage, second, contents), /autre onglet/);
+  assert.equal(map.get(BUDGET_STORAGE_KEY), concurrent);
+
+  const fullStorage = { ...storage, setItem: () => { throw new Error('quota'); } };
+  assert.throws(() => writeBudgetSnapshot(fullStorage, readBudgetSnapshot(storage), contents), /intact/);
+  assert.equal(map.get(BUDGET_STORAGE_KEY), concurrent);
 });

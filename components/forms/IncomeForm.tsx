@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { Income, IncomeType, Frequency } from '@/lib/types';
+import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { isLocalDate } from '@/lib/local-date';
 import FormField from './FormField';
 
 const cls =
@@ -31,7 +33,8 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const amount = parseFloat(form.amount);
-    if (!form.label.trim() || !Number.isFinite(amount) || amount <= 0 || !form.expectedDate) return;
+    if (!form.label.trim() || !isNonNegativeBudgetAmount(amount) || amount <= 0
+      || !isLocalDate(form.expectedDate) || (form.frequency !== 'one_time' && form.endDate && !isLocalDate(form.endDate))) return;
     onSubmit({
       label: form.label.trim(),
       type: form.type,

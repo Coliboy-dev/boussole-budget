@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { Debt, DebtStatus, DebtType } from '@/lib/types';
+import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { isLocalDate } from '@/lib/local-date';
 import FormField from './FormField';
 
 const cls =
@@ -14,6 +16,7 @@ interface Props {
 }
 
 export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
+  const [error, setError] = useState('');
   const [form, setForm] = useState({
     creditor: initial?.creditor ?? '',
     type: (initial?.type ?? 'personal') as DebtType,
@@ -26,17 +29,25 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
     notes: initial?.notes ?? '',
   });
 
-  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => {
+    setError('');
     setForm((f) => ({ ...f, [k]: v }));
+  };
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const initialAmount = parseFloat(form.initialAmount);
     const remainingAmount = parseFloat(form.remainingAmount);
-    const monthlyPayment = parseFloat(form.monthlyPayment) || 0;
-    if (!form.creditor.trim() || !Number.isFinite(initialAmount) || !Number.isFinite(remainingAmount)
-      || initialAmount < 0 || remainingAmount < 0 || monthlyPayment < 0
-      || (monthlyPayment > 0 && !form.nextDueDate)) return;
+    const monthlyPayment = form.monthlyPayment === '' ? 0 : parseFloat(form.monthlyPayment);
+    if (![initialAmount, remainingAmount, monthlyPayment].every(isNonNegativeBudgetAmount)) {
+      setError('Renseigne des montants valides et supérieurs ou égaux à zéro.');
+      return;
+    }
+    if (!form.creditor.trim()) return;
+    if ((form.nextDueDate || monthlyPayment > 0) && !isLocalDate(form.nextDueDate)) {
+      setError('Renseigne une date d’échéance valide.');
+      return;
+    }
     onSubmit({
       creditor: form.creditor.trim(),
       type: form.type,
@@ -52,6 +63,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
 
   return (
     <form onSubmit={handleSubmit}>
+      {error && <p role="alert" className="mb-3 text-sm text-red-700">{error}</p>}
       <FormField label="Créancier" required hint="Nom de la banque, entreprise ou personne">
         <input
           className={cls}

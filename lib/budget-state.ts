@@ -1,10 +1,45 @@
 import type { ChildExpense, Debt, DocumentItem, Expense, Goal, Income, MediationFile, UserProfile } from './types.ts';
+import { assertBudgetState } from './budget-schema.ts';
 import { isLocalDate } from './local-date.ts';
 import { debtOccurrences, expenseOccurrences, incomeOccurrences, isOpenOccurrence } from './occurrences.ts';
 import { fromCents, toCents } from './money.ts';
 
 export const BUDGET_STORAGE_KEY = 'boussole-budget-v2';
 export const LEGACY_BUDGET_STORAGE_KEY = 'boussole-budget-v1';
+const BUDGET_VERSION = 2;
+
+export interface BudgetStorageSnapshot {
+  current: string | null;
+  legacy: string | null;
+}
+
+export function readBudgetSnapshot(storage: Pick<Storage, 'getItem'>): BudgetStorageSnapshot {
+  const current = storage.getItem(BUDGET_STORAGE_KEY);
+  const legacy = current === null ? storage.getItem(LEGACY_BUDGET_STORAGE_KEY) : null;
+  return { current, legacy };
+}
+
+export function writeBudgetSnapshot(
+  storage: Pick<Storage, 'getItem' | 'setItem'>,
+  expected: BudgetStorageSnapshot,
+  contents: string,
+): void {
+  let latest: BudgetStorageSnapshot;
+  try {
+    latest = readBudgetSnapshot(storage);
+  } catch {
+    throw new Error('Le stockage du navigateur est indisponible.');
+  }
+  if (latest.current !== expected.current || latest.legacy !== expected.legacy) {
+    throw new Error('Le budget enregistré a changé dans un autre onglet. Recharge la page avant de continuer.');
+  }
+
+  try {
+    storage.setItem(BUDGET_STORAGE_KEY, contents);
+  } catch {
+    throw new Error('Impossible d’enregistrer dans ce navigateur. Le budget enregistré est intact.');
+  }
+}
 
 export interface AppState {
   currentBalance: number;
@@ -78,30 +113,35 @@ function convertAmounts(state: AppState, convert: (amount: number) => number): A
 }
 
 export function serializeBudget(state: AppState): string {
-  return JSON.stringify({ version: 2, state: convertAmounts(state, checkedCents) });
+  assertBudgetState(state, 'euros');
+  return JSON.stringify({ version: BUDGET_VERSION, state: convertAmounts(state, toCents) });
 }
 
-function checkedCents(amount: number): number {
-  if (!Number.isFinite(amount)) throw new Error('Montant invalide');
-  const cents = toCents(amount);
-  if (!Number.isSafeInteger(cents)) throw new Error('Montant en centimes invalide');
-  return cents;
+function parseBudgetJSON(contents: string): unknown {
+  try {
+    return JSON.parse(contents.replace(/^\uFEFF/, ''));
+  } catch {
+    throw new Error('Le fichier ne contient pas de JSON valide.');
+  }
 }
 
 export function deserializeBudget(stored: string): AppState {
-  const value = JSON.parse(stored) as { version?: unknown; state?: AppState } | null;
-  if (value?.version !== 2 || !value.state) throw new Error('Version de budget non reconnue');
+  const value = parseBudgetJSON(stored);
+  if (!value || typeof value !== 'object' || !('version' in value) || !('state' in value)) {
+    throw new Error('Ce fichier ne contient pas de sauvegarde Boussole Budget.');
+  }
+  if (value.version !== BUDGET_VERSION) throw new Error('Cette version de sauvegarde n’est pas prise en charge.');
 
-  return convertAmounts(value.state, (amount) => {
-    if (!Number.isSafeInteger(amount)) throw new Error('Montant en centimes invalide');
-    return fromCents(amount);
-  });
+  assertBudgetState(value.state, 'cents');
+  return convertAmounts(value.state, fromCents);
 }
 
 export function migrateLegacyBudget(stored: string, defaults: AppState, today: string): AppState {
-  const value = JSON.parse(stored) as Partial<AppState> | null;
+  const value = parseBudgetJSON(stored);
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Budget v1 invalide');
-  const state = convertAmounts({ ...defaults, ...value }, (amount) => fromCents(checkedCents(amount)));
+  const legacy = { ...defaults, ...value };
+  assertBudgetState(legacy, 'euros');
+  const state = convertAmounts(legacy, (amount) => fromCents(toCents(amount)));
 
   return {
     ...state,

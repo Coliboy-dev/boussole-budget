@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { Goal, GoalStatus } from '@/lib/types';
+import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { isLocalDate } from '@/lib/local-date';
 import FormField from './FormField';
 
 const cls =
@@ -32,7 +34,9 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
     const targetAmount = parseFloat(form.targetAmount);
     const savedAmount = parseFloat(form.savedAmount) || 0;
     const monthlyContribution = parseFloat(form.monthlyContribution) || undefined;
-    if (!form.label.trim() || isNaN(targetAmount) || targetAmount <= 0) return;
+    if (!form.label.trim() || targetAmount <= 0
+      || ![targetAmount, savedAmount, monthlyContribution ?? 0].every(isNonNegativeBudgetAmount)
+      || (form.targetDate && !isLocalDate(form.targetDate))) return;
     onSubmit({
       label: form.label.trim(),
       targetAmount,
@@ -45,7 +49,7 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit}>
       <FormField label="Nom de l'objectif" required>
         <input
           className={cls}

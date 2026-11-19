@@ -16,6 +16,7 @@ const moreNavItems = [
   { href: '/objectifs', label: 'Objectifs', icon: '🎯' },
   { href: '/projection', label: 'Projection', icon: '📅' },
   { href: '/conseils', label: 'Conseils', icon: '💡' },
+  { href: '/sauvegarde', label: 'Sauvegarde', icon: '💾' },
 ];
 
 export default function BottomNav() {

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import type { ChildExpense, ChildExpenseCategory, ChildExpenseStatus } from '@/lib/types';
-import { todayInBrussels } from '@/lib/local-date';
+import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { isLocalDate, todayInBrussels } from '@/lib/local-date';
 import FormField from './FormField';
 
 const cls =
@@ -37,7 +38,9 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
     const totalAmount = parseFloat(form.totalAmount);
     const paidByUser = parseFloat(form.paidByUser);
     const shareAmount = parseFloat(form.shareAmount) || 0;
-    if (!form.label.trim() || isNaN(totalAmount) || isNaN(paidByUser)) return;
+    if (!form.label.trim() || ![totalAmount, paidByUser, shareAmount].every(isNonNegativeBudgetAmount)
+      || !isLocalDate(form.date)
+      || (form.status !== 'reimbursed' && form.reimbursementDate && !isLocalDate(form.reimbursementDate))) return;
     onSubmit({
       childName: form.childName.trim() || undefined,
       label: form.label.trim(),
@@ -54,7 +57,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Prénom de l'enfant" hint="Optionnel">
           <input

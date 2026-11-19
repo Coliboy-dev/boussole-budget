@@ -41,6 +41,12 @@ Le disponible correspond au plus bas des soldes projetés en fin de journée sur
 
 Un nouveau navigateur démarre avec un budget vide. Le tableau de bord permet de régler la réserve de sécurité et d'ouvrir la démo en lecture seule. Un budget déjà enregistré est chargé avec ses propres données. Les conseils du tableau de bord et de la page Conseils utilisent ce budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
 
+## Sauvegarde du budget
+
+Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui contient le budget complet en centimes. Pour le restaurer, choisis le fichier puis confirme le remplacement du budget sur cet appareil.
+
+Le même schéma contrôle le fichier et le stockage du navigateur. Une version incompatible, une date invalide ou une dette avec un montant négatif est signalée. L'application charge les données avant de les écrire et ne remplace le budget actif qu'après l'enregistrement réussi de l'import. La migration automatique d'un ancien budget conserve la copie v1.
+
 ## Comment s'en servir pour la suite
 
 1. **Chantier P0-1** met en place les assertions, le script `npm test` et la CI.

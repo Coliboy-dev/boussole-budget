@@ -10,6 +10,7 @@ import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import AlertBanner from '@/components/ui/AlertBanner';
 import Card from '@/components/ui/Card';
 import { getUpcomingReminders, formatCurrency, formatDate } from '@/lib/budget-calculations';
+import { isBudgetAmount, isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { isLocalDate } from '@/lib/local-date';
 import { fromCents, toCents } from '@/lib/money';
 
@@ -31,7 +32,7 @@ export default function DashboardPage() {
   function handleBalanceSubmit(e: React.FormEvent) {
     e.preventDefault();
     const val = parseFloat(balanceInput.replace(',', '.'));
-    if (Number.isFinite(val)) setBalance(val);
+    if (isBudgetAmount(val)) setBalance(val);
     setEditingBalance(false);
   }
 
@@ -43,9 +44,9 @@ export default function DashboardPage() {
   function handleReserveSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = String(new FormData(event.currentTarget).get('reserve') ?? '');
-    const cents = toCents(Number(value));
-    if (value === '' || !Number.isSafeInteger(cents) || cents < 0) return;
-    updateProfile({ safetyReserve: fromCents(cents) });
+    const amount = Number(value);
+    if (value === '' || !isNonNegativeBudgetAmount(amount)) return;
+    updateProfile({ safetyReserve: fromCents(toCents(amount)) });
   }
 
   const quickLinks = [
@@ -150,9 +151,10 @@ export default function DashboardPage() {
             </button>
           </form>
         </details>
-        <Link href="/demo" prefetch={false} className="text-xs font-medium text-teal-700 underline">
-          Voir un budget de démonstration
-        </Link>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-teal-700">
+          <Link href="/sauvegarde" className="underline">Sauvegarder ou restaurer le budget</Link>
+          <Link href="/demo" prefetch={false} className="underline">Voir un budget de démonstration</Link>
+        </div>
       </Card>
 
       {/* Alert banners */}
