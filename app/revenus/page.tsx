@@ -94,7 +94,7 @@ export default function RevenusPage() {
         <IncomeList
           incomes={incomes}
           onEdit={handleEdit}
-          onDelete={(id) => { if (confirm('Supprimer ce revenu ?')) deleteIncome(id); }}
+          onDelete={deleteIncome}
         />
 
         {incomes.length === 0 && (

@@ -5,6 +5,7 @@ import type { Expense, ExpenseCategory, Frequency } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { isLocalDate } from '@/lib/local-date';
 import FormField from './FormField';
+import { useFormValidation } from './useFormValidation';
 
 const cls =
   'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 bg-white';
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
+  const { errors, validate, clearFieldError } = useFormValidation();
   const [form, setForm] = useState({
     label: initial?.label ?? '',
     category: (initial?.category ?? 'other') as ExpenseCategory,
@@ -30,12 +32,16 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const amount = parseFloat(form.amount);
     const isRecurring = form.frequency !== 'one_time';
-    if (!form.label.trim() || !isNonNegativeBudgetAmount(amount) || amount <= 0
-      || !isLocalDate(form.dueDate) || (isRecurring && form.endDate && !isLocalDate(form.endDate))) return;
+    if (!validate(e.currentTarget, {
+      label: form.label.trim() ? undefined : 'Renseigne l’intitulé de la charge.',
+      amount: isNonNegativeBudgetAmount(amount) && amount > 0 ? undefined : 'Saisis un montant valide supérieur à zéro.',
+      dueDate: isLocalDate(form.dueDate) ? undefined : 'Renseigne une date d’échéance valide.',
+      endDate: form.endDate && !isLocalDate(form.endDate) ? 'Renseigne une date de fin valide.' : undefined,
+    })) return;
     onSubmit({
       label: form.label.trim(),
       category: form.category,
@@ -53,10 +59,11 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <FormField label="Intitulé" required>
+    <form onSubmit={handleSubmit} onChange={clearFieldError} noValidate>
+      <FormField label="Intitulé" required error={errors.label}>
         <input
           className={cls}
+          name="label"
           value={form.label}
           onChange={(e) => set('label', e.target.value)}
           placeholder="Ex : Loyer, Énergie…"
@@ -84,12 +91,13 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
       </FormField>
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="Montant (€)" required>
+        <FormField label="Montant (€)" required error={errors.amount}>
           <input
             className={cls}
             type="number"
             min="0"
             step="0.01"
+            name="amount"
             value={form.amount}
             onChange={(e) => set('amount', e.target.value)}
             placeholder="0,00"
@@ -112,22 +120,24 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
         </FormField>
       </div>
 
-      <FormField label={form.frequency === 'one_time' ? 'Date d’échéance' : 'Date de la première échéance'} required>
+      <FormField label={form.frequency === 'one_time' ? 'Date d’échéance' : 'Date de la première échéance'} required error={errors.dueDate}>
         <input
           className={cls}
           type="date"
           required
+          name="dueDate"
           value={form.dueDate}
           onChange={(e) => set('dueDate', e.target.value)}
         />
       </FormField>
 
       {form.frequency !== 'one_time' && (
-        <FormField label="Fin de la récurrence" hint="Optionnel">
+        <FormField label="Fin de la récurrence" hint="Optionnel" error={errors.endDate}>
           <input
             className={cls}
             type="date"
             min={form.dueDate || undefined}
+            name="endDate"
             value={form.endDate}
             onChange={(e) => set('endDate', e.target.value)}
           />

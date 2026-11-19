@@ -125,7 +125,7 @@ export default function ChargesPage() {
         <ExpenseList
           expenses={expenses}
           onEdit={handleEdit}
-          onDelete={(id) => { if (confirm('Supprimer cette charge ?')) deleteExpense(id); }}
+          onDelete={deleteExpense}
         />
 
         {expenses.length === 0 && (

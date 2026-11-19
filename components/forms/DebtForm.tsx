@@ -5,6 +5,7 @@ import type { Debt, DebtStatus, DebtType } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { isLocalDate } from '@/lib/local-date';
 import FormField from './FormField';
+import { useFormValidation } from './useFormValidation';
 
 const cls =
   'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 bg-white';
@@ -16,7 +17,7 @@ interface Props {
 }
 
 export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
-  const [error, setError] = useState('');
+  const { errors, validate, clearFieldError } = useFormValidation();
   const [form, setForm] = useState({
     creditor: initial?.creditor ?? '',
     type: (initial?.type ?? 'personal') as DebtType,
@@ -29,25 +30,22 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
     notes: initial?.notes ?? '',
   });
 
-  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => {
-    setError('');
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
-  };
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const initialAmount = parseFloat(form.initialAmount);
     const remainingAmount = parseFloat(form.remainingAmount);
     const monthlyPayment = form.monthlyPayment === '' ? 0 : parseFloat(form.monthlyPayment);
-    if (![initialAmount, remainingAmount, monthlyPayment].every(isNonNegativeBudgetAmount)) {
-      setError('Renseigne des montants valides et supérieurs ou égaux à zéro.');
-      return;
-    }
-    if (!form.creditor.trim()) return;
-    if ((form.nextDueDate || monthlyPayment > 0) && !isLocalDate(form.nextDueDate)) {
-      setError('Renseigne une date d’échéance valide.');
-      return;
-    }
+    if (!validate(e.currentTarget, {
+      creditor: form.creditor.trim() ? undefined : 'Renseigne le nom du créancier.',
+      initialAmount: isNonNegativeBudgetAmount(initialAmount) ? undefined : 'Saisis un montant initial valide et positif ou nul.',
+      remainingAmount: isNonNegativeBudgetAmount(remainingAmount) ? undefined : 'Saisis un montant restant valide et positif ou nul.',
+      monthlyPayment: isNonNegativeBudgetAmount(monthlyPayment) ? undefined : 'Saisis une mensualité valide et positive ou nulle.',
+      nextDueDate: (form.nextDueDate || monthlyPayment > 0) && !isLocalDate(form.nextDueDate)
+        ? 'Renseigne une date d’échéance valide.' : undefined,
+    })) return;
     onSubmit({
       creditor: form.creditor.trim(),
       type: form.type,
@@ -62,11 +60,11 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      {error && <p role="alert" className="mb-3 text-sm text-red-700">{error}</p>}
-      <FormField label="Créancier" required hint="Nom de la banque, entreprise ou personne">
+    <form onSubmit={handleSubmit} onChange={clearFieldError} noValidate>
+      <FormField label="Créancier" required hint="Nom de la banque, entreprise ou personne" error={errors.creditor}>
         <input
           className={cls}
+          name="creditor"
           value={form.creditor}
           onChange={(e) => set('creditor', e.target.value)}
           placeholder="Ex : BNP Paribas, CPAS…"
@@ -103,24 +101,26 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="Montant initial (€)" required>
+        <FormField label="Montant initial (€)" required error={errors.initialAmount}>
           <input
             className={cls}
             type="number"
             min="0"
             step="0.01"
+            name="initialAmount"
             value={form.initialAmount}
             onChange={(e) => set('initialAmount', e.target.value)}
             placeholder="0,00"
             required
           />
         </FormField>
-        <FormField label="Montant restant (€)" required>
+        <FormField label="Montant restant (€)" required error={errors.remainingAmount}>
           <input
             className={cls}
             type="number"
             min="0"
             step="0.01"
+            name="remainingAmount"
             value={form.remainingAmount}
             onChange={(e) => set('remainingAmount', e.target.value)}
             placeholder="0,00"
@@ -130,22 +130,24 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="Mensualité (€)">
+        <FormField label="Mensualité (€)" error={errors.monthlyPayment}>
           <input
             className={cls}
             type="number"
             min="0"
             step="0.01"
+            name="monthlyPayment"
             value={form.monthlyPayment}
             onChange={(e) => set('monthlyPayment', e.target.value)}
             placeholder="0,00"
           />
         </FormField>
-        <FormField label="Date de la première échéance" required={Number(form.monthlyPayment) > 0}>
+        <FormField label="Date de la première échéance" required={Number(form.monthlyPayment) > 0} error={errors.nextDueDate}>
           <input
             className={cls}
             type="date"
             required={Number(form.monthlyPayment) > 0}
+            name="nextDueDate"
             value={form.nextDueDate}
             onChange={(e) => set('nextDueDate', e.target.value)}
           />

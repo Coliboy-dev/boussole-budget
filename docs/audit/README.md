@@ -47,6 +47,12 @@ Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui 
 
 Le même schéma contrôle le fichier et le stockage du navigateur. Une version incompatible, une date invalide ou une dette avec un montant négatif est signalée. L'application charge les données avant de les écrire et ne remplace le budget actif qu'après l'enregistrement réussi de l'import. La migration automatique d'un ancien budget conserve la copie v1.
 
+## Hygiène technique et formulaires
+
+Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.
+
+Le tableau de bord affiche une seule carte de solde. Une suppression demande une confirmation. Les erreurs de saisie s'affichent sous les champs et le premier champ invalide reçoit le focus.
+
 ## Comment s'en servir pour la suite
 
 1. **Chantier P0-1** met en place les assertions, le script `npm test` et la CI.

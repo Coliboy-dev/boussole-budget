@@ -89,7 +89,7 @@ export default function ObjectifsPage() {
           </AlertBanner>
         )}
 
-        <GoalList goals={goals} onEdit={handleEdit} onDelete={(id) => { if (confirm('Supprimer cet objectif ?')) deleteGoal(id); }} />
+        <GoalList goals={goals} onEdit={handleEdit} onDelete={deleteGoal} />
 
         {goals.length === 0 && (
           <button

@@ -107,7 +107,7 @@ export default function DettesPage() {
           </div>
         </Card>
 
-        <DebtList debts={debts} onEdit={handleEdit} onDelete={(id) => { if (confirm('Supprimer cette dette ?')) deleteDebt(id); }} />
+        <DebtList debts={debts} onEdit={handleEdit} onDelete={deleteDebt} />
 
         {debts.length === 0 && (
           <button

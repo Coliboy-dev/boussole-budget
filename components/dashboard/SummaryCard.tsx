@@ -4,7 +4,6 @@ import type { BudgetSummary } from '@/lib/types';
 
 interface SummaryCardProps {
   summary: BudgetSummary;
-  balanceDate?: string;
   hasUndatedPayments: boolean;
 }
 
@@ -32,21 +31,13 @@ const riskConfig = {
   },
 };
 
-export default function SummaryCard({ summary, balanceDate, hasUndatedPayments }: SummaryCardProps) {
+export default function SummaryCard({ summary, hasUndatedPayments }: SummaryCardProps) {
   const risk = riskConfig[summary.riskLevel];
   const forecast = summary.availableForecast;
   const causes = forecast.causes.slice(0, 2).join(', ');
 
   return (
-    <div className="space-y-3">
-      <Card className="bg-teal-600 border-0 text-white">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm text-teal-100 font-medium">Solde bancaire</span>
-          {balanceDate && <span className="text-xs text-teal-200">{formatDate(balanceDate)}</span>}
-        </div>
-        <p className="text-3xl font-bold tracking-tight">{formatCurrency(summary.currentBalance)}</p>
-      </Card>
-      {/* Vrai disponible */}
+    <div>
       <Card className={`border ${risk.border} ${risk.bg}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
