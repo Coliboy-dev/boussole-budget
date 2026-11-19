@@ -20,6 +20,7 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
     amount: initial?.amount?.toString() ?? '',
     frequency: (initial?.frequency ?? 'monthly') as Frequency,
     expectedDate: initial?.expectedDate ?? '',
+    endDate: initial?.endDate ?? '',
     isConfirmed: initial?.isConfirmed ?? true,
     notes: initial?.notes ?? '',
   });
@@ -30,20 +31,21 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const amount = parseFloat(form.amount);
-    if (!form.label.trim() || isNaN(amount) || amount <= 0) return;
+    if (!form.label.trim() || !Number.isFinite(amount) || amount <= 0 || !form.expectedDate) return;
     onSubmit({
       label: form.label.trim(),
       type: form.type,
       amount,
       frequency: form.frequency,
-      expectedDate: form.expectedDate || undefined,
+      expectedDate: form.expectedDate,
+      endDate: form.frequency === 'one_time' ? undefined : form.endDate || undefined,
       isConfirmed: form.isConfirmed,
       notes: form.notes.trim() || undefined,
     });
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit}>
       <FormField label="Intitulé" required>
         <input
           className={cls}
@@ -98,14 +100,27 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
         </FormField>
       </div>
 
-      <FormField label="Prochain versement attendu" hint="Optionnel">
+      <FormField label={form.frequency === 'one_time' ? 'Date du versement' : 'Date du premier versement'} required>
         <input
           className={cls}
           type="date"
+          required
           value={form.expectedDate}
           onChange={(e) => set('expectedDate', e.target.value)}
         />
       </FormField>
+
+      {form.frequency !== 'one_time' && (
+        <FormField label="Fin de la récurrence" hint="Optionnel">
+          <input
+            className={cls}
+            type="date"
+            min={form.expectedDate || undefined}
+            value={form.endDate}
+            onChange={(e) => set('endDate', e.target.value)}
+          />
+        </FormField>
+      )}
 
       <div className="flex items-center gap-3 mb-4">
         <input

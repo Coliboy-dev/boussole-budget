@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ChildExpense, ChildExpenseCategory, ChildExpenseStatus } from '@/lib/types';
+import { todayInBrussels } from '@/lib/local-date';
 import FormField from './FormField';
 
 const cls =
@@ -22,7 +23,8 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
     paidByUser: initial?.paidByUser?.toString() ?? '',
     shareAmount: initial?.shareAmount?.toString() ?? '0',
     status: (initial?.status ?? 'pending') as ChildExpenseStatus,
-    date: initial?.date ?? new Date().toISOString().slice(0, 10),
+    date: initial?.date ?? todayInBrussels(),
+    reimbursementDate: initial?.reimbursementDate ?? '',
     receiptSent: initial?.receiptSent ?? false,
     notes: initial?.notes ?? '',
   });
@@ -45,6 +47,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
       shareAmount,
       status: form.status,
       date: form.date,
+      reimbursementDate: form.status === 'reimbursed' ? undefined : form.reimbursementDate || undefined,
       receiptSent: form.receiptSent,
       notes: form.notes.trim() || undefined,
     });
@@ -149,6 +152,17 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
           <option value="receipt_sent">Justificatif envoyé</option>
         </select>
       </FormField>
+
+      {form.status !== 'reimbursed' && Number(form.shareAmount) > 0 && (
+        <FormField label="Remboursement attendu le" hint="Optionnel, affiché comme revenu incertain">
+          <input
+            className={cls}
+            type="date"
+            value={form.reimbursementDate}
+            onChange={(e) => set('reimbursementDate', e.target.value)}
+          />
+        </FormField>
+      )}
 
       <div className="flex items-center gap-3 mb-4">
         <input

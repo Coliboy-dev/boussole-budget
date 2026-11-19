@@ -1,9 +1,11 @@
 import type { BudgetSummary, AdviceItem, Debt, MediationFile } from './types';
+import { daysBetween, isLocalDate, todayInBrussels } from './local-date.ts';
 
 export function generateAdvice(
   summary: BudgetSummary,
   debts: Debt[],
-  mediation: MediationFile | null
+  mediation: MediationFile | null,
+  today = todayInBrussels(),
 ): AdviceItem[] {
   const advice: AdviceItem[] = [];
 
@@ -71,10 +73,8 @@ export function generateAdvice(
   }
 
   // Next mediation appointment soon
-  if (mediation?.nextAppointment) {
-    const nextAppt = new Date(mediation.nextAppointment);
-    const today = new Date();
-    const daysUntil = Math.ceil((nextAppt.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (isLocalDate(mediation?.nextAppointment)) {
+    const daysUntil = daysBetween(today, mediation.nextAppointment);
     if (daysUntil <= 14 && daysUntil > 0) {
       advice.push({
         id: 'adv-mediation-appt',

@@ -25,14 +25,22 @@ npm test
 
 La suite impose le fuseau `Europe/Brussels` et fige l'horloge pour chaque scénario. Le décalage d'un jour de la projection (FIN-06) n'apparaît pas en UTC.
 
-Les 16 scénarios vérifient les résultats attendus du tableau « Scénarios chiffrés » du rapport D. Chaque écart fait échouer `npm test`. GitHub Actions exécute cette commande à chaque push sur `main` et pour les pull requests qui la ciblent. La suite échoue avec le moteur actuel.
+Les 16 scénarios vérifient les résultats attendus du tableau « Scénarios chiffrés » du rapport D. La suite couvre aussi la migration, le calendrier des récurrences, les paiements et l'horizon du disponible. Chaque écart fait échouer `npm test`. GitHub Actions exécute cette commande à chaque push sur `main` et pour les pull requests qui la ciblent. S7 reste en échec jusqu'au chantier des conseils personnalisés.
 
 S2 vérifie que le paiement du loyer laisse le disponible inchangé. Les 1 800 € du tableau correspondent au résultat du moteur actuel avant paiement. S9 et S10 fixent un jour d'ancrage pour les courses afin de vérifier la récurrence sans dépendre d'une date estimée.
+
+Le modèle daté précise les opérations des scénarios S1, S3, S5, S11 et S13. S1 saisit le loyer comme une charge historique déjà payée, puisque le scénario ne prévoit que les courses avant la prochaine rentrée. S3 et S5 datent les flux du jour de départ. S11 teste le statut de trois échéances uniques. S13 borne ses charges de quelques centimes à la date du scénario. Les montants attendus du rapport sont conservés.
+
+## Modèle daté et vrai disponible
+
+Le budget v2 est enregistré en centimes entiers. La migration conserve la copie v1. Une ancienne date de récurrence sert de repère de calendrier. La migration conserve les retards identifiables sans déduire une succession de factures impayées de l'ancien repère. Les charges sans date restent consultables et le tableau de bord signale qu'elles sont hors projection.
+
+Le disponible correspond au plus bas des soldes projetés en fin de journée sur 35 jours, moins la réserve. Les revenus incertains alimentent une estimation distincte. Sur la démo du 29 mai, le solde prudent atteint 148,50 € le 1er juin après le loyer et le transport, soit 98,50 € après réserve.
 
 ## Comment s'en servir pour la suite
 
 1. **Chantier P0-1** met en place les assertions, le script `npm test` et la CI.
-2. **Chantiers P0-2 et P0-3** : refaire le moteur jusqu'à ce que la suite passe. Le critère central : sur la démo au 29 mai 2026, le vrai disponible vaut **98,50 €**.
+2. **Chantiers P0-2 et P0-3** introduisent le modèle daté et calculent le vrai disponible. Sur la démo au 29 mai 2026, il vaut **98,50 €**.
 3. Ne pas modifier un attendu pour faire passer un test sans l'avoir justifié par écrit.
 
 ## Ordre d'exécution recommandé

@@ -1,4 +1,4 @@
-// Les attendus viennent du rapport D. Le moteur actuel doit faire échouer ces tests.
+// Les attendus viennent du rapport D.
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 import { generateAdvice } from '../../lib/advice-engine.ts';
@@ -10,12 +10,20 @@ import {
   toMonthlyAmount,
 } from '../../lib/budget-calculations.ts';
 import {
+  cancelExpenseOccurrence,
+  deserializeBudget,
+  migrateLegacyBudget,
+  recordPayment,
+  serializeBudget,
+} from '../../lib/budget-state.ts';
+import {
   mockChildExpenses,
   mockCurrentBalance,
   mockDebts,
   mockExpenses,
   mockIncomes,
   mockMediationFile,
+  mockUser,
 } from '../../lib/mock-data.ts';
 import { buildProjection } from '../../lib/projection.ts';
 
@@ -83,7 +91,7 @@ test('S1 — un salaire déjà reçu et un loyer déjà payé sont dans le solde
   mock.timers.setTime(Date.parse('2026-06-10T10:00:00+02:00'));
   const incomes = [income(2000, { expectedDate: '2026-06-05' })];
   const expenses = [
-    expense(800, { id: 'loyer', dueDate: '2026-06-01', isPaid: true }),
+    expense(800, { id: 'loyer', frequency: 'one_time', dueDate: '2026-06-01', isPaid: true }),
     expense(400, { id: 'courses', dueDate: '2026-06-15' }),
   ];
 
@@ -103,12 +111,14 @@ test('S2 — payer le loyer et mettre à jour le solde ne change pas le disponib
 
 test('S3 — une pension incertaine est exclue du disponible prudent', () => {
   const incomes = [
-    income(1150),
-    income(200, { id: 'pension', type: 'alimony', isConfirmed: false }),
+    income(1150, { expectedDate: '2026-05-29' }),
+    income(200, { id: 'pension', type: 'alimony', isConfirmed: false, expectedDate: '2026-05-29' }),
   ];
-  const summary = calculateBudgetSummary(100, incomes, [expense(1100)], [], [], 50);
+  const expenses = [expense(1100, { dueDate: '2026-05-29' })];
+  const summary = calculateBudgetSummary(100, incomes, expenses, [], [], 50);
 
   assert.equal(summary.trueAvailable, 100);
+  assert.equal(summary.availableForecast.optimisticAvailable, 300);
 });
 
 test('S4 — une facture ponctuelle datée est prise en compte', () => {
@@ -150,7 +160,9 @@ test('S5 — des frais enfants historiques et remboursés ne pèsent plus sur le
     date: `2025-${String(month + 1).padStart(2, '0')}-10`,
     receiptSent: true,
   }));
-  const summary = calculateBudgetSummary(1000, [income(1500)], [expense(1000)], [], history, 50);
+  const incomes = [income(1500, { expectedDate: '2026-05-29' })];
+  const expenses = [expense(1000, { dueDate: '2026-05-29' })];
+  const summary = calculateBudgetSummary(1000, incomes, expenses, [], history, 50);
 
   assert.equal(summary.trueAvailable, 1450);
 });
@@ -271,9 +283,9 @@ test('S10 — les échéances de la démo se renouvellent et les impayés resten
 
 test('S11 — les rappels incluent les échéances du jour et les retards', () => {
   const expenses = [
-    expense(100, { id: 'jour', label: 'Due aujourd’hui', dueDate: '2026-05-29' }),
-    expense(100, { id: 'payee', label: 'Payée', dueDate: '2026-06-02', isPaid: true }),
-    expense(100, { id: 'retard', label: 'En retard', dueDate: '2026-05-20' }),
+    expense(100, { id: 'jour', label: 'Due aujourd’hui', frequency: 'one_time', dueDate: '2026-05-29' }),
+    expense(100, { id: 'payee', label: 'Payée', frequency: 'one_time', dueDate: '2026-06-02', isPaid: true }),
+    expense(100, { id: 'retard', label: 'En retard', frequency: 'one_time', dueDate: '2026-05-20' }),
   ];
 
   assert.deepEqual(
@@ -300,7 +312,10 @@ test('S12 — un arriéré sans mensualité reste dû et la dernière mensualit�
 });
 
 test('S13 — les centimes sont exacts et un disponible nul reste neutre', () => {
-  const expenses = [expense(0.10, { id: 'dix' }), expense(0.20, { id: 'vingt' })];
+  const expenses = [
+    expense(0.10, { id: 'dix', dueDate: '2026-05-29', endDate: '2026-05-29' }),
+    expense(0.20, { id: 'vingt', dueDate: '2026-05-29', endDate: '2026-05-29' }),
+  ];
   const summary = calculateBudgetSummary(0.30, [], expenses, [], [], 0);
 
   assert.deepEqual(
@@ -353,7 +368,120 @@ test('S15 — la démo du 29 mai laisse 98,50 € disponibles après réserve', 
       available: summary.trueAvailable,
       lowestBalance: projection.lowestBalance,
       lowestDate: projection.lowestDate,
+      causes: summary.availableForecast.causes,
     },
-    { available: 98.50, lowestBalance: 148.50, lowestDate: '2026-06-01' },
+    {
+      available: 98.50,
+      lowestBalance: 148.50,
+      lowestDate: '2026-06-01',
+      causes: ['Loyer', 'Transport (STIB)'],
+    },
   );
+});
+
+const emptyState = {
+  currentBalance: 0,
+  userProfile: mockUser,
+  incomes: [],
+  expenses: [],
+  debts: [],
+  childExpenses: [],
+  goals: [],
+  mediationFile: mockMediationFile,
+  documents: [],
+};
+
+test('Une charge ancrée au 31 mai revient en juin, juillet et août sans dériver', () => {
+  const rent = expense(50, {
+    dueDate: '2026-05-31',
+    endDate: '2026-08-31',
+    trackedFrom: '2026-05-31',
+    occurrenceStatuses: { '2026-05-31': 'paid' },
+  });
+  const projection = buildProjection(250, [], [rent], [], [], 50, { today: '2026-06-01', horizon: 120 });
+
+  assert.deepEqual(projection.events.map(({ dueDate }) => dueDate), ['2026-06-30', '2026-07-31', '2026-08-31']);
+});
+
+test('La migration v1 conserve les données et enregistre les montants v2 en centimes', () => {
+  const legacy = JSON.stringify({
+    ...emptyState,
+    currentBalance: 847.50,
+    expenses: [
+      expense(59.90, { id: 'paid', dueDate: '2026-05-29', isPaid: true }),
+      expense(10.05, { id: 'late', dueDate: '2026-05-28' }),
+    ],
+  });
+  const migrated = migrateLegacyBudget(legacy, emptyState, '2026-05-29');
+  const stored = serializeBudget(migrated);
+  const raw = JSON.parse(stored);
+  const reloaded = deserializeBudget(stored);
+
+  assert.equal(raw.version, 2);
+  assert.equal(raw.state.currentBalance, 84750);
+  assert.deepEqual(raw.state.expenses.map(({ amount }) => amount), [5990, 1005]);
+  assert.deepEqual(reloaded.expenses[0].occurrenceStatuses, { '2026-05-29': 'paid' });
+  assert.equal(reloaded.expenses[1].trackedFrom, '2026-05-28');
+  assert.equal(reloaded.currentBalance, JSON.parse(legacy).currentBalance);
+  assert.equal(serializeBudget(reloaded), stored);
+});
+
+test('Un paiement de charge débite le solde une fois et garde l’échéance suivante', () => {
+  const state = {
+    ...emptyState,
+    currentBalance: 90.25,
+    expenses: [expense(30.15, { dueDate: '2026-05-29', trackedFrom: '2026-05-29' })],
+  };
+  const payment = {
+    type: 'expense', id: 'expense', today: '2026-05-29', dueDate: '2026-05-29', balanceIncludesPayment: false,
+  };
+  const paid = recordPayment(state, payment);
+  const projection = buildProjection(paid.currentBalance, [], paid.expenses, [], [], 50, { horizon: 35 });
+
+  assert.equal(paid.currentBalance, 60.10);
+  assert.equal(paid.balanceDate, '2026-05-29');
+  assert.equal(recordPayment(paid, payment), paid);
+  assert.deepEqual(projection.events.map(({ dueDate }) => dueDate), ['2026-06-29']);
+
+  const cancelled = cancelExpenseOccurrence(paid, 'expense', '2026-06-29', '2026-05-29');
+  assert.equal(cancelled.currentBalance, paid.currentBalance);
+  assert.equal(cancelled.expenses[0].occurrenceStatuses['2026-06-29'], 'cancelled');
+});
+
+test('Un versement déjà déduit solde la dette sans débiter de nouveau le compte', () => {
+  const state = {
+    ...emptyState,
+    currentBalance: 500,
+    debts: [debt('dette', 40.15, 100, '2026-05-29')],
+  };
+  const paid = recordPayment(state, {
+    type: 'debt', id: 'dette', today: '2026-05-29', dueDate: '2026-05-29', balanceIncludesPayment: true,
+  });
+
+  assert.equal(paid.currentBalance, 500);
+  assert.equal(paid.debts[0].remainingAmount, 0);
+  assert.equal(paid.debts[0].status, 'completed');
+});
+
+test('Un revenu reçu et déjà inclus dans le solde ne compte plus dans la projection', () => {
+  const state = {
+    ...emptyState,
+    currentBalance: 700,
+    incomes: [income(600, { expectedDate: '2026-05-29' })],
+  };
+  const received = recordPayment(state, {
+    type: 'income', id: 'income', today: '2026-05-29', dueDate: '2026-05-29', balanceIncludesPayment: true,
+  });
+  const projection = buildProjection(received.currentBalance, received.incomes, [], [], [], 50, { horizon: 35 });
+
+  assert.equal(received.currentBalance, 700);
+  assert.deepEqual(projection.events.map(({ dueDate }) => dueDate), ['2026-06-29']);
+});
+
+test('Le disponible inclut le jour 35 de la projection', () => {
+  const expenses = [expense(200, { frequency: 'one_time', dueDate: '2026-07-03' })];
+  const summary = calculateBudgetSummary(250, [], expenses, [], [], 50);
+
+  assert.equal(summary.trueAvailable, 0);
+  assert.equal(summary.availableForecast.date, '2026-07-03');
 });

@@ -34,7 +34,9 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
     const initialAmount = parseFloat(form.initialAmount);
     const remainingAmount = parseFloat(form.remainingAmount);
     const monthlyPayment = parseFloat(form.monthlyPayment) || 0;
-    if (!form.creditor.trim() || isNaN(initialAmount) || isNaN(remainingAmount)) return;
+    if (!form.creditor.trim() || !Number.isFinite(initialAmount) || !Number.isFinite(remainingAmount)
+      || initialAmount < 0 || remainingAmount < 0 || monthlyPayment < 0
+      || (monthlyPayment > 0 && !form.nextDueDate)) return;
     onSubmit({
       creditor: form.creditor.trim(),
       type: form.type,
@@ -49,7 +51,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit}>
       <FormField label="Créancier" required hint="Nom de la banque, entreprise ou personne">
         <input
           className={cls}
@@ -127,10 +129,11 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
             placeholder="0,00"
           />
         </FormField>
-        <FormField label="Prochaine échéance" hint="Optionnel">
+        <FormField label="Date de la première échéance" required={Number(form.monthlyPayment) > 0}>
           <input
             className={cls}
             type="date"
+            required={Number(form.monthlyPayment) > 0}
             value={form.nextDueDate}
             onChange={(e) => set('nextDueDate', e.target.value)}
           />

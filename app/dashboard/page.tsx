@@ -9,21 +9,26 @@ import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import AlertBanner from '@/components/ui/AlertBanner';
 import Card from '@/components/ui/Card';
-import { getUpcomingReminders, formatCurrency } from '@/lib/budget-calculations';
+import { getUpcomingReminders, formatCurrency, formatDate } from '@/lib/budget-calculations';
 import { generateAdvice } from '@/lib/advice-engine';
+import { isLocalDate } from '@/lib/local-date';
 
 export default function DashboardPage() {
-  const { summary, userProfile, incomes, expenses, debts, childExpenses, mediationFile, currentBalance, setBalance } = useApp();
+  const { summary, userProfile, expenses, debts, mediationFile, currentBalance, setBalance, balanceDate, storageBlocked, today } = useApp();
   const [editingBalance, setEditingBalance] = useState(false);
   const [balanceInput, setBalanceInput] = useState('');
 
-  const reminders = getUpcomingReminders(expenses, debts, mediationFile.steps);
-  const advice = generateAdvice(summary, debts, mediationFile);
+  const reminders = getUpcomingReminders(expenses, debts, mediationFile.steps, today);
+  const advice = summary.emptyBudget ? [] : generateAdvice(summary, debts, mediationFile, today);
+  const hasUndatedPayments = expenses.some((expense) => !expense.isPaid && !isLocalDate(expense.dueDate))
+    || debts.some((debt) => debt.monthlyPayment > 0 && debt.remainingAmount > 0
+      && debt.status !== 'suspended' && debt.status !== 'completed' && debt.status !== 'late'
+      && !isLocalDate(debt.nextDueDate));
 
   function handleBalanceSubmit(e: React.FormEvent) {
     e.preventDefault();
     const val = parseFloat(balanceInput.replace(',', '.'));
-    if (!isNaN(val)) setBalance(val);
+    if (Number.isFinite(val)) setBalance(val);
     setEditingBalance(false);
   }
 
@@ -54,6 +59,11 @@ export default function DashboardPage() {
       </div>
 
       {/* Balance card — editable */}
+      {storageBlocked && (
+        <AlertBanner variant="warning" title="Stockage indisponible">
+          Les données enregistrées ne peuvent pas être mises à jour dans ce navigateur.
+        </AlertBanner>
+      )}
       <Card className="bg-white border-gray-100">
         <div className="flex items-center justify-between">
           <div>
@@ -102,7 +112,7 @@ export default function DashboardPage() {
           <div className="text-3xl">🏦</div>
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Mets à jour ton solde manuellement après chaque versement ou paiement.
+          {balanceDate ? `Solde au ${formatDate(balanceDate)}.` : 'Mets à jour ton solde depuis ton compte.'}
         </p>
       </Card>
 
@@ -119,7 +129,7 @@ export default function DashboardPage() {
       )}
 
       {/* Summary cards */}
-      <SummaryCard summary={summary} />
+      <SummaryCard summary={summary} balanceDate={balanceDate} hasUndatedPayments={hasUndatedPayments} />
 
       {/* Budget breakdown */}
       <BudgetChart summary={summary} />

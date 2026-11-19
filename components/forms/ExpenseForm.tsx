@@ -18,10 +18,10 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
     label: initial?.label ?? '',
     category: (initial?.category ?? 'other') as ExpenseCategory,
     amount: initial?.amount?.toString() ?? '',
-    frequency: (initial?.frequency ?? 'monthly') as Frequency,
+    frequency: (initial && !initial.isRecurring ? 'one_time' : initial?.frequency ?? 'monthly') as Frequency,
     dueDate: initial?.dueDate ?? '',
+    endDate: initial?.endDate ?? '',
     isPaid: initial?.isPaid ?? false,
-    isRecurring: initial?.isRecurring ?? true,
     notes: initial?.notes ?? '',
   });
 
@@ -31,21 +31,26 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const amount = parseFloat(form.amount);
-    if (!form.label.trim() || isNaN(amount) || amount <= 0) return;
+    if (!form.label.trim() || !Number.isFinite(amount) || amount <= 0 || !form.dueDate) return;
+    const isRecurring = form.frequency !== 'one_time';
     onSubmit({
       label: form.label.trim(),
       category: form.category,
       amount,
       frequency: form.frequency,
-      dueDate: form.dueDate || undefined,
-      isPaid: form.isPaid,
-      isRecurring: form.isRecurring,
+      dueDate: form.dueDate,
+      endDate: isRecurring ? form.endDate || undefined : undefined,
+      isPaid: false,
+      isRecurring,
+      occurrenceStatuses: form.isPaid && !initial?.dueDate
+        ? { ...initial?.occurrenceStatuses, [form.dueDate]: 'paid' }
+        : initial?.occurrenceStatuses,
       notes: form.notes.trim() || undefined,
     });
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit}>
       <FormField label="Intitulé" required>
         <input
           className={cls}
@@ -104,29 +109,30 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
         </FormField>
       </div>
 
-      <FormField label="Date de prochaine échéance" hint="Optionnel">
+      <FormField label={form.frequency === 'one_time' ? 'Date d’échéance' : 'Date de la première échéance'} required>
         <input
           className={cls}
           type="date"
+          required
           value={form.dueDate}
           onChange={(e) => set('dueDate', e.target.value)}
         />
       </FormField>
 
-      <div className="flex flex-col gap-3 mb-4">
-        <div className="flex items-center gap-3">
+      {form.frequency !== 'one_time' && (
+        <FormField label="Fin de la récurrence" hint="Optionnel">
           <input
-            type="checkbox"
-            id="isRecurring"
-            checked={form.isRecurring}
-            onChange={(e) => set('isRecurring', e.target.checked)}
-            className="w-4 h-4 accent-teal-500"
+            className={cls}
+            type="date"
+            min={form.dueDate || undefined}
+            value={form.endDate}
+            onChange={(e) => set('endDate', e.target.value)}
           />
-          <label htmlFor="isRecurring" className="text-sm text-gray-700">
-            Charge récurrente
-          </label>
-        </div>
-        <div className="flex items-center gap-3">
+        </FormField>
+      )}
+
+      {!initial?.dueDate && (
+        <div className="flex items-center gap-3 mb-4">
           <input
             type="checkbox"
             id="isPaid"
@@ -135,10 +141,10 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
             className="w-4 h-4 accent-teal-500"
           />
           <label htmlFor="isPaid" className="text-sm text-gray-700">
-            Déjà payé ce mois-ci
+            Déjà payé et inclus dans mon solde
           </label>
         </div>
-      </div>
+      )}
 
       <FormField label="Notes" hint="Optionnel">
         <textarea
