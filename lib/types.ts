@@ -82,6 +82,8 @@ export interface MediationStep {
 export interface MediationFile {
   mediatorName?: string;
   mediatorOrganization?: string;
+  procedure?: 'amicable' | 'collective';
+  allowanceIncomeId?: string;
   startDate?: string;
   nextAppointment?: string;
   status: 'not_started' | 'in_progress' | 'plan_proposed' | 'plan_accepted' | 'completed' | 'failed';

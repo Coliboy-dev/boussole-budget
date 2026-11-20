@@ -170,6 +170,8 @@ function budgetCheck(unit: Unit): Check {
     mediationFile: object({
       mediatorName: optional(text),
       mediatorOrganization: optional(text),
+      procedure: optional(oneOf('amicable', 'collective')),
+      allowanceIncomeId: optional(identifier),
       startDate: optional(date),
       nextAppointment: optional(date),
       status: oneOf('not_started', 'in_progress', 'plan_proposed', 'plan_accepted', 'completed', 'failed'),

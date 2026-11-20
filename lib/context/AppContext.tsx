@@ -81,7 +81,6 @@ type AppAction =
   | { type: 'ADD_GOAL'; payload: Omit<Goal, 'id'> }
   | { type: 'UPDATE_GOAL'; payload: { id: string; data: Partial<Goal> } }
   | { type: 'DELETE_GOAL'; payload: string }
-  | { type: 'UPDATE_MEDIATION'; payload: Partial<MediationFile> }
   | { type: 'RECORD_PAYMENT'; payload: Payment }
   | { type: 'CANCEL_EXPENSE_OCCURRENCE'; payload: { id: string; dueDate: string; today: string } };
 
@@ -183,8 +182,6 @@ function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
       };
     case 'DELETE_GOAL':
       return { ...state, goals: state.goals.filter((g) => g.id !== action.payload) };
-    case 'UPDATE_MEDIATION':
-      return { ...state, mediationFile: { ...state.mediationFile, ...action.payload } };
     case 'RECORD_PAYMENT':
       return { ...state, ...recordPayment(state, action.payload) };
     case 'CANCEL_EXPENSE_OCCURRENCE':
@@ -342,6 +339,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveBudget({ ...budget, userProfile: { ...budget.userProfile, ...profile } });
   }
 
+  function updateMediation(data: Partial<MediationFile>): void {
+    if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
+      throw new Error('Le budget doit être chargé avant d’enregistrer le suivi de médiation.');
+    }
+    if (!budget.balanceDate) {
+      throw new Error('Enregistre ton solde dans Aujourd’hui avant de modifier le suivi.');
+    }
+    saveBudget({ ...budget, mediationFile: { ...budget.mediationFile, ...data } });
+  }
+
   function clearBudget(): void {
     // Persist the empty budget first so legacy data cannot be re-imported on restart.
     saveBudget(emptyBudgetState, null);
@@ -429,7 +436,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addGoal: (goal) => dispatch({ type: 'ADD_GOAL', payload: goal }),
     updateGoal: (id, data) => dispatch({ type: 'UPDATE_GOAL', payload: { id, data } }),
     deleteGoal: (id) => dispatch({ type: 'DELETE_GOAL', payload: id }),
-    updateMediation: (data) => dispatch({ type: 'UPDATE_MEDIATION', payload: data }),
+    updateMediation,
     recordPayment: (payment) => dispatch({ type: 'RECORD_PAYMENT', payload: { ...payment, today } }),
     recordScheduledPayment,
     recordUnscheduledDebtPayment: saveUnscheduledDebtPayment,
