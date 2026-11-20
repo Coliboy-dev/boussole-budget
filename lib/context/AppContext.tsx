@@ -15,6 +15,7 @@ import type {
 import { calculateBudgetSummary } from '@/lib/budget-calculations';
 import { generateAdvice } from '@/lib/advice-engine';
 import {
+  LEGACY_BUDGET_STORAGE_KEY,
   cancelExpenseOccurrence,
   deserializeBudget,
   emptyBudgetState,
@@ -204,6 +205,8 @@ export interface AppContextType extends AppState {
   exportBudget: () => string;
   restoreBudget: (budget: AppState) => void;
   finishOnboarding: (input?: FirstBudgetInput) => void;
+  saveProfileSettings: (profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>) => void;
+  clearBudget: () => void;
   setBalance: (amount: number) => void;
   updateProfile: (data: Partial<UserProfile>) => void;
   addIncome: (income: Omit<Income, 'id'>) => void;
@@ -307,6 +310,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveBudget(input ? createFirstBudget(budget, input, today) : budget);
   }
 
+  function saveProfileSettings(profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>): void {
+    if ((storageStatus !== 'ready' && storageStatus !== 'fresh') || state !== persistence.current?.saved) {
+      throw new Error('Le budget doit être chargé avant d’enregistrer les réglages.');
+    }
+    saveBudget({ ...budget, userProfile: { ...budget.userProfile, ...profile } });
+  }
+
+  function clearBudget(): void {
+    // Persist the empty budget first so legacy data cannot be re-imported on restart.
+    saveBudget(emptyBudgetState);
+    scheduledPaymentUndo.current = null;
+    try {
+      localStorage.removeItem(LEGACY_BUDGET_STORAGE_KEY);
+    } catch {
+      throw new Error('Le budget actif a été effacé, mais le navigateur a conservé l’ancienne copie. Réessaie de l’effacer.');
+    }
+  }
+
   function recordScheduledPayment(payment: ScheduledPayment): void {
     if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
       throw new Error('Le budget doit être enregistré avant de pouvoir payer cette échéance.');
@@ -350,6 +371,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     exportBudget,
     restoreBudget: saveBudget,
     finishOnboarding,
+    saveProfileSettings,
+    clearBudget,
     setBalance: (amount) => dispatch({ type: 'SET_BALANCE', payload: { amount, today } }),
     updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
     addIncome: (income) => dispatch({ type: 'ADD_INCOME', payload: income }),

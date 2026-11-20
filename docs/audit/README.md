@@ -41,7 +41,7 @@ Le disponible correspond au plus bas des soldes projetés en fin de journée sur
 
 Un nouveau navigateur propose trois questions sur le solde bancaire, la prochaine rentrée certaine et les factures à payer. Le solde et les échéances saisies sont enregistrés ensemble, puis le premier vrai disponible s’affiche avec le détail du calcul. Le revenu et les factures saisis sont ponctuels. Un budget déjà enregistré ou restauré ouvre directement le tableau de bord. La démo en lecture seule et la restauration sont accessibles dès le premier écran.
 
-Le tableau de bord permet de régler la réserve de sécurité. Les conseils utilisent les données du budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
+Les conseils utilisent les données du budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
 
 ## Écran Aujourd’hui
 
@@ -50,6 +50,8 @@ Le premier écran du budget affiche le vrai disponible, la date de fin de la pro
 ## Échéancier
 
 L’échéancier réunit les charges, les dettes et les rentrées prévues dans la page **Échéancier**. Les échéances en retard sont regroupées en haut. Un appui sur **Payé** enregistre l’échéance et débite le solde. Le vrai disponible est recalculé. **Annuler** rétablit le dernier paiement effectué sur cette page tant que le budget reste inchangé. Si le paiement est déjà déduit de ton solde, enregistre-le depuis **Charges** ou **Dettes** en cochant la case correspondante.
+
+Les quatre onglets sont **Aujourd’hui**, **Échéances**, **Budget** et **Plus**. Dans **Plus → Réglages**, tu peux changer ton prénom et ta réserve, ouvrir la démo en lecture seule ou effacer le budget de cet appareil. L’écran **Aujourd’hui** donne aussi accès au réglage de la réserve.
 
 ## Sauvegarde du budget
 

@@ -8,14 +8,12 @@ import BudgetOnboarding, { OnboardingResult } from '@/components/onboarding/Budg
 import DailyBalanceCurve from '@/components/dashboard/DailyBalanceCurve';
 import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
-import FormField from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import AlertBanner from '@/components/ui/AlertBanner';
 import Card from '@/components/ui/Card';
 import { getUpcomingReminders, formatCurrency, formatDate } from '@/lib/budget-calculations';
-import { isBudgetAmount, isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { isBudgetAmount } from '@/lib/budget-schema';
 import { isLocalDate } from '@/lib/local-date';
-import { fromCents, toCents } from '@/lib/money';
 
 export default function DashboardPage() {
   const { isBudgetLoading, needsOnboarding } = useApp();
@@ -33,12 +31,11 @@ export default function DashboardPage() {
 function SavedBudgetDashboard() {
   const {
     summary, advice, userProfile, expenses, debts, currentBalance, setBalance,
-    balanceDate, storageBlocked, today, updateProfile,
+    balanceDate, storageBlocked, today,
   } = useApp();
   const [editingBalance, setEditingBalance] = useState(false);
   const [balanceInput, setBalanceInput] = useState('');
   const balanceValidation = useFormValidation();
-  const reserveValidation = useFormValidation();
 
   const reminders = getUpcomingReminders(expenses, debts, [], today, summary.availableForecast.horizon);
   const hasUndatedPayments = expenses.some((expense) => !expense.isPaid && !isLocalDate(expense.dueDate))
@@ -60,16 +57,6 @@ function SavedBudgetDashboard() {
     balanceValidation.reset();
     setBalanceInput(currentBalance.toString());
     setEditingBalance(true);
-  }
-
-  function handleReserveSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = String(new FormData(event.currentTarget).get('reserve') ?? '');
-    const amount = Number(value);
-    if (!reserveValidation.validate(event.currentTarget, {
-      reserve: value !== '' && isNonNegativeBudgetAmount(amount) ? undefined : 'Saisis un montant valide et positif ou nul.',
-    })) return;
-    updateProfile({ safetyReserve: fromCents(toCents(amount)) });
   }
 
   const quickLinks = [
@@ -167,28 +154,9 @@ function SavedBudgetDashboard() {
       </Card>
 
       <Card className="space-y-2">
-        <details>
-          <summary className="cursor-pointer text-sm font-medium text-gray-700">
-            Réserve de sécurité · {formatCurrency(userProfile.safetyReserve)}
-          </summary>
-          <form onSubmit={handleReserveSubmit} onChange={reserveValidation.clearFieldError} noValidate className="mt-3 flex flex-wrap items-start gap-2">
-            <FormField label="Montant de la réserve (€)" required error={reserveValidation.errors.reserve}>
-              <input
-                key={userProfile.safetyReserve}
-                name="reserve"
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                defaultValue={userProfile.safetyReserve}
-                className="mt-1 block w-36 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-              />
-            </FormField>
-            <button type="submit" className="mt-6 rounded-lg bg-teal-700 px-3 py-2 text-xs font-medium text-white">
-              Enregistrer la réserve
-            </button>
-          </form>
-        </details>
+        <Link href="/reglages#reserve" className="inline-flex min-h-11 items-center text-sm font-medium text-teal-800 underline">
+          Réserve de sécurité · {formatCurrency(userProfile.safetyReserve)}
+        </Link>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-teal-700">
           <Link href="/sauvegarde" className="underline">Sauvegarder ou restaurer le budget</Link>
           <Link href="/demo" prefetch={false} className="underline">Voir un budget de démonstration</Link>
