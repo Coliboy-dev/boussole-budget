@@ -2,7 +2,17 @@
 
 Plan d’implémentation complet. Il est écrit pour être exécuté par un agent de code (ChatGPT/Codex) **sans interprétation** : chaque décision est déjà prise. En cas de doute non couvert ici, **s’arrêter et demander** plutôt que deviner.
 
-État de référence : `main` au commit `6fc2c6d` (20 novembre 2026), 69 tests verts.
+État de référence : `main` au commit `efa3995` (20 novembre 2026), 69 tests verts.
+
+### Corrections du 20 novembre (révision 2)
+Les incohérences relevées avant tout code ont été tranchées. Ces décisions remplacent le texte initial :
+1. **Pas de version 3 de sauvegarde.** On reste en version 2 ; les nouveaux champs sont facultatifs à la lecture et complétés par des valeurs par défaut (§3.2, §3.3). Les tests existants sur la version restent inchangés.
+2. **Clé de commerce** redéfinie (R8) : chiffres conservés, premier mot dès 2 caractères, dictionnaire comparé par préfixe. `CRF` → `crf`, `Q8` → `q8`.
+3. **Écarts dans les scénarios existants** : ils ne sont pas nuls. Les attendus corrects sont 0 €, 700 € et 50 € selon les cases cochées (§3.7), vérifiés dans un **nouveau** fichier de tests.
+4. **`updateSpending` reçoit `today`** : aucune fonction de `lib/` ne lit l’horloge (§3.6).
+5. **Scénario de base des tests** précisé : les 150 € de dépenses de départ sont débitées (`balanceIncluded: false`), sinon elles absorberaient l’écart du test 6 (§3.10).
+6. **Type des enveloppes dans la projection** : un type `EnvelopeOccurrence` séparé, sans toucher au type `Occurrence`, qui alimente les rappels (§3.4).
+7. **Test 11** : attendus de moyenne écrits en chiffres.
 
 ---
 
@@ -80,8 +90,9 @@ Libellés : Courses, Restaurants et snacks, Transport et carburant, Santé et ph
 L’analyse « Où part mon argent » regroupe : les catégories de dépenses ci-dessus, les catégories des charges existantes (`ExpenseCategory`, libellés de `components/budget/ExpenseList.tsx`), `debts` (« Dettes ») et `unrecorded` (« Non encodé »). Les clés communes (`groceries`, `transport`, `health`, `other`) fusionnent.
 
 ### R8 — Reconnaissance du commerce, sans IA
-- Clé de commerce : minuscules, accents retirés (`normalize('NFD')`), chiffres et ponctuation retirés, espaces réduits ; on garde le **premier mot** s’il fait au moins 3 lettres, sinon les deux premiers. Ex. « COLRUYT MARBAIS MAR… » → `colruyt` ; « CRF EXP SCHAERBEEK » → `crf exp` ; « Cadi Marbais » → `cadi`.
-- Ordre de décision : 1) mémoire apprise de la personne (`merchantCategories`), 2) dictionnaire intégré, 3) aucune catégorie proposée.
+- Texte normalisé : minuscules, accents retirés (`normalize('NFD')` puis suppression des diacritiques), tout caractère qui n’est ni lettre ni chiffre remplacé par une espace, espaces réduites et retirées aux extrémités. **Les chiffres sont conservés.** Ex. « H&M Namur » → `h m namur`.
+- Clé de commerce (`merchantKey`) : le **premier mot** du texte normalisé s’il fait **au moins 2 caractères**, sinon les deux premiers mots. Ex. « COLRUYT MARBAIS MAR… » → `colruyt` ; « CRF EXP SCHAERBEEK » → `crf` ; « Q8 Wavre » → `q8` ; « Cadi Marbais » → `cadi` ; « H&M Namur » → `h m`. Texte vide → clé vide (rien n’est appris).
+- Ordre de décision : 1) mémoire apprise `merchantCategories[merchantKey(libellé)]` ; 2) dictionnaire intégré, comparé **par préfixe de mots** sur le texte normalisé (une entrée correspond si le texte est égal à l’entrée ou commence par l’entrée suivie d’une espace ; en cas de plusieurs correspondances, la plus longue gagne) ; 3) aucune catégorie proposée.
 - Chaque enregistrement d’une dépense avec un libellé met à jour `merchantCategories[clé] = catégorie choisie` (la correction de la personne gagne toujours).
 
 ### R9 — Saisie rapide dictée
@@ -127,9 +138,10 @@ export interface BalanceGap {
 - `AppState` reçoit : `envelopes: Envelope[]`, `spendings: Spending[]`, `balanceGaps: BalanceGap[]`, `merchantCategories: Record<string, SpendingCategory>`, `balanceRevision: number`.
 - `emptyBudgetState` : `[]`, `[]`, `[]`, `{}`, `0`.
 - `convertAmounts` convertit `envelopes[].monthlyAmount`, `spendings[].amount`, `balanceGaps[].amount` (ce dernier peut être négatif).
-- `BUDGET_VERSION = 3`. `serializeBudget` écrit la version 3.
-- `deserializeStoredBudget` accepte **2 et 3**. Pour une version 2, compléter l’état avec les valeurs par défaut ci-dessus **avant** `assertBudgetState`. Toute autre version : même message d’erreur qu’aujourd’hui.
-- `migrateLegacyBudget` (v1) : complète aussi avec ces valeurs par défaut (déjà le cas via `{ ...defaults, ...value }`, vérifier).
+- **`BUDGET_VERSION` reste 2.** `serializeBudget` écrit toujours la version 2, avec les nouveaux champs. La lecture d’une version 3 reste refusée (test existant inchangé).
+- Nouvelle fonction exportée `withSpendingDefaults(value)` : complète un état lu avec `envelopes: []`, `spendings: []`, `balanceGaps: []`, `merchantCategories: {}`, `balanceRevision: 0` pour chaque champ **absent** (`undefined`), sans toucher aux champs présents.
+- `deserializeStoredBudget` applique `withSpendingDefaults` à `value.state` **avant** `assertBudgetState`. `migrateLegacyBudget` (v1) l’applique aussi (`{ ...defaults, ...value }` le fait déjà via `emptyBudgetState`, vérifier par un test).
+- Pourquoi pas de version 3 : `convertAmounts` part de `...state`, donc une ancienne version de l’app qui lit un fichier contenant les nouveaux champs les **conserve tels quels** et les réécrit à l’identique. Une version 3 serait refusée par un appareil pas encore mis à jour, qui écraserait ensuite la copie synchronisée sans ces champs.
 
 ### 3.3 Validation — `lib/budget-schema.ts`
 - Ajouter un contrôle `record(check)` pour un objet à clés libres (clé non vide, valeur contrôlée).
@@ -137,13 +149,14 @@ export interface BalanceGap {
 - `spendings: entities({ date, amount: money strictement > 0, category: spendingCategory, label: optional(text), balanceIncluded: flag, debited: flag, balanceRevision: nonNegativeInteger })`.
 - `balanceGaps: entities({ fromDate: date, date, amount: amount(unit, true) })`.
 - `merchantCategories: record(spendingCategory)`, `balanceRevision: nonNegativeInteger`.
+- Ces cinq champs sont déclarés **`optional(...)`** dans le schéma (un état sans eux reste valide), mais **requis** dans le type TypeScript `AppState` : tout état construit par le code passe par `emptyBudgetState` ou `withSpendingDefaults`.
 
 ### 3.4 Moteur — `lib/occurrences.ts` et `lib/projection.ts`
-- `Occurrence['type']` devient `'income' | 'expense' | 'debt' | 'child' | 'envelope'`.
+- **Ne pas modifier** le type `Occurrence` de `lib/occurrences.ts` : `getUpcomingReminders` copie `occurrence.type` dans `Reminder.type`, qui n’accepte pas `'envelope'` (erreur TypeScript garantie). Définir à la place dans `lib/envelopes.ts` : `export type EnvelopeOccurrence = Omit<Occurrence, 'type'> & { type: 'envelope' }`. `buildProjection` travaille sur `Occurrence | EnvelopeOccurrence`, et `ProjectionEvent.type` devient `Occurrence['type'] | 'envelope'`.
 - Nouvelle fonction pure dans `lib/envelopes.ts` :
   ```ts
   export function spentInMonth(spendings: Spending[], category: SpendingCategory, month: string /* YYYY-MM */): number // centimes
-  export function envelopeOccurrences(envelopes: Envelope[], spendings: Spending[], today: string, end: string): Occurrence[]
+  export function envelopeOccurrences(envelopes: Envelope[], spendings: Spending[], today: string, end: string): EnvelopeOccurrence[]
   ```
   `envelopeOccurrences` applique R3. Libellés : « Enveloppe Courses (reste de décembre) » pour le mois en cours, « Enveloppe Courses (janvier) » pour un mois suivant. `sourceId` = id de l’enveloppe, `status: 'planned'`, `isEstimated: false`, montant négatif. Une enveloppe à 0 € ou un reste à 0 ne produit pas d’occurrence.
 - `buildProjection` : nouvelle option `{ envelopes = [], spendings = [] }` dans l’objet d’options (paramètre existant). Les occurrences d’enveloppes rejoignent la liste triée **à l’intérieur** de `buildProjection` uniquement. **Ne pas** les ajouter à `forecastOccurrences` (les rappels, l’échéancier payable et `passedOccurrences` doivent les ignorer).
@@ -159,16 +172,18 @@ export interface BalanceGap {
 ### 3.6 Dépenses — `lib/spending.ts` (fonctions pures sur `AppState`)
 ```ts
 addSpending(state, input: { id, date, amount, category, label?, balanceIncluded }, today): AppState
-updateSpending(state, id, changes: Partial<{ date, amount, category, label }>): AppState
+updateSpending(state, id, changes: Partial<{ date, amount, category, label }>, today): AppState
 deleteSpending(state, id): AppState
 upsertEnvelope(state, envelope: Envelope): AppState          // remplace l’enveloppe de même catégorie
 deleteEnvelope(state, id): AppState
 replaceExpenseWithEnvelope(state, expenseId, category: SpendingCategory): AppState // R4
 ```
-Règles R1, R2 (la valeur reçue est appliquée telle quelle ; le défaut est calculé par l’interface), R6, R8 (mise à jour de `merchantCategories` dans `addSpending` et `updateSpending` si libellé présent). Refuser silencieusement (retourner `state` inchangé) : montant ≤ 0 ou non exact au centime, date invalide ou future, id inconnu.
+Règles R1, R2 (la valeur reçue est appliquée telle quelle ; le défaut est calculé par l’interface), R6, R8 (mise à jour de `merchantCategories` dans `addSpending` et `updateSpending` si libellé présent). Refuser silencieusement (retourner `state` inchangé) : montant ≤ 0 ou non exact au centime, date invalide ou postérieure à `today`, id inconnu. **Aucune fonction de `lib/` ne lit l’horloge** : la date du jour est toujours un paramètre (`today`), fourni par `AppContext`.
 
 ### 3.7 Mise à jour du solde — `lib/balance-update.ts`
-Étendre `updateBalance` (sans changer sa signature publique) : calcul de l’écart R5 **avant** de remplacer le solde, fusion du même jour, incrément de `balanceRevision`. L’identifiant d’un écart : `gap-${today}`. Les 5 tests de `tests/balance-update.test.mjs` restent verts (écart 0 dans ces scénarios ⇒ aucun `BalanceGap`).
+Étendre `updateBalance` (sans changer sa signature publique) : calcul de l’écart R5, fusion du même jour, incrément de `balanceRevision`. L’identifiant d’un écart : `gap-${today}`.
+Ordre exact : 1) appliquer chaque échéance cochée avec `recordPayment(…, balanceIncludesPayment: true)` sur l’état **d’origine** et additionner l’`amountCents` de celles **réellement** marquées payées (une échéance refusée par `recordPayment` n’entre pas dans la somme) ; 2) `attendu = toCents(currentBalance d’origine) + somme` ; 3) `écart = attendu − toCents(nouveau solde)` ; 4) enregistrer ou fusionner l’écart si une `balanceDate` d’origine existait ; 5) remplacer solde et `balanceDate`, incrémenter `balanceRevision`.
+Les écarts **n’influencent pas** le vrai disponible : les 5 tests de `tests/balance-update.test.mjs` restent verts **sans modification**. Avec leurs données, les écarts attendus sont : loyer et ING cochés → **aucun écart** ; aucune case cochée → **700 €** ; seul le loyer coché → **50 €**. Ces trois attendus vont dans le **nouveau** fichier `tests/spending.test.mjs` (test 9), pas dans l’ancien.
 
 ### 3.8 Analyse — `lib/spending-analysis.ts`
 ```ts
@@ -199,17 +214,18 @@ suggestCategory(label: string, learned: Record<string, SpendingCategory>): Spend
 ```
 `parseQuickEntry` : premier montant trouvé, formats acceptés `42,28` `42.28` `42 €` `42€28` `42 euros 28` `42 euros` `€42,28` ; le reste du texte devient le libellé après retrait de : « j’ai dépensé », « j'ai payé », « euros », « euro », « eur », « € », « chez », « au », « à la », « à », « pour », et des espaces en trop. Pas de nombres écrits en lettres (hors périmètre).
 Dictionnaire (`lib/merchants.ts`, clé → catégorie) — base de départ, extensible :
-- groceries : colruyt, delhaize, aldi, lidl, carrefour, crf exp, intermarche, okay, spar, cora, match, proxy, albert, ecomarche, cadi, bio planet, louis delhaize
-- restaurants : quick, mcdonalds, mcdonald, burger, exki, panos, pizza, friterie, starbucks
-- transport : stib, tec, sncb, nmbs, lijn, total, totalenergies, q8, esso, shell, lukoil, texaco, gulf, cambio, poppy
+Les entrées sont écrites **sous forme normalisée** (voir R8) :
+- groceries : colruyt, delhaize, aldi, lidl, carrefour, crf, intermarche, okay, spar, cora, match, proxy, albert heijn, ecomarche, cadi, bio planet, louis delhaize
+- restaurants : quick, mcdonalds, mc donald, burger king, exki, panos, pizza hut, friterie, starbucks
+- transport : stib, tec, sncb, nmbs, de lijn, total, totalenergies, q8, esso, shell, lukoil, texaco, gulf, cambio, poppy
 - health : pharmacie, multipharma, apotheek
-- clothing : primark, zara, kiabi, c&a, hm, jbc, zeeman
+- clothing : primark, zara, kiabi, c a, h m, jbc, zeeman
 - home : ikea, brico, hubo, gamma, action, hema, blokker, leroy
 - leisure : kinepolis, decathlon, fnac, netflix, spotify
 - cash : retrait, bancontact retrait, atm
 
 ### 3.10 Tests de la PR 1 — `tests/spending.test.mjs` (attendus exacts)
-En tête : `process.env.TZ = 'Europe/Brussels'`. Scénario de base : `today = '2026-12-10'`, horizon 35 jours (fin `2027-01-14`), solde 1 000 €, `balanceDate = '2026-12-01'`, réserve 50 €, aucun revenu ni charge, enveloppe Courses 400 €/mois, dépenses Courses de décembre totalisant 150 € (déjà comprises).
+En tête : `process.env.TZ = 'Europe/Brussels'`. Scénario de base : `today = '2026-12-10'`, horizon 35 jours (fin `2027-01-14`), solde 1 000 €, `balanceDate = '2026-12-01'`, `balanceRevision = 0`, réserve 50 €, aucun revenu ni charge, enveloppe Courses 400 €/mois, et deux dépenses Courses placées directement dans l’état de départ : 100 € le `2026-12-03` et 50 € le `2026-12-07`, toutes deux `balanceIncluded: false`, `debited: true`, `balanceRevision: 0` (le solde de 1 000 € tient déjà compte de ces débits).
 1. **Enveloppe de base** : point bas 350 € (1 000 − 250 aujourd’hui − 400 le 1ᵉʳ janvier), vrai disponible **300 €**.
 2. **Dépense dans l’enveloppe** : `addSpending` 50 € Courses, non comprise → solde 950 €, vrai disponible **300 €** (inchangé), `balanceDate` inchangée.
 3. **Dépassement** : depuis 2, +300 € Courses → solde 650 €, reste 0, vrai disponible **200 €**.
@@ -218,13 +234,13 @@ En tête : `process.env.TZ = 'Europe/Brussels'`. Scénario de base : `today = '2
 6. **Écart de solde** : depuis 2 (solde suivi 950 €), `updateBalance(900)` le 10/12 → un `BalanceGap { fromDate: '2026-12-01', date: '2026-12-10', amount: 50 }`, `balanceRevision` 1 ; `analyzeMonth(…, '2026-12').unrecordedCents` = **5 000**. Puis `addSpending` 20 € datée du 08/12, comprise → non encodé **3 000**, solde inchangé 900 €.
 7. **Correction le même jour** : depuis la première partie de 6, `updateBalance(880)` le même jour → un seul écart de **70 €**.
 8. **Suppression** : dépense créée avant une mise à jour de solde puis supprimée → solde inchangé ; dépense créée après → solde recrédité.
-9. **Pas de régression** : les échéances cochées dans `updateBalance` dont la somme explique tout l’écart ne créent aucun `BalanceGap` (reprendre le budget de `tests/balance-update.test.mjs`).
+9. **Écarts sur le budget de `tests/balance-update.test.mjs`** (recopier ses données dans le nouveau fichier, le 3 décembre, nouveau solde 300 €) : loyer et ING cochés → `balanceGaps` vide ; aucune case cochée → un écart de **700 €** (`fromDate: '2026-11-25'`) ; seul le loyer coché → un écart de **50 €**. Le vrai disponible est identique avec ou sans écart enregistré.
 10. **Charges dans l’analyse** : loyer 650 € payé le 01/12 + dépense Courses 42,28 € → rows `rent` 65 000 et `groceries` 4 228, total 69 228.
-11. **Comparaison** : novembre Courses 300 €, décembre 200 € → `previousCents` 30 000 ; `averageCents` sur les mois disponibles uniquement.
+11. **Comparaison** : novembre Courses 300 €, décembre 200 €, aucune donnée avant novembre → pour décembre, `previousCents` = 30 000 et `averageCents` = 30 000 (seul novembre a des données parmi septembre, octobre et novembre) ; pour novembre, `previousCents` = 0 et `averageCents` = `null`.
 12. **Remplacement charge → enveloppe** : charge Courses 300 €/mois → après `replaceExpenseWithEnvelope`, plus de charge Courses, enveloppe 300 €, et le vrai disponible ne compte plus les 300 € deux fois.
-13. **Sérialisation** : aller-retour v3 identique ; un fichier v2 existant se charge avec les valeurs par défaut ; une version 4 est refusée ; une enveloppe en double sur une catégorie est refusée.
+13. **Sérialisation** : le fichier écrit porte `version: 2` ; aller-retour identique avec enveloppes, dépenses, écarts et mémoire des commerces ; un fichier version 2 **sans** les nouveaux champs se charge avec les valeurs par défaut ; une enveloppe en double sur une catégorie est refusée ; une dépense à 0 € est refusée.
 14. **Saisie rapide** (tableau) : « 42,28 Colruyt » → 42.28 / « Colruyt » ; « j'ai dépensé 12 euros au primeur » → 12 / « primeur » ; « 42 euros 28 Delhaize » → 42.28 ; « €7,5 pharmacie » → 7.5 ; « Colruyt » → montant absent ; « 0 » → montant absent.
-15. **Commerce** : `merchantKey('COLRUYT MARBAIS MAR')` = `colruyt` ; `suggestCategory('CRF EXP SCHAERBEEK', {})` = `groceries` ; une catégorie apprise pour `cadi` l’emporte sur le dictionnaire.
+15. **Commerce** : `merchantKey('COLRUYT MARBAIS MAR')` = `colruyt` ; `merchantKey('CRF EXP SCHAERBEEK')` = `crf` ; `merchantKey('Q8 Wavre')` = `q8` ; `merchantKey('H&M Namur')` = `h m` ; `suggestCategory('CRF EXP SCHAERBEEK', {})` = `groceries` ; `suggestCategory('Q8 Wavre', {})` = `transport` ; `suggestCategory('Louis Delhaize Tubize', {})` = `groceries` (préfixe de deux mots) ; `suggestCategory('Cadi Marbais', { cadi: 'home' })` = `home` (la mémoire gagne) ; `suggestCategory('Boulangerie Dupont', {})` = `undefined`.
 
 ### 3.11 Critères d’acceptation PR 1
 Tous les tests verts (69 existants + nouveaux), `tsc`, `lint`, `build` OK, **aucun changement visible** dans l’application (les écrans existants affichent les mêmes chiffres). Section README « Dépenses et enveloppes : modèle et calcul ».
@@ -294,7 +310,7 @@ Dans le détail d’une catégorie qui a une enveloppe : champ « Nouveau montan
 
 ## 6. Pièges connus du dépôt
 
-- `ProjectionEvent.type` alimente des `Record` indexés par type (`eventLabels`) : ajouter l’entrée `envelope` partout où TypeScript le signale.
+- `ProjectionEvent.type` alimente des `Record` indexés par type (`eventLabels`) : ajouter l’entrée `envelope` partout où TypeScript le signale. Le type `Occurrence` lui-même ne change pas (voir §3.4).
 - `getUpcomingReminders`, `passedOccurrences` et l’échéancier payable reposent sur `forecastOccurrences` : les enveloppes ne doivent **pas** y entrer.
 - `recordPayment` met `balanceDate` à jour quand il débite ; **les dépenses ne doivent pas** le faire (R1).
 - Les paiements passent par `ensureSavedForPayment` ; les dépenses passent par le réducteur et l’enregistrement normal, comme les autres saisies.
