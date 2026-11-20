@@ -1,10 +1,23 @@
 import type { AppState } from './budget-state.ts';
 import { addMonths, isLocalDate } from './local-date.ts';
-import { toCents } from './money.ts';
+import { fromCents, toCents } from './money.ts';
 import { balanceGapsOf, spendingCategoryLabels, spendingsOf } from './spending.ts';
 import type { ExpenseCategory, SpendingCategory } from './types.ts';
 
 export type AnalysisCategory = SpendingCategory | ExpenseCategory | 'debts' | 'unrecorded';
+
+export function isSpendingCategory(category: AnalysisCategory): category is SpendingCategory {
+  return Object.hasOwn(spendingCategoryLabels, category);
+}
+
+export function envelopeSuggestion(
+  category: AnalysisCategory, averageCents: number | null,
+): { monthlyAmount: number | undefined } | null {
+  if (!isSpendingCategory(category)) return null;
+  const stepCents = 500;
+  const monthlyAmount = averageCents === null ? undefined : fromCents(Math.ceil(averageCents / stepCents) * stepCents);
+  return { monthlyAmount };
+}
 
 interface MonthItem {
   date: string;

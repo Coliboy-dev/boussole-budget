@@ -17,16 +17,11 @@ import { useApp } from '@/lib/context/AppContext';
 import { addMonths, isLocalDate, parseLocalDate } from '@/lib/local-date';
 import { fromCents } from '@/lib/money';
 import { envelopesOf, spendingCategoryLabels } from '@/lib/spending';
-import { analyzeMonth, monthItems, type AnalysisCategory } from '@/lib/spending-analysis';
-import type { SpendingCategory } from '@/lib/types';
+import { analyzeMonth, envelopeSuggestion, isSpendingCategory, monthItems, type AnalysisCategory } from '@/lib/spending-analysis';
 
 const percentFormatter = new Intl.NumberFormat('fr-BE', { style: 'percent', maximumFractionDigits: 1 });
 const monthFormatter = new Intl.DateTimeFormat('fr-BE', { month: 'long' });
 const actionClass = 'inline-flex min-h-11 items-center rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-50';
-
-function isSpendingCategory(category: AnalysisCategory): category is SpendingCategory {
-  return Object.hasOwn(spendingCategoryLabels, category);
-}
 
 function categoryPresentation(category: AnalysisCategory) {
   if (category === 'debts') return { title: 'Dettes', icon: HandCoins };
@@ -78,7 +73,7 @@ export default function AnalysisPage() {
   const envelope = envelopeCategory ? envelopesOf(state).find(({ category }) => category === envelopeCategory) : undefined;
   const items = selectedCategory ? monthItems(state, month, selectedCategory) : [];
   const averageCents = selected?.averageCents ?? null;
-  const monthlyAmount = averageCents === null ? undefined : fromCents(Math.ceil(averageCents / 500) * 500);
+  const suggestion = selectedCategory ? envelopeSuggestion(selectedCategory, averageCents) : null;
   const close = () => setSelectedCategory(undefined);
 
   if (state.isBudgetLoading) {
@@ -131,7 +126,7 @@ export default function AnalysisPage() {
             </ul>
           )}
           {envelope && <EnvelopeScenario envelope={envelope} onApplied={close} />}
-          {!envelope && envelopeCategory && selected && (
+          {!envelope && suggestion && selected && (
             <div className="space-y-2">
               <p className="text-sm text-slate-700">
                 {averageCents === null
@@ -152,8 +147,8 @@ export default function AnalysisPage() {
           )}
         </DetailSheet>
       )}
-      {creatingEnvelope && envelopeCategory && (
-        <EnvelopeForm prefill={{ category: envelopeCategory, monthlyAmount }} onClose={() => setCreatingEnvelope(false)} />
+      {creatingEnvelope && envelopeCategory && suggestion && (
+        <EnvelopeForm prefill={{ category: envelopeCategory, ...suggestion }} onClose={() => setCreatingEnvelope(false)} />
       )}
     </div>
   );
