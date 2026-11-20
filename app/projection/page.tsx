@@ -11,6 +11,7 @@ import ProjectionTimeline from '@/components/projection/ProjectionTimeline';
 import ProjectionEventList from '@/components/projection/ProjectionEventList';
 import Card from '@/components/ui/Card';
 import AlertBanner from '@/components/ui/AlertBanner';
+import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
 
 const HORIZONS = [7, 15, 30, AVAILABLE_HORIZON] as const;
 type Horizon = (typeof HORIZONS)[number];
@@ -220,33 +221,13 @@ export default function ProjectionPage() {
         </p>
       </Card>
 
-      <p role="status" className="sr-only">
-        {paymentFeedback && (paymentFeedback.paid
-          ? `Paiement enregistré pour ${paymentFeedback.event.label}.`
-          : `Paiement annulé pour ${paymentFeedback.event.label}.`)}
-      </p>
-      {(paymentFeedback?.paid || paymentError) && (
-        <div className="fixed inset-x-0 bottom-16 z-30 mx-auto max-w-2xl px-4 pb-2">
-          <div className="rounded-xl border border-teal-900 bg-teal-950 px-3 py-2 text-white shadow-lg">
-            {paymentError && <p role="alert" className="py-1 text-sm">{paymentError}</p>}
-            {paymentFeedback?.paid && (
-              <div className="flex items-center justify-between gap-2">
-                <p className="min-w-0 wrap-break-word text-sm">
-                  Paiement enregistré <span className="block text-xs text-teal-100">{paymentFeedback.event.label}</span>
-                </p>
-                <button
-                  type="button"
-                  ref={undoButton}
-                  onClick={undo}
-                  className="min-h-11 shrink-0 rounded-lg px-3 text-sm font-semibold text-white underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  Annuler
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <PaymentUndoToast
+        label={paymentFeedback?.event.label}
+        paid={Boolean(paymentFeedback?.paid)}
+        error={paymentError}
+        onUndo={undo}
+        undoRef={undoButton}
+      />
     </div>
   );
 }
