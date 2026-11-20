@@ -7,6 +7,7 @@ import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { fromCents, toCents } from '@/lib/money';
 import FormField from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
+import PersistentStorage from '@/components/settings/PersistentStorage';
 import AlertBanner from '@/components/ui/AlertBanner';
 import Card from '@/components/ui/Card';
 import Modal from '@/components/ui/Modal';
@@ -93,6 +94,8 @@ export default function SettingsPage() {
           </button>
         </form>
       </Card>
+
+      <PersistentStorage />
 
       <Card className="space-y-2">
         <h2 className="text-sm font-semibold text-gray-900">Données du budget</h2>

@@ -8,6 +8,7 @@ import BudgetOnboarding, { OnboardingResult } from '@/components/onboarding/Budg
 import DailyBalanceCurve from '@/components/dashboard/DailyBalanceCurve';
 import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
+import BackupStatus from '@/components/dashboard/BackupStatus';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import AlertBanner from '@/components/ui/AlertBanner';
 import Card from '@/components/ui/Card';
@@ -31,7 +32,7 @@ export default function DashboardPage() {
 function SavedBudgetDashboard() {
   const {
     summary, advice, userProfile, expenses, debts, currentBalance, setBalance,
-    balanceDate, storageBlocked, today,
+    balanceDate, storageBlocked, today, goals, lastBackupDate,
   } = useApp();
   const [editingBalance, setEditingBalance] = useState(false);
   const [balanceInput, setBalanceInput] = useState('');
@@ -80,6 +81,7 @@ function SavedBudgetDashboard() {
         </AlertBanner>
       )}
       <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments} hasRecordedBalance={Boolean(balanceDate)} />
+      <BackupStatus today={today} lastBackupDate={lastBackupDate} hasBudget={!summary.emptyBudget || Boolean(balanceDate) || goals.length > 0} />
       {!summary.emptyBudget && <UpcomingDeadlines reminders={reminders} horizon={summary.availableForecast.horizon} />}
       {(!summary.emptyBudget || balanceDate) && (
         <DailyBalanceCurve
@@ -158,7 +160,6 @@ function SavedBudgetDashboard() {
           Réserve de sécurité · {formatCurrency(userProfile.safetyReserve)}
         </Link>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-teal-700">
-          <Link href="/sauvegarde" className="inline-flex min-h-11 items-center underline">Sauvegarder ou restaurer le budget</Link>
           <Link href="/demo" prefetch={false} className="inline-flex min-h-11 items-center underline">Voir un budget de démonstration</Link>
         </div>
       </Card>

@@ -17,7 +17,7 @@ import { generateAdvice } from '@/lib/advice-engine';
 import {
   LEGACY_BUDGET_STORAGE_KEY,
   cancelExpenseOccurrence,
-  deserializeBudget,
+  deserializeStoredBudget,
   emptyBudgetState,
   migrateLegacyBudget,
   readBudgetSnapshot,
@@ -35,6 +35,7 @@ import { fromCents, toCents } from '@/lib/money';
 import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
 
 type RuntimeState = AppState & {
+  lastBackupDate: string | null;
   storageStatus: 'loading' | 'fresh' | 'ready' | 'unreadable' | 'unsaved';
   storageRevision: number;
 };
@@ -204,7 +205,9 @@ export interface AppContextType extends AppState {
   isBudgetLoading: boolean;
   needsOnboarding: boolean;
   canExportBudget: boolean;
+  lastBackupDate: string | null;
   exportBudget: () => string;
+  recordBackupExport: (date: string) => void;
   restoreBudget: (budget: AppState) => void;
   finishOnboarding: (input?: FirstBudgetInput) => void;
   saveProfileSettings: (profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>) => void;
@@ -239,6 +242,7 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, {
     ...emptyBudgetState,
+    lastBackupDate: null,
     storageStatus: 'loading',
     storageRevision: 0,
   });
@@ -251,30 +255,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       snapshot = readBudgetSnapshot(localStorage);
       const { current, legacy } = snapshot;
-      const budget = current !== null ? deserializeBudget(current)
-        : legacy !== null ? migrateLegacyBudget(legacy, emptyBudgetState, todayInBrussels()) : emptyBudgetState;
+      const { budget, lastBackupDate } = current !== null ? deserializeStoredBudget(current) : {
+        budget: legacy !== null ? migrateLegacyBudget(legacy, emptyBudgetState, todayInBrussels()) : emptyBudgetState,
+        lastBackupDate: null,
+      };
       const loaded: RuntimeState = {
         ...budget,
+        lastBackupDate,
         storageStatus: current === null && legacy === null ? 'fresh' : 'ready',
         storageRevision: 0,
       };
       persistence.current = { snapshot, saved: loaded, needsMigration: legacy !== null };
       dispatch({ type: 'HYDRATE', payload: loaded });
     } catch {
-      const unavailable: RuntimeState = { ...emptyBudgetState, storageStatus: 'unreadable', storageRevision: 0 };
+      const unavailable: RuntimeState = {
+        ...emptyBudgetState, lastBackupDate: null, storageStatus: 'unreadable', storageRevision: 0,
+      };
       persistence.current = snapshot ? { snapshot, saved: unavailable, needsMigration: false } : null;
       dispatch({ type: 'HYDRATE', payload: unavailable });
     }
   }, []);
 
   useEffect(() => {
-    const { storageStatus, storageRevision, ...budget } = state;
+    const { storageStatus, storageRevision, lastBackupDate, ...budget } = state;
     const previous = persistence.current;
     if (storageStatus !== 'ready' || !previous || storageRevision !== previous.saved.storageRevision
       || (state === previous.saved && !previous.needsMigration)) return;
 
     try {
-      const contents = serializeBudget(budget);
+      const contents = serializeBudget(budget, lastBackupDate ?? undefined);
       writeBudgetSnapshot(localStorage, previous.snapshot, contents);
       persistence.current = { snapshot: { current: contents, legacy: null }, saved: state, needsMigration: false };
     } catch {
@@ -282,7 +291,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state]);
 
-  const { storageStatus, storageRevision, ...budget } = state;
+  const { storageStatus, storageRevision, lastBackupDate, ...budget } = state;
   const canExportBudget = storageStatus === 'fresh' || storageStatus === 'ready' || storageStatus === 'unsaved';
 
   function exportBudget(): string {
@@ -290,15 +299,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return serializeBudget(budget);
   }
 
-  function saveBudget(imported: AppState): RuntimeState {
+  function saveBudget(imported: AppState, backupDate = lastBackupDate): RuntimeState {
     const previous = persistence.current;
     if (!previous || storageStatus === 'loading') throw new Error('Le stockage du navigateur est indisponible.');
     if (storageRevision !== previous.saved.storageRevision) throw new Error('Une restauration est déjà en cours.');
 
-    const contents = serializeBudget(imported);
+    const contents = serializeBudget(imported, backupDate ?? undefined);
     writeBudgetSnapshot(localStorage, previous.snapshot, contents);
     const restored: RuntimeState = {
       ...imported,
+      lastBackupDate: backupDate,
       storageStatus: 'ready',
       storageRevision: storageRevision + 1,
     };
@@ -306,6 +316,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     persistence.current = { snapshot: { current: contents, legacy: null }, saved: restored, needsMigration: false };
     dispatch({ type: 'HYDRATE', payload: restored });
     return restored;
+  }
+
+  function recordBackupExport(date: string): void {
+    if (storageStatus === 'fresh') return;
+    if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
+      throw new Error('La date de l’export n’a pas pu être enregistrée sur cet appareil.');
+    }
+    if (date !== lastBackupDate) saveBudget(budget, date);
+  }
+
+  function restoreBudget(imported: AppState): void {
+    saveBudget(imported, null);
   }
 
   function finishOnboarding(input?: FirstBudgetInput): void {
@@ -322,7 +344,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   function clearBudget(): void {
     // Persist the empty budget first so legacy data cannot be re-imported on restart.
-    saveBudget(emptyBudgetState);
+    saveBudget(emptyBudgetState, null);
     scheduledPaymentUndo.current = null;
     try {
       localStorage.removeItem(LEGACY_BUDGET_STORAGE_KEY);
@@ -382,8 +404,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isBudgetLoading: storageStatus === 'loading',
     needsOnboarding: storageStatus === 'fresh',
     canExportBudget,
+    lastBackupDate,
     exportBudget,
-    restoreBudget: saveBudget,
+    recordBackupExport,
+    restoreBudget,
     finishOnboarding,
     saveProfileSettings,
     clearBudget,

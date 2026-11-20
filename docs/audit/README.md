@@ -65,6 +65,8 @@ La page **Dettes** affiche le restant dû et, quand le calendrier le permet, la 
 
 Utilise le build de production sur HTTPS, ou sur localhost pour un test. Ouvre l’application en ligne jusqu’à ce que **Plus** affiche **Mode hors ligne prêt**. Le cache garde les pages et les ressources de cette version. Le budget reste dans le stockage local. Le parcours hors ligne a été vérifié dans Chromium avec un profil mobile Android. L’installation sur les téléphones du pilote reste à vérifier.
 
+Dans **Plus → Réglages**, utilise **Demander le stockage persistant** pour solliciter la protection du navigateur contre l’effacement automatique. L’écran affiche le résultat. La décision dépend du navigateur. Garde une copie JSON dans les fichiers de ton appareil.
+
 Les pages **Confidentialité** et **Mentions légales** sont accessibles dans **Plus**. La confidentialité décrit le traitement des données techniques par Vercel. Les mentions légales indiquent la dénomination, l’adresse, l’e-mail, le numéro d’entreprise (BCE) et le numéro de TVA de Start’OnLab.
 
 Les pages et les ressources HTTP portent la directive `noindex`. Le fichier `robots.txt` laisse les moteurs consulter les URL pour qu’ils puissent lire cette directive et retirer les URL déjà indexées. [Documentation Google sur la désindexation](https://developers.google.com/search/docs/crawling-indexing/block-indexing)
@@ -72,6 +74,8 @@ Les pages et les ressources HTTP portent la directive `noindex`. Le fichier `rob
 ## Sauvegarde du budget
 
 Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui contient le budget complet en centimes. Pour le restaurer, choisis le fichier puis confirme le remplacement du budget sur cet appareil.
+
+**Aujourd’hui** affiche la date du dernier téléchargement JSON lancé pour le budget depuis cet appareil. Un rappel s’affiche dès la première sauvegarde à faire, puis à partir de sept jours après le dernier export. Un import ou un effacement remet la date à zéro. Le rappel est affiché dans l’application.
 
 Le même schéma contrôle le fichier et le stockage du navigateur. Une version incompatible, une date invalide ou une dette avec un montant négatif est signalée. L'application charge les données avant de les écrire et ne remplace le budget actif qu'après l'enregistrement réussi de l'import. La migration automatique d'un ancien budget conserve la copie v1.
 

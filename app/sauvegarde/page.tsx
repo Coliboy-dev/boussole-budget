@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Card from '@/components/ui/Card';
 import { deserializeBudget, type AppState } from '@/lib/budget-state';
 import { useApp } from '@/lib/context/AppContext';
+import { todayInBrussels } from '@/lib/local-date';
 
 interface SelectedBackup {
   name: string;
@@ -11,7 +12,7 @@ interface SelectedBackup {
 }
 
 export default function SauvegardePage() {
-  const { canExportBudget, isBudgetLoading, storageBlocked, exportBudget, restoreBudget, today } = useApp();
+  const { canExportBudget, isBudgetLoading, storageBlocked, exportBudget, recordBackupExport, restoreBudget } = useApp();
   const [selection, setSelection] = useState<SelectedBackup | null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState('');
@@ -20,19 +21,31 @@ export default function SauvegardePage() {
   function downloadBackup() {
     setError('');
     setNotice('');
+    const exportDate = todayInBrussels();
 
     try {
       const contents = exportBudget();
       const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = `boussole-budget-${today}.json`;
+      link.download = `boussole-budget-${exportDate}.json`;
       document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      try {
+        link.click();
+      } finally {
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Impossible d’exporter le budget.');
+      return;
+    }
+
+    setNotice('Téléchargement lancé.');
+    try {
+      recordBackupExport(exportDate);
+    } catch {
+      setError('La date de l’export n’a pas pu être enregistrée sur cet appareil.');
     }
   }
 

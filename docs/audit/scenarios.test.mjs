@@ -14,6 +14,7 @@ import {
   LEGACY_BUDGET_STORAGE_KEY,
   cancelExpenseOccurrence,
   deserializeBudget,
+  deserializeStoredBudget,
   emptyBudgetState,
   migrateLegacyBudget,
   readBudgetSnapshot,
@@ -714,6 +715,17 @@ test('La sauvegarde v2 restaure le budget complet avec les centimes et les statu
   assert.equal(JSON.parse(contents).state.currentBalance, -1234);
   assert.deepEqual(JSON.parse(JSON.stringify(deserializeBudget(contents))), budget);
   assert.equal(serializeBudget(deserializeBudget(contents)), contents);
+});
+
+test('La date du dernier export reste locale et les anciens budgets v2 restent lisibles', () => {
+  const budget = { ...emptyBudgetState, currentBalance: 129.50 };
+  const previous = serializeBudget(budget);
+  const stored = serializeBudget(budget, '2026-11-20');
+
+  assert.equal(deserializeStoredBudget(previous).lastBackupDate, null);
+  assert.equal(deserializeStoredBudget(stored).lastBackupDate, '2026-11-20');
+  assert.equal(serializeBudget(deserializeBudget(stored)), previous);
+  assert.equal(deserializeStoredBudget(stored.replace('2026-11-20', '2026-02-31')).lastBackupDate, null);
 });
 
 test('Un fichier tronqué, incompatible ou incohérent est refusé', () => {
