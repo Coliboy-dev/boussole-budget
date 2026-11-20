@@ -23,7 +23,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
     type: (initial?.type ?? 'personal') as DebtType,
     initialAmount: initial?.initialAmount?.toString() ?? '',
     remainingAmount: initial?.remainingAmount?.toString() ?? '',
-    monthlyPayment: initial?.monthlyPayment?.toString() ?? '0',
+    monthlyPayment: initial?.monthlyPayment?.toString() ?? '',
     status: (initial?.status ?? 'to_pay') as DebtStatus,
     nextDueDate: initial?.nextDueDate ?? '',
     isMediationIncluded: initial?.isMediationIncluded ?? false,
@@ -142,7 +142,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
             placeholder="0,00"
           />
         </FormField>
-        <FormField label="Date de la première échéance" required={Number(form.monthlyPayment) > 0} error={errors.nextDueDate}>
+        <FormField label="1re échéance" required={Number(form.monthlyPayment) > 0} error={errors.nextDueDate}>
           <input
             className={cls}
             type="date"

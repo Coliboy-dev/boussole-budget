@@ -54,6 +54,20 @@ body {
     min-block-size: 44px;
   }
 
+  /* Safari iOS donne aux champs date une largeur intrinsèque qui déborde des grilles. */
+  input:is([type="date"], [type="month"], [type="time"]) {
+    display: block;
+    inline-size: 100%;
+    max-inline-size: 100%;
+    min-inline-size: 0;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: start;
+  }
+
   :where(a, button, input, select, summary, textarea):focus-visible {
     outline: 2px solid var(--color-teal-800);
     outline-offset: 2px;

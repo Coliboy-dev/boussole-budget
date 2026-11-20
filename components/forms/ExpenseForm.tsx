@@ -120,7 +120,7 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
         </FormField>
       </div>
 
-      <FormField label={form.frequency === 'one_time' ? 'Date d’échéance' : 'Date de la première échéance'} required error={errors.dueDate}>
+      <FormField label={form.frequency === 'one_time' ? 'Date d’échéance' : '1re échéance'} required error={errors.dueDate}>
         <input
           className={cls}
           type="date"

@@ -17,7 +17,7 @@ export default function FormField({ label, required, hint, error, children }: Fo
     .filter(Boolean).join(' ');
 
   return (
-    <div className="mb-4">
+    <div className="mb-4 min-w-0">
       <label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-gray-700">
         {label}
         {required && <span aria-hidden="true" className="ml-0.5 text-red-800">*</span>}
