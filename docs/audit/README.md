@@ -90,6 +90,6 @@ Le tableau de bord affiche une seule carte de solde. Une suppression demande une
 1. P0-1, P0-4, P0-6 : tests, retrait de la démo par défaut, hygiène.
 2. P0-2, P0-3, P0-5 : modèle daté, vrai disponible par point bas, export et import.
 3. P1 : onboarding, écran « Aujourd'hui », échéancier, navigation, accessibilité.
-4. Tests avec 5 utilisateurs réels, puis décision d'aller ou non plus loin.
+4. [Pilote avec cinq utilisateurs réels](pilote-p1.md), puis décision d'aller ou non plus loin.
 
 Le détail, les efforts et les critères d'acceptation sont dans le rapport F.
