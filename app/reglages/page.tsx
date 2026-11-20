@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { fromCents, toCents } from '@/lib/money';
+import { setPaymentRemindersEnabled, usePaymentReminders } from '@/lib/use-payment-reminders';
 import FormField from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import PersistentStorage from '@/components/settings/PersistentStorage';
@@ -15,6 +16,8 @@ import Modal from '@/components/ui/Modal';
 export default function SettingsPage() {
   const { userProfile, isBudgetLoading, storageBlocked, saveProfileSettings, clearBudget } = useApp();
   const validation = useFormValidation();
+  const remindersEnabled = usePaymentReminders();
+  const [reminderError, setReminderError] = useState(false);
   const [showErase, setShowErase] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -52,6 +55,15 @@ export default function SettingsPage() {
       setError(failure instanceof Error ? failure.message : 'Impossible d’effacer le budget.');
     } finally {
       setShowErase(false);
+    }
+  }
+
+  function changePaymentReminders(enabled: boolean) {
+    try {
+      setPaymentRemindersEnabled(enabled);
+      setReminderError(false);
+    } catch {
+      setReminderError(true);
     }
   }
 
@@ -93,6 +105,26 @@ export default function SettingsPage() {
             Enregistrer les réglages
           </button>
         </form>
+      </Card>
+
+      <Card className="space-y-2">
+        <h2 className="text-sm font-semibold text-gray-900">Rappels d’échéance</h2>
+        <p id="payment-reminders-hint" className="text-sm text-gray-700">
+          Les paiements dus le lendemain sont signalés dans Aujourd’hui. Ce réglage s’applique à cet appareil.
+        </p>
+        <label className="flex min-h-11 w-fit cursor-pointer items-center gap-3 text-sm font-semibold text-gray-900">
+          <input
+            type="checkbox"
+            checked={remindersEnabled}
+            onChange={(event) => changePaymentReminders(event.target.checked)}
+            aria-describedby="payment-reminders-hint"
+            className="size-5 shrink-0 accent-teal-700"
+          />
+          Afficher les rappels de paiement
+        </label>
+        {reminderError && (
+          <p role="alert" className="text-sm text-red-800">Impossible d’enregistrer ce réglage dans ce navigateur.</p>
+        )}
       </Card>
 
       <PersistentStorage />

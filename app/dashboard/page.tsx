@@ -106,6 +106,7 @@ function SavedBudgetDashboard() {
       {!summary.emptyBudget && (
         <UpcomingDeadlines
           reminders={reminders}
+          today={today}
           horizon={summary.availableForecast.horizon}
           onPay={pay}
           payDisabled={storageBlocked}
