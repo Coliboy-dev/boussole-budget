@@ -115,6 +115,14 @@ La base est décrite dans `supabase/migrations/`. Chaque compte ne peut lire, mo
 
 `tests/cloud-sync.test.mjs` vérifie le chiffrement (aller-retour, mauvaise phrase, bloc altéré, absence de montant lisible) et toutes les décisions de synchronisation. Un test de bout en bout à deux navigateurs sur le vrai projet a validé l’activation, la récupération sur un second appareil, le refus d’une mauvaise phrase, la propagation d’une modification, le conflit et la suppression du compte.
 
+## Dépenses et enveloppes : modèle et calcul
+
+Le format de sauvegarde reste en version 2. Les anciennes sauvegardes gardent leur structure. Le moteur traite les champs absents comme des listes vides, une mémoire de commerces vide et une révision de solde à zéro.
+
+Le moteur réserve le reste de chaque enveloppe dès aujourd’hui, puis le montant complet de chaque mois qui commence dans l’horizon de projection. Le simulateur utilise cette même projection. Recopier le solde bancaire enregistre l’écart inexpliqué après avoir tenu compte des échéances cochées. Une dépense déjà comprise dans un solde peut réduire la part non encodée.
+
+Les calculs d’analyse utilisent le montant actuel des charges et des mensualités pour les échéances marquées comme payées. Un ancien paiement est donc estimé à partir du montant actuel si celui-ci a changé. Les règles de saisie rapide et de reconnaissance du commerce sont testées dans le moteur. Les écrans de saisie et d’analyse sont prévus dans les PR suivantes.
+
 ## Hygiène technique et formulaires
 
 Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.

@@ -1,10 +1,12 @@
 import { annualProvisionsCents } from './annual-provisions.ts';
-import type { Income, Expense, Debt, ChildExpense, DailyBalance } from './types.ts';
+import { envelopeOccurrences, type EnvelopeOccurrence } from './envelopes.ts';
+import type { Income, Expense, Debt, ChildExpense, DailyBalance, Envelope, Spending } from './types.ts';
 import { addDays, daysBetween, todayInBrussels } from './local-date.ts';
 import { fromCents, toCents } from './money.ts';
 import { forecastOccurrences, type Occurrence } from './occurrences.ts';
 
 type RiskLevel = 'safe' | 'fragile' | 'danger';
+type ProjectedOccurrence = Occurrence | EnvelopeOccurrence;
 
 export interface ProjectionEvent {
   id: string;
@@ -13,7 +15,7 @@ export interface ProjectionEvent {
   dueDate: string;
   label: string;
   amount: number;
-  type: Occurrence['type'];
+  type: ProjectedOccurrence['type'];
   isEstimated: boolean;
   isLate: boolean;
 }
@@ -45,6 +47,8 @@ export interface ProjectionResult {
 interface ProjectionOptions {
   today?: string;
   horizon?: number;
+  envelopes?: Envelope[];
+  spendings?: Spending[];
 }
 
 export const AVAILABLE_HORIZON = 35;
@@ -62,13 +66,15 @@ export function buildProjection(
   debts: Debt[],
   childExpenses: ChildExpense[],
   safetyReserve: number,
-  { today = todayInBrussels(), horizon = 30 }: ProjectionOptions = {},
+  { today = todayInBrussels(), horizon = 30, envelopes = [], spendings = [] }: ProjectionOptions = {},
 ): ProjectionResult {
   const end = addDays(today, horizon);
-  const occurrences = forecastOccurrences(incomes, expenses, debts, childExpenses, today, end)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || b.amountCents - a.amountCents);
+  const occurrences = [
+    ...forecastOccurrences(incomes, expenses, debts, childExpenses, today, end),
+    ...envelopeOccurrences(envelopes, spendings, today, end),
+  ].sort((a, b) => a.dueDate.localeCompare(b.dueDate) || b.amountCents - a.amountCents);
 
-  const byDate = new Map<string, Occurrence[]>();
+  const byDate = new Map<string, ProjectedOccurrence[]>();
   const events = occurrences.map((occurrence): ProjectionEvent => {
     const { dueDate, amountCents, sourceId, type, label, isEstimated } = occurrence;
     const isLate = occurrence.status === 'late';

@@ -1,8 +1,9 @@
-import type { ChildExpense, Debt, DocumentItem, Expense, Goal, Income, MediationFile, UserProfile } from './types.ts';
+import type { BalanceGap, ChildExpense, Debt, DocumentItem, Envelope, Expense, Goal, Income, MediationFile, Spending, SpendingCategory, UserProfile } from './types.ts';
 import { assertBudgetState } from './budget-schema.ts';
 import { isLocalDate } from './local-date.ts';
 import { debtOccurrences, expenseOccurrences, incomeOccurrences, isOpenOccurrence } from './occurrences.ts';
 import { fromCents, toCents } from './money.ts';
+import { balanceGapsOf, envelopesOf, spendingsOf } from './spending.ts';
 
 export const BUDGET_STORAGE_KEY = 'boussole-budget-v2';
 export const LEGACY_BUDGET_STORAGE_KEY = 'boussole-budget-v1';
@@ -52,6 +53,11 @@ export interface AppState {
   goals: Goal[];
   mediationFile: MediationFile;
   documents: DocumentItem[];
+  envelopes?: Envelope[];
+  spendings?: Spending[];
+  balanceGaps?: BalanceGap[];
+  merchantCategories?: Record<string, SpendingCategory>;
+  balanceRevision?: number;
 }
 
 export const emptyBudgetState: AppState = {
@@ -76,8 +82,21 @@ export const emptyBudgetState: AppState = {
 
 function convertAmounts(state: AppState, convert: (amount: number) => number): AppState {
   const plan = state.mediationFile.proposedPlan;
+  const envelopes = envelopesOf(state);
+  const spendings = spendingsOf(state);
+  const balanceGaps = balanceGapsOf(state);
   return {
     ...state,
+    // La copie initiale préserve les tableaux vides et l’absence des clés des anciennes sauvegardes.
+    ...(envelopes.length > 0 && {
+      envelopes: envelopes.map((envelope) => ({ ...envelope, monthlyAmount: convert(envelope.monthlyAmount) })),
+    }),
+    ...(spendings.length > 0 && {
+      spendings: spendings.map((spending) => ({ ...spending, amount: convert(spending.amount) })),
+    }),
+    ...(balanceGaps.length > 0 && {
+      balanceGaps: balanceGaps.map((gap) => ({ ...gap, amount: convert(gap.amount) })),
+    }),
     currentBalance: convert(state.currentBalance),
     userProfile: { ...state.userProfile, safetyReserve: convert(state.userProfile.safetyReserve) },
     incomes: state.incomes.map((income) => ({ ...income, amount: convert(income.amount) })),
@@ -181,15 +200,19 @@ export interface Payment {
   balanceIncludesPayment: boolean;
 }
 
-export function recordPayment(state: AppState, payment: Payment): AppState {
-  const { type, id, dueDate, today, balanceIncludesPayment } = payment;
+export function openPaymentOccurrence(state: AppState, { type, id, dueDate, today }: Omit<Payment, 'balanceIncludesPayment'>) {
   const through = dueDate > today ? dueDate : today;
   const income = type === 'income' ? state.incomes.find((item) => item.id === id) : undefined;
   const expense = type === 'expense' ? state.expenses.find((item) => item.id === id) : undefined;
   const debt = type === 'debt' ? state.debts.find((item) => item.id === id) : undefined;
   const occurrences = income ? incomeOccurrences(income, today, through)
     : expense ? expenseOccurrences(expense, today, through) : debt ? debtOccurrences(debt, today, through) : [];
-  const occurrence = occurrences.find((item) => item.dueDate === dueDate && isOpenOccurrence(item));
+  return occurrences.find((item) => item.dueDate === dueDate && isOpenOccurrence(item));
+}
+
+export function recordPayment(state: AppState, payment: Payment): AppState {
+  const { type, id, dueDate, today, balanceIncludesPayment } = payment;
+  const occurrence = openPaymentOccurrence(state, payment);
   if (!occurrence || !Number.isSafeInteger(occurrence.amountCents) || occurrence.amountCents === 0
     || (type === 'income') !== (occurrence.amountCents > 0)) return state;
 
@@ -198,13 +221,13 @@ export function recordPayment(state: AppState, payment: Payment): AppState {
     ...state,
     balanceDate: balanceIncludesPayment ? state.balanceDate : today,
     currentBalance: balanceIncludesPayment ? state.currentBalance : fromCents(balanceCents + occurrence.amountCents),
-    incomes: income ? state.incomes.map((item) => item.id === id
+    incomes: type === 'income' ? state.incomes.map((item) => item.id === id
       ? { ...item, occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' } }
       : item) : state.incomes,
-    expenses: expense ? state.expenses.map((item) => item.id === id
+    expenses: type === 'expense' ? state.expenses.map((item) => item.id === id
       ? { ...item, occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' } }
       : item) : state.expenses,
-    debts: debt ? state.debts.map((item) => {
+    debts: type === 'debt' ? state.debts.map((item) => {
       if (item.id !== id) return item;
       const remainingCents = toCents(item.remainingAmount) + occurrence.amountCents;
       const updated: Debt = {

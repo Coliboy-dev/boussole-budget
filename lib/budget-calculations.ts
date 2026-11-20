@@ -5,10 +5,12 @@ import type {
   ChildExpense,
   Goal,
   BudgetSummary,
+  Envelope,
   Reminder,
   Frequency,
   GoalStatus,
   MediationStep,
+  Spending,
 } from './types.ts';
 import { addDays, addMonths, daysBetween, isLocalDate, monthsBetween, parseLocalDate, todayInBrussels } from './local-date.ts';
 import { fromCents, monthlyCents, toCents } from './money.ts';
@@ -138,25 +140,30 @@ export function calculateBudgetSummary(
   safetyReserve: number,
   goals: Goal[] = [],
   today = todayInBrussels(),
+  { envelopes = [], spendings = [] }: { envelopes?: Envelope[]; spendings?: Spending[] } = {},
 ): BudgetSummary {
   const totalMonthlyIncome = monthlyIncomeCents(incomes);
   const totalMonthlyExpenses = monthlyExpenseCents(expenses);
   const totalMonthlyDebts = monthlyDebtCents(debts);
+  const totalMonthlyEnvelopes = envelopes.reduce((sum, envelope) => sum + toCents(envelope.monthlyAmount), 0);
   const monthlyMargin = monthlyIncomeCents(incomes.filter((income) => income.isConfirmed))
-    - totalMonthlyExpenses - totalMonthlyDebts;
+    - totalMonthlyExpenses - totalMonthlyDebts - totalMonthlyEnvelopes;
 
   const forecast = buildProjection(currentBalance, incomes, expenses, debts, childExpenses, safetyReserve, {
     today,
     horizon: AVAILABLE_HORIZON,
+    envelopes,
+    spendings,
   });
   const empty = currentBalance === 0 && incomes.length === 0 && expenses.length === 0
-    && debts.length === 0 && childExpenses.length === 0;
+    && debts.length === 0 && childExpenses.length === 0 && envelopes.length === 0 && spendings.length === 0;
 
   return {
     currentBalance,
     totalMonthlyIncome: fromCents(totalMonthlyIncome),
     totalMonthlyExpenses: fromCents(totalMonthlyExpenses),
     totalMonthlyDebts: fromCents(totalMonthlyDebts),
+    totalMonthlyEnvelopes: fromCents(totalMonthlyEnvelopes),
     totalMonthlyChildExpenses: 0,
     safetyReserve,
     trueAvailable: empty ? 0 : forecast.available,

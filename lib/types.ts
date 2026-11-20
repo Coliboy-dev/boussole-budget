@@ -48,6 +48,34 @@ export interface Expense extends Schedule {
   notes?: string;
 }
 
+export type SpendingCategory = 'groceries' | 'restaurants' | 'transport' | 'health' | 'leisure'
+  | 'clothing' | 'home' | 'children' | 'cash' | 'other';
+
+export interface Envelope {
+  id: string;
+  category: SpendingCategory;
+  label: string;
+  monthlyAmount: number;
+}
+
+export interface Spending {
+  id: string;
+  date: string;
+  amount: number;
+  category: SpendingCategory;
+  label?: string;
+  balanceIncluded: boolean;
+  debited: boolean;
+  balanceRevision: number;
+}
+
+export interface BalanceGap {
+  id: string;
+  fromDate: string;
+  date: string;
+  amount: number;
+}
+
 // Debt types
 export type DebtStatus = 'to_pay' | 'late' | 'contested' | 'in_mediation' | 'plan_accepted' | 'suspended' | 'completed';
 export type DebtType = 'personal' | 'shared';
@@ -154,6 +182,7 @@ export interface BudgetSummary {
   totalMonthlyIncome: number;
   totalMonthlyExpenses: number;
   totalMonthlyDebts: number;
+  totalMonthlyEnvelopes: number;
   totalMonthlyChildExpenses: number;
   safetyReserve: number;
   trueAvailable: number; // vraiDisponible

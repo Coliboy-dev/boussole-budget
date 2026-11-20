@@ -1,7 +1,8 @@
-import { recordPayment, type AppState } from './budget-state.ts';
+import { openPaymentOccurrence, recordPayment, type AppState } from './budget-state.ts';
 import { daysBetween } from './local-date.ts';
 import { fromCents, toCents } from './money.ts';
 import { forecastOccurrences } from './occurrences.ts';
+import { balanceGapsOf, balanceRevisionOf } from './spending.ts';
 
 /** Échéance que la personne confirme comme déjà passée sur son compte. */
 export interface SettledOccurrence {
@@ -46,11 +47,40 @@ export function updateBalance(
   state: AppState,
   { amount, today, settled = [] }: { amount: number; today: string; settled?: SettledOccurrence[] },
 ): AppState {
-  let next: AppState = { ...state, currentBalance: fromCents(toCents(amount)), balanceDate: today };
+  let next = state;
+  let settledCents = 0;
   for (const item of settled) {
-    next = recordPayment(next, { ...item, today, balanceIncludesPayment: true });
+    const payment = { ...item, today, balanceIncludesPayment: true };
+    const occurrence = openPaymentOccurrence(next, payment);
+    const paid = recordPayment(next, payment);
+    if (paid !== next && occurrence) settledCents += occurrence.amountCents;
+    next = paid;
   }
-  return next;
+
+  const newBalance = toCents(amount);
+  const difference = toCents(state.currentBalance) + settledCents - newBalance;
+  if (state.balanceDate && difference !== 0) {
+    const gaps = balanceGapsOf(state);
+    const existing = gaps.find(({ date }) => date === today);
+    if (existing) {
+      const combined = toCents(existing.amount) + difference;
+      next = {
+        ...next,
+        balanceGaps: combined === 0
+          ? gaps.filter((item) => item !== existing)
+          : gaps.map((item) => item === existing ? { ...item, amount: fromCents(combined) } : item),
+      };
+    } else {
+      next = {
+        ...next,
+        balanceGaps: [...gaps, { id: `gap-${today}`, fromDate: state.balanceDate, date: today, amount: fromCents(difference) }],
+      };
+    }
+  }
+
+  return {
+    ...next, currentBalance: fromCents(newBalance), balanceDate: today, balanceRevision: balanceRevisionOf(state) + 1,
+  };
 }
 
 /** Âge du solde enregistré et nombre d’échéances passées depuis. */
