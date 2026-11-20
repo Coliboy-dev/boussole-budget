@@ -95,6 +95,12 @@ La base est décrite dans `supabase/migrations/`. Chaque compte ne peut lire, mo
 
 `tests/cloud-sync.test.mjs` vérifie le chiffrement (aller-retour, mauvaise phrase, bloc altéré, absence de montant lisible) et toutes les décisions de synchronisation. Un test de bout en bout à deux navigateurs sur le vrai projet a validé l’activation, la récupération sur un second appareil, le refus d’une mauvaise phrase, la propagation d’une modification, le conflit et la suppression du compte.
 
+## Relevé trimestriel des frais partagés (P2-5)
+
+Dans **Frais enfants**, renseigne la référence du justificatif si tu l’as, puis utilise **Préparer un relevé trimestriel**. Choisis le trimestre et vérifie les dates, les montants, les parts et les justificatifs. Les totaux reprennent les frais du trimestre qui ont une part enregistrée, quel que soit leur statut de remboursement.
+
+**Imprimer ou enregistrer en PDF** ouvre la fenêtre d’impression du navigateur. Le brouillon indique sa date de préparation et les références de justificatifs, avec une mention pour celles qui restent à compléter. La qualification des frais, les règles de répartition et les modalités de transmission sont à valider juridiquement avant publication du chantier.
+
 ## Hygiène technique et formulaires
 
 Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.

@@ -29,6 +29,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
     date: initial?.date ?? todayInBrussels(),
     reimbursementDate: initial?.reimbursementDate ?? '',
     receiptSent: initial?.receiptSent ?? false,
+    receiptReference: initial?.receiptReference ?? '',
     notes: initial?.notes ?? '',
   });
 
@@ -60,6 +61,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
       date: form.date,
       reimbursementDate: form.status === 'reimbursed' ? undefined : form.reimbursementDate || undefined,
       receiptSent: form.receiptSent,
+      receiptReference: form.receiptReference.trim() || undefined,
       notes: form.notes.trim() || undefined,
     });
   }
@@ -180,6 +182,15 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
           />
         </FormField>
       )}
+
+      <FormField label="Référence du justificatif" hint="Optionnel">
+        <input
+          className={cls}
+          value={form.receiptReference}
+          onChange={(e) => set('receiptReference', e.target.value)}
+          placeholder="Ex. facture F-2026-015"
+        />
+      </FormField>
 
       <div className="flex items-center gap-3 mb-4">
         <input

@@ -9,7 +9,7 @@ import { Icon } from '@/components/ui/icons';
 const items = [
   { href: '/dashboard', label: 'Aujourd’hui', icon: House, routes: ['/'] },
   { href: '/projection', label: 'Échéances', icon: CalendarDays, routes: [] },
-  { href: '/budget', label: 'Budget', icon: Wallet, routes: ['/revenus', '/charges', '/dettes', '/enfants', '/objectifs', '/simulation'] },
+  { href: '/budget', label: 'Budget', icon: Wallet, routes: ['/revenus', '/charges', '/dettes', '/enfants', '/enfants/decompte', '/objectifs', '/simulation'] },
   { href: '/plus', label: 'Plus', icon: Ellipsis, routes: ['/reglages', '/demo', '/conseils', '/sauvegarde', '/synchronisation', '/confidentialite', '/mentions-legales'] },
 ];
 

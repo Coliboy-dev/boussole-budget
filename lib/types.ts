@@ -113,6 +113,7 @@ export interface ChildExpense {
   reimbursementDate?: string;
   notes?: string;
   receiptSent: boolean;
+  receiptReference?: string;
 }
 
 // Goals

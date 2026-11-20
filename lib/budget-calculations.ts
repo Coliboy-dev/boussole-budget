@@ -10,7 +10,7 @@ import type {
   GoalStatus,
   MediationStep,
 } from './types.ts';
-import { addDays, daysBetween, isLocalDate, monthsBetween, parseLocalDate, todayInBrussels } from './local-date.ts';
+import { addDays, addMonths, daysBetween, isLocalDate, monthsBetween, parseLocalDate, startOfQuarter, todayInBrussels } from './local-date.ts';
 import { fromCents, monthlyCents, toCents } from './money.ts';
 import { forecastOccurrences } from './occurrences.ts';
 import { AVAILABLE_HORIZON, buildProjection } from './projection.ts';
@@ -47,6 +47,23 @@ export function calculateTotalMonthlyExpenses(expenses: Expense[]): number {
 
 export function calculateTotalMonthlyDebts(debts: Debt[]): number {
   return fromCents(monthlyDebtCents(debts));
+}
+
+export function calculateSharedExpenseStatement(expenses: readonly ChildExpense[], dayInQuarter: string) {
+  const start = startOfQuarter(dayInQuarter);
+  const end = addDays(addMonths(start, 3), -1);
+  const items = expenses
+    .filter(({ date, shareAmount }) => date >= start && date <= end && toCents(shareAmount) > 0)
+    .sort((first, second) => first.date.localeCompare(second.date));
+
+  return {
+    start,
+    end,
+    items,
+    totalAmount: fromCents(items.reduce((sum, item) => sum + toCents(item.totalAmount), 0)),
+    paidByUser: fromCents(items.reduce((sum, item) => sum + toCents(item.paidByUser), 0)),
+    shareAmount: fromCents(items.reduce((sum, item) => sum + toCents(item.shareAmount), 0)),
+  };
 }
 
 export function hasUndatedPayments(expenses: Expense[], debts: Debt[]): boolean {

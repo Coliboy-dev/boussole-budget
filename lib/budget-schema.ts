@@ -156,6 +156,7 @@ function budgetCheck(unit: Unit): Check {
       reimbursementDate: optional(date),
       notes: optional(text),
       receiptSent: flag,
+      receiptReference: optional(text),
     }),
     goals: entities({
       label: text,
