@@ -10,7 +10,7 @@ import type {
   GoalStatus,
   MediationStep,
 } from './types.ts';
-import { addDays, daysBetween, isLocalDate, monthsBetween, parseLocalDate, todayInBrussels } from './local-date.ts';
+import { addDays, addMonths, daysBetween, isLocalDate, monthsBetween, parseLocalDate, todayInBrussels } from './local-date.ts';
 import { fromCents, monthlyCents, toCents } from './money.ts';
 import { forecastOccurrences } from './occurrences.ts';
 import { AVAILABLE_HORIZON, buildProjection } from './projection.ts';
@@ -56,25 +56,77 @@ export function hasUndatedPayments(expenses: Expense[], debts: Debt[]): boolean 
       && !isLocalDate(debt.nextDueDate));
 }
 
-export function calculateSavingsCapacity(monthlyMargin: number, goals: Goal[]): number {
-  const provisions = goals.reduce((sum, goal) => sum + toCents(goal.monthlyContribution ?? 0), 0);
-  return fromCents(Math.max(0, toCents(monthlyMargin) - provisions));
+function monthlyGoalContributionCents(goals: readonly Pick<Goal, 'monthlyContribution'>[]): number {
+  return goals.reduce((sum, goal) => sum + toCents(goal.monthlyContribution ?? 0), 0);
 }
 
-export function calculateGoalFeasibility(goal: Goal, monthlySavings: number): GoalStatus {
+export function calculateSavingsCapacity(monthlyMargin: number, goals: readonly Pick<Goal, 'monthlyContribution'>[]): number {
+  return fromCents(Math.max(0, toCents(monthlyMargin) - monthlyGoalContributionCents(goals)));
+}
+
+export function calculateGoalTotals(goals: Goal[]) {
+  return {
+    saved: fromCents(goals.reduce((sum, goal) => sum + toCents(goal.savedAmount), 0)),
+    target: fromCents(goals.reduce((sum, goal) => sum + toCents(goal.targetAmount), 0)),
+    monthly: fromCents(monthlyGoalContributionCents(goals)),
+  };
+}
+
+type GoalPlan = Pick<Goal, 'monthlyContribution' | 'targetAmount' | 'savedAmount' | 'targetDate'>;
+
+export type GoalFeasibility =
+  | { status: 'realistic'; reason?: never }
+  | { status: 'fragile' | 'to_postpone'; reason: string };
+
+export function assessGoalFeasibility(goal: GoalPlan, monthlySavings: number, today = todayInBrussels()): GoalFeasibility {
   const savings = toCents(monthlySavings);
   const contribution = toCents(goal.monthlyContribution ?? 0);
-  if (savings <= 0 || contribution <= 0) return 'to_postpone';
-  if (contribution > savings * 0.8) return 'fragile';
+  const remaining = toCents(goal.targetAmount) - toCents(goal.savedAmount);
+  if (remaining <= 0) return { status: 'realistic' };
 
-  if (isLocalDate(goal.targetDate)) {
-    const months = Math.max(0, monthsBetween(todayInBrussels(), goal.targetDate));
-    const saved = toCents(goal.savedAmount);
-    const remaining = toCents(goal.targetAmount) - saved;
-    if (saved + contribution * months < remaining * 0.8) return 'fragile';
+  if (savings <= 0) {
+    return { status: 'to_postpone', reason: 'Ta capacité d’épargne mensuelle est de 0,00 €.' };
+  }
+  if (contribution <= 0) {
+    return {
+      status: 'to_postpone',
+      reason: `Indique une mise de côté mensuelle pour évaluer cet objectif avec les ${formatCurrency(monthlySavings)} disponibles par mois.`,
+    };
+  }
+  if (contribution > savings * 0.8) {
+    const planned = `${formatCurrency(fromCents(contribution))}/mois`;
+    const available = `${formatCurrency(monthlySavings)}/mois`;
+    return {
+      status: 'fragile',
+      reason: contribution > savings
+        ? `Tu prévois ${planned} pour ${available} disponibles.`
+        : `Mettre de côté ${planned} sur ${available} disponibles te laisse peu de marge.`,
+    };
   }
 
-  return 'realistic';
+  if (isLocalDate(goal.targetDate)) {
+    const target = formatDate(goal.targetDate);
+    const remainingAmount = formatCurrency(fromCents(remaining));
+    if (goal.targetDate < today) {
+      return { status: 'fragile', reason: `Il reste ${remainingAmount} à épargner et la date cible du ${target} est passée.` };
+    }
+
+    let months = monthsBetween(today, goal.targetDate);
+    if (months > 0 && addMonths(today, months) > goal.targetDate) months -= 1;
+    const projected = contribution * months;
+    if (projected < remaining) {
+      return {
+        status: 'fragile',
+        reason: `Tu mettrais de côté ${formatCurrency(fromCents(projected))} sur les ${remainingAmount} restants d’ici le ${target}.`,
+      };
+    }
+  }
+
+  return { status: 'realistic' };
+}
+
+export function calculateGoalFeasibility(goal: GoalPlan, monthlySavings: number, today = todayInBrussels()): GoalStatus {
+  return assessGoalFeasibility(goal, monthlySavings, today).status;
 }
 
 export function calculateBudgetSummary(
@@ -121,6 +173,16 @@ export function calculateBudgetSummary(
       reservedAmount: forecast.reservedAmount,
       optimisticAvailable: empty ? 0 : forecast.optimisticAvailable,
     },
+  };
+}
+
+export function calculateUncertainIncome(incomes: Income[], today: string, horizon: number) {
+  const uncertainIncomes = incomes.filter(({ isConfirmed }) => !isConfirmed);
+  const occurrences = forecastOccurrences(uncertainIncomes, [], [], [], today, addDays(today, horizon));
+
+  return {
+    count: occurrences.length,
+    total: fromCents(occurrences.reduce((sum, { amountCents }) => sum + amountCents, 0)),
   };
 }
 

@@ -7,29 +7,38 @@ import GoalForm from '@/components/forms/GoalForm';
 import GoalList from '@/components/goals/GoalList';
 import Card from '@/components/ui/Card';
 import AlertBanner from '@/components/ui/AlertBanner';
-import { formatCurrency } from '@/lib/budget-calculations';
+import {
+  assessGoalFeasibility,
+  calculateGoalFeasibility,
+  calculateGoalTotals,
+  calculateSavingsCapacity,
+  formatCurrency,
+} from '@/lib/budget-calculations';
 import type { Goal } from '@/lib/types';
 
 export default function ObjectifsPage() {
-  const { goals, addGoal, updateGoal, deleteGoal } = useApp();
+  const { goals, summary, today, addGoal, updateGoal, deleteGoal } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Goal | null>(null);
 
-  const totalSaved = goals.reduce((s, g) => s + g.savedAmount, 0);
-  const totalTarget = goals.reduce((s, g) => s + g.targetAmount, 0);
-  const totalMonthlyNeeded = goals.reduce((s, g) => s + (g.monthlyContribution || 0), 0);
-  const realisticGoals = goals.filter((g) => g.status === 'realistic').length;
+  const totals = calculateGoalTotals(goals);
+  const assessedGoals = goals.map((goal) => ({
+    goal,
+    feasibility: assessGoalFeasibility(goal, summary.savingsCapacity, today),
+  }));
+  const hasRealisticGoal = assessedGoals.some(({ feasibility }) => feasibility.status === 'realistic');
 
   function handleEdit(goal: Goal) {
     setEditItem(goal);
     setShowForm(true);
   }
 
-  function handleSubmit(data: Omit<Goal, 'id'>) {
+  function handleSubmit(data: Omit<Goal, 'id' | 'status'>) {
     if (editItem) {
       updateGoal(editItem.id, data);
     } else {
-      addGoal(data);
+      const savingsAfterAddition = calculateSavingsCapacity(summary.savingsCapacity, [data]);
+      addGoal({ ...data, status: calculateGoalFeasibility(data, savingsAfterAddition, today) });
     }
     setShowForm(false);
     setEditItem(null);
@@ -69,27 +78,26 @@ export default function ObjectifsPage() {
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
               <p className="text-xs text-gray-600 mb-1">Épargné</p>
-              <p className="text-lg font-bold text-teal-700">{formatCurrency(totalSaved)}</p>
+              <p className="text-lg font-bold text-teal-700">{formatCurrency(totals.saved)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-600 mb-1">Objectif total</p>
-              <p className="text-lg font-bold text-gray-700">{formatCurrency(totalTarget)}</p>
+              <p className="text-lg font-bold text-gray-700">{formatCurrency(totals.target)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-600 mb-1">/mois réservé</p>
-              <p className="text-lg font-bold text-teal-800">{formatCurrency(totalMonthlyNeeded)}</p>
+              <p className="text-lg font-bold text-teal-800">{formatCurrency(totals.monthly)}</p>
             </div>
           </div>
         </Card>
 
-        {goals.length > 0 && realisticGoals === 0 && (
+        {goals.length > 0 && !hasRealisticGoal && (
           <AlertBanner variant="warning" title="Objectifs fragiles">
-            Tous tes objectifs sont en état fragile ou à reporter. Essaie de dégager plus de marge
-            mensuelle.
+            Tous tes objectifs sont fragiles ou à reporter. Chaque carte indique ce qui bloque.
           </AlertBanner>
         )}
 
-        <GoalList goals={goals} onEdit={handleEdit} onDelete={deleteGoal} />
+        <GoalList goals={assessedGoals} onEdit={handleEdit} onDelete={deleteGoal} />
 
         {goals.length === 0 && (
           <button

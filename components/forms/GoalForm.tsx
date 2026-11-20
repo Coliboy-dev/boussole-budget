@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Goal, GoalStatus } from '@/lib/types';
+import type { Goal } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { isLocalDate } from '@/lib/local-date';
 import FormField from './FormField';
@@ -12,7 +12,7 @@ const cls =
 
 interface Props {
   initial?: Goal;
-  onSubmit: (data: Omit<Goal, 'id'>) => void;
+  onSubmit: (data: Omit<Goal, 'id' | 'status'>) => void;
   onCancel: () => void;
 }
 
@@ -24,7 +24,6 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
     savedAmount: initial?.savedAmount?.toString() ?? '0',
     targetDate: initial?.targetDate ?? '',
     monthlyContribution: initial?.monthlyContribution?.toString() ?? '',
-    status: (initial?.status ?? 'realistic') as GoalStatus,
     notes: initial?.notes ?? '',
   });
 
@@ -35,7 +34,7 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
     e.preventDefault();
     const targetAmount = parseFloat(form.targetAmount);
     const savedAmount = parseFloat(form.savedAmount) || 0;
-    const monthlyContribution = parseFloat(form.monthlyContribution) || undefined;
+    const monthlyContribution = form.monthlyContribution === '' ? undefined : parseFloat(form.monthlyContribution);
     if (!validate(e.currentTarget, {
       label: form.label.trim() ? undefined : 'Renseigne le nom de l’objectif.',
       targetAmount: isNonNegativeBudgetAmount(targetAmount) && targetAmount > 0 ? undefined : 'Saisis un montant cible valide supérieur à zéro.',
@@ -49,7 +48,6 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
       savedAmount,
       targetDate: form.targetDate || undefined,
       monthlyContribution,
-      status: form.status,
       notes: form.notes.trim() || undefined,
     });
   }
@@ -118,18 +116,6 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
           />
         </FormField>
       </div>
-
-      <FormField label="Réalisme de l'objectif">
-        <select
-          className={cls}
-          value={form.status}
-          onChange={(e) => set('status', e.target.value as GoalStatus)}
-        >
-          <option value="realistic">Réalisable</option>
-          <option value="fragile">Fragile</option>
-          <option value="to_postpone">⏸️ À reporter</option>
-        </select>
-      </FormField>
 
       <FormField label="Notes" hint="Optionnel">
         <textarea
