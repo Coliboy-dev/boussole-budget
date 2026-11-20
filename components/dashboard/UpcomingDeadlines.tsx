@@ -1,61 +1,49 @@
+import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import { formatShortDate, formatCurrency } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
 
 interface UpcomingDeadlinesProps {
   reminders: Reminder[];
+  horizon: number;
 }
 
-const typeConfig: Record<string, { icon: string; color: string }> = {
-  expense: { icon: '📋', color: 'bg-teal-100 text-teal-700' },
-  debt: { icon: '💳', color: 'bg-amber-100 text-amber-700' },
-  mediation: { icon: '🤝', color: 'bg-indigo-100 text-indigo-700' },
-  child: { icon: '👨‍👧‍👦', color: 'bg-purple-100 text-purple-700' },
-  income: { icon: '💰', color: 'bg-green-100 text-green-700' },
-};
-
-export default function UpcomingDeadlines({ reminders }: UpcomingDeadlinesProps) {
-  if (reminders.length === 0) {
-    return (
-      <Card>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Échéances et retards</h3>
-        <p className="text-sm text-gray-400 text-center py-4">Aucune échéance dans les 30 prochains jours.</p>
-      </Card>
-    );
-  }
+export default function UpcomingDeadlines({ reminders, horizon }: UpcomingDeadlinesProps) {
+  const upcoming = reminders.filter(({ isLate }) => !isLate).slice(0, 3);
+  const lateCount = reminders.filter(({ isLate }) => isLate).length;
 
   return (
-    <Card padding="none">
-      <div className="px-4 pt-4 pb-2">
-        <h3 className="text-sm font-semibold text-gray-700">Échéances et retards</h3>
+    <Card>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-gray-900">Prochaines échéances</h2>
+        <Link href="/projection" className="inline-flex min-h-11 items-center text-xs font-medium text-teal-800 underline">Voir l’échéancier</Link>
       </div>
-      <div className="divide-y divide-gray-50">
-        {reminders.slice(0, 6).map((reminder) => {
-          const config = typeConfig[reminder.type] || typeConfig.expense;
-          return (
-            <div
-              key={reminder.id}
-              className={`flex items-center gap-3 px-4 py-3 ${reminder.isUrgent ? 'bg-red-50/50' : ''}`}
-            >
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${config.color}`}>
-                {config.icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{reminder.label}</p>
-                <p className={`text-xs ${reminder.isUrgent ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                  {reminder.isLate ? 'En retard depuis le ' : reminder.isUrgent ? '⚡ ' : ''}
+      {upcoming.length === 0 ? (
+        <p className="mt-3 text-sm text-gray-600">Aucune échéance prévue dans les {horizon} prochains jours.</p>
+      ) : (
+        <ul className="mt-1 divide-y divide-gray-100">
+          {upcoming.map((reminder) => (
+            <li key={reminder.id} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <p className="wrap-break-word text-sm font-medium text-gray-800">{reminder.label}</p>
+                <time dateTime={reminder.dueDate} className="text-xs text-gray-600">
                   {formatShortDate(reminder.dueDate)}
-                </p>
+                </time>
               </div>
               {reminder.amount !== undefined && (
-                <span className="text-sm font-semibold text-gray-700 flex-shrink-0">
+                <span className="shrink-0 text-sm font-semibold text-gray-800 tabular-nums">
                   {formatCurrency(reminder.amount)}
                 </span>
               )}
-            </div>
-          );
-        })}
-      </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {lateCount > 0 && (
+        <Link href="/projection#en-retard" className="inline-flex min-h-11 items-center text-xs font-medium text-red-800 underline">
+          {lateCount} {lateCount === 1 ? 'échéance en retard' : 'échéances en retard'}
+        </Link>
+      )}
     </Card>
   );
 }

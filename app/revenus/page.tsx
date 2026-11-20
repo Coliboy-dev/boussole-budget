@@ -54,11 +54,11 @@ export default function RevenusPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-800">💰 Mes revenus</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Tous tes revenus mensuels</p>
+            <p className="text-sm text-gray-600 mt-0.5">Tous tes revenus mensuels</p>
           </div>
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="flex items-center gap-1.5 bg-teal-500 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-600 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 bg-teal-700 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-800 transition-colors shadow-sm"
           >
             + Ajouter
           </button>
@@ -67,18 +67,18 @@ export default function RevenusPage() {
         <Card className="bg-green-50 border-green-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-green-600 mb-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-800 mb-1">
                 Total mensuel
               </p>
               <p className="text-3xl font-bold text-green-700">{formatCurrency(totalMonthly)}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-500 mb-1">Dont confirmé</p>
-              <p className="text-lg font-bold text-green-600">{formatCurrency(confirmedTotal)}</p>
+              <p className="text-xs text-gray-600 mb-1">Dont confirmé</p>
+              <p className="text-lg font-bold text-green-800">{formatCurrency(confirmedTotal)}</p>
             </div>
           </div>
           {unconfirmedTotal > 0 && (
-            <p className="text-xs text-amber-600 mt-2 pt-2 border-t border-green-200">
+            <p className="text-xs text-amber-800 mt-2 pt-2 border-t border-green-200">
               ⚠️ {formatCurrency(unconfirmedTotal)} de revenus incertains inclus
             </p>
           )}
@@ -100,7 +100,7 @@ export default function RevenusPage() {
         {incomes.length === 0 && (
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="w-full border-2 border-dashed border-teal-200 rounded-2xl py-6 text-center text-teal-500 font-semibold hover:bg-teal-50 transition-colors"
+            className="w-full border-2 border-dashed border-teal-200 rounded-2xl py-6 text-center text-teal-800 font-semibold hover:bg-teal-50 transition-colors"
           >
             + Ajouter ton premier revenu
           </button>

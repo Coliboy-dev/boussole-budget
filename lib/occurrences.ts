@@ -87,7 +87,8 @@ export function debtOccurrences(debt: Debt, today: string, end: string): Occurre
   if (remainingCents === 0) return [];
 
   // A V1 debt marked late establishes the entered arrear, without inventing intervening arrears.
-  const anchor = debt.nextDueDate ?? (debt.status === 'late' ? today : undefined);
+  const undatedArrear = !debt.nextDueDate && debt.status === 'late';
+  const anchor = undatedArrear ? today : debt.nextDueDate;
   const dates = scheduleDates(debt, anchor, monthlyCents ? 'monthly' : 'one_time', today, end, true);
   if (debt.status === 'late' && !isLocalDate(debt.trackedFrom) && isLocalDate(anchor)
     && anchor < today && !dates.includes(anchor) && (!debt.endDate || anchor <= debt.endDate)) {
@@ -96,7 +97,9 @@ export function debtOccurrences(debt: Debt, today: string, end: string): Occurre
   const result: Occurrence[] = [];
 
   for (const dueDate of dates) {
-    const status = statusFor(debt, dueDate, today);
+    const savedStatus = statusFor(debt, dueDate, today);
+    const status = savedStatus === 'planned' && undatedArrear && dueDate === today
+      ? 'late' : savedStatus;
     const amountCents = Math.min(remainingCents, monthlyCents || remainingCents);
     if (amountCents === 0) break;
 

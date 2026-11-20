@@ -12,7 +12,7 @@ interface GoalListProps {
 export default function GoalList({ goals, onEdit, onDelete }: GoalListProps) {
   if (goals.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-400">
+      <div className="text-center py-8 text-gray-600">
         <p className="text-4xl mb-2">🎯</p>
         <p className="text-sm">Aucun objectif défini pour l&apos;instant.</p>
       </div>

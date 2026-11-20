@@ -15,23 +15,28 @@ import type {
 import { calculateBudgetSummary } from '@/lib/budget-calculations';
 import { generateAdvice } from '@/lib/advice-engine';
 import {
+  LEGACY_BUDGET_STORAGE_KEY,
   cancelExpenseOccurrence,
-  deserializeBudget,
+  deserializeStoredBudget,
   emptyBudgetState,
   migrateLegacyBudget,
   readBudgetSnapshot,
   recordPayment,
+  recordUnscheduledDebtPayment,
   serializeBudget,
   writeBudgetSnapshot,
   type AppState,
   type BudgetStorageSnapshot,
   type Payment,
+  type UnscheduledDebtPayment,
 } from '@/lib/budget-state';
 import { todayInBrussels } from '@/lib/local-date';
 import { fromCents, toCents } from '@/lib/money';
+import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
 
 type RuntimeState = AppState & {
-  storageStatus: 'loading' | 'ready' | 'unreadable' | 'unsaved';
+  lastBackupDate: string | null;
+  storageStatus: 'loading' | 'fresh' | 'ready' | 'unreadable' | 'unsaved';
   storageRevision: number;
 };
 
@@ -40,6 +45,8 @@ type BudgetPersistence = {
   saved: RuntimeState;
   needsMigration: boolean;
 };
+
+type ScheduledPayment = Pick<Payment, 'id' | 'dueDate'> & { type: 'expense' | 'debt' };
 
 function subscribeToCalendar(listener: () => void): () => void {
   const timer = window.setInterval(listener, 60_000);
@@ -85,6 +92,9 @@ function uid(): string {
 function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
   if (action.type === 'HYDRATE') return action.payload;
   if (state.storageStatus === 'loading') return state;
+
+  // Saisir des données depuis un autre écran démarre également le budget.
+  if (state.storageStatus === 'fresh') state = { ...state, storageStatus: 'ready' };
 
   switch (action.type) {
     case 'SAVE_FAILED':
@@ -193,9 +203,15 @@ export interface AppContextType extends AppState {
   today: string;
   storageBlocked: boolean;
   isBudgetLoading: boolean;
+  needsOnboarding: boolean;
   canExportBudget: boolean;
+  lastBackupDate: string | null;
   exportBudget: () => string;
+  recordBackupExport: (date: string) => void;
   restoreBudget: (budget: AppState) => void;
+  finishOnboarding: (input?: FirstBudgetInput) => void;
+  saveProfileSettings: (profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>) => void;
+  clearBudget: () => void;
   setBalance: (amount: number) => void;
   updateProfile: (data: Partial<UserProfile>) => void;
   addIncome: (income: Omit<Income, 'id'>) => void;
@@ -215,6 +231,9 @@ export interface AppContextType extends AppState {
   deleteGoal: (id: string) => void;
   updateMediation: (data: Partial<MediationFile>) => void;
   recordPayment: (payment: Omit<Payment, 'today'>) => void;
+  recordScheduledPayment: (payment: ScheduledPayment) => void;
+  recordUnscheduledDebtPayment: (payment: Omit<UnscheduledDebtPayment, 'today'>) => void;
+  undoScheduledPayment: () => void;
   cancelExpenseOccurrence: (id: string, dueDate: string) => void;
 }
 
@@ -223,10 +242,12 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, {
     ...emptyBudgetState,
+    lastBackupDate: null,
     storageStatus: 'loading',
     storageRevision: 0,
   });
   const persistence = useRef<BudgetPersistence | null>(null);
+  const scheduledPaymentUndo = useRef<{ before: AppState; after: RuntimeState } | null>(null);
   const today = useSyncExternalStore(subscribeToCalendar, todayInBrussels, serverDate);
 
   useEffect(() => {
@@ -234,26 +255,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       snapshot = readBudgetSnapshot(localStorage);
       const { current, legacy } = snapshot;
-      const budget = current !== null ? deserializeBudget(current)
-        : legacy !== null ? migrateLegacyBudget(legacy, emptyBudgetState, todayInBrussels()) : emptyBudgetState;
-      const loaded: RuntimeState = { ...budget, storageStatus: 'ready', storageRevision: 0 };
+      const { budget, lastBackupDate } = current !== null ? deserializeStoredBudget(current) : {
+        budget: legacy !== null ? migrateLegacyBudget(legacy, emptyBudgetState, todayInBrussels()) : emptyBudgetState,
+        lastBackupDate: null,
+      };
+      const loaded: RuntimeState = {
+        ...budget,
+        lastBackupDate,
+        storageStatus: current === null && legacy === null ? 'fresh' : 'ready',
+        storageRevision: 0,
+      };
       persistence.current = { snapshot, saved: loaded, needsMigration: legacy !== null };
       dispatch({ type: 'HYDRATE', payload: loaded });
     } catch {
-      const unavailable: RuntimeState = { ...emptyBudgetState, storageStatus: 'unreadable', storageRevision: 0 };
+      const unavailable: RuntimeState = {
+        ...emptyBudgetState, lastBackupDate: null, storageStatus: 'unreadable', storageRevision: 0,
+      };
       persistence.current = snapshot ? { snapshot, saved: unavailable, needsMigration: false } : null;
       dispatch({ type: 'HYDRATE', payload: unavailable });
     }
   }, []);
 
   useEffect(() => {
-    const { storageStatus, storageRevision, ...budget } = state;
+    const { storageStatus, storageRevision, lastBackupDate, ...budget } = state;
     const previous = persistence.current;
     if (storageStatus !== 'ready' || !previous || storageRevision !== previous.saved.storageRevision
       || (state === previous.saved && !previous.needsMigration)) return;
 
     try {
-      const contents = serializeBudget(budget);
+      const contents = serializeBudget(budget, lastBackupDate ?? undefined);
       writeBudgetSnapshot(localStorage, previous.snapshot, contents);
       persistence.current = { snapshot: { current: contents, legacy: null }, saved: state, needsMigration: false };
     } catch {
@@ -261,29 +291,97 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state]);
 
-  const { storageStatus, storageRevision, ...budget } = state;
-  const canExportBudget = storageStatus === 'ready' || storageStatus === 'unsaved';
+  const { storageStatus, storageRevision, lastBackupDate, ...budget } = state;
+  const canExportBudget = storageStatus === 'fresh' || storageStatus === 'ready' || storageStatus === 'unsaved';
 
   function exportBudget(): string {
     if (!canExportBudget) throw new Error('Le budget doit être chargé pour être exporté.');
     return serializeBudget(budget);
   }
 
-  function restoreBudget(imported: AppState): void {
+  function saveBudget(imported: AppState, backupDate = lastBackupDate): RuntimeState {
     const previous = persistence.current;
     if (!previous || storageStatus === 'loading') throw new Error('Le stockage du navigateur est indisponible.');
     if (storageRevision !== previous.saved.storageRevision) throw new Error('Une restauration est déjà en cours.');
 
-    const contents = serializeBudget(imported);
+    const contents = serializeBudget(imported, backupDate ?? undefined);
     writeBudgetSnapshot(localStorage, previous.snapshot, contents);
     const restored: RuntimeState = {
       ...imported,
+      lastBackupDate: backupDate,
       storageStatus: 'ready',
       storageRevision: storageRevision + 1,
     };
     // A save queued before restoration must not overwrite the newly imported version.
     persistence.current = { snapshot: { current: contents, legacy: null }, saved: restored, needsMigration: false };
     dispatch({ type: 'HYDRATE', payload: restored });
+    return restored;
+  }
+
+  function recordBackupExport(date: string): void {
+    if (storageStatus === 'fresh') return;
+    if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
+      throw new Error('La date de l’export n’a pas pu être enregistrée sur cet appareil.');
+    }
+    if (date !== lastBackupDate) saveBudget(budget, date);
+  }
+
+  function restoreBudget(imported: AppState): void {
+    saveBudget(imported, null);
+  }
+
+  function finishOnboarding(input?: FirstBudgetInput): void {
+    if (storageStatus !== 'fresh') throw new Error('Un budget existe déjà sur cet appareil.');
+    saveBudget(input ? createFirstBudget(budget, input, today) : budget);
+  }
+
+  function saveProfileSettings(profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>): void {
+    if ((storageStatus !== 'ready' && storageStatus !== 'fresh') || state !== persistence.current?.saved) {
+      throw new Error('Le budget doit être chargé avant d’enregistrer les réglages.');
+    }
+    saveBudget({ ...budget, userProfile: { ...budget.userProfile, ...profile } });
+  }
+
+  function clearBudget(): void {
+    // Persist the empty budget first so legacy data cannot be re-imported on restart.
+    saveBudget(emptyBudgetState, null);
+    scheduledPaymentUndo.current = null;
+    try {
+      localStorage.removeItem(LEGACY_BUDGET_STORAGE_KEY);
+    } catch {
+      throw new Error('Le budget actif a été effacé, mais le navigateur a conservé l’ancienne copie. Réessaie de l’effacer.');
+    }
+  }
+
+  function ensureSavedForPayment(): void {
+    if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
+      throw new Error('Le budget doit être chargé et enregistré avant de saisir un paiement.');
+    }
+  }
+
+  function recordScheduledPayment(payment: ScheduledPayment): void {
+    ensureSavedForPayment();
+    const paid = recordPayment(budget, { ...payment, today, balanceIncludesPayment: false });
+    if (paid === budget) throw new Error('Cette échéance ne peut plus être marquée comme payée.');
+
+    scheduledPaymentUndo.current = { before: budget, after: saveBudget(paid) };
+  }
+
+  function saveUnscheduledDebtPayment(payment: Omit<UnscheduledDebtPayment, 'today'>): void {
+    ensureSavedForPayment();
+    const paid = recordUnscheduledDebtPayment(budget, { ...payment, today });
+    if (paid === budget) throw new Error('Le paiement dépasse le restant dû ou la dette est déjà soldée.');
+    saveBudget(paid);
+  }
+
+  function undoScheduledPayment(): void {
+    const payment = scheduledPaymentUndo.current;
+    // An undo can only restore the exact state replaced by this payment.
+    if (!payment || state !== payment.after || state !== persistence.current?.saved) {
+      throw new Error('Le budget a changé depuis ce paiement. L’annulation n’est plus disponible.');
+    }
+    saveBudget(payment.before);
+    scheduledPaymentUndo.current = null;
   }
 
   const summary = calculateBudgetSummary(
@@ -304,9 +402,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     today,
     storageBlocked: storageStatus === 'unreadable' || storageStatus === 'unsaved',
     isBudgetLoading: storageStatus === 'loading',
+    needsOnboarding: storageStatus === 'fresh',
     canExportBudget,
+    lastBackupDate,
     exportBudget,
+    recordBackupExport,
     restoreBudget,
+    finishOnboarding,
+    saveProfileSettings,
+    clearBudget,
     setBalance: (amount) => dispatch({ type: 'SET_BALANCE', payload: { amount, today } }),
     updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
     addIncome: (income) => dispatch({ type: 'ADD_INCOME', payload: income }),
@@ -327,6 +431,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteGoal: (id) => dispatch({ type: 'DELETE_GOAL', payload: id }),
     updateMediation: (data) => dispatch({ type: 'UPDATE_MEDIATION', payload: data }),
     recordPayment: (payment) => dispatch({ type: 'RECORD_PAYMENT', payload: { ...payment, today } }),
+    recordScheduledPayment,
+    recordUnscheduledDebtPayment: saveUnscheduledDebtPayment,
+    undoScheduledPayment,
     cancelExpenseOccurrence: (id, dueDate) => dispatch({ type: 'CANCEL_EXPENSE_OCCURRENCE', payload: { id, dueDate, today } }),
   };
 

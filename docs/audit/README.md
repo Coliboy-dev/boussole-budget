@@ -39,11 +39,43 @@ Le disponible correspond au plus bas des soldes projetés en fin de journée sur
 
 ## Première ouverture et conseils
 
-Un nouveau navigateur démarre avec un budget vide. Le tableau de bord permet de régler la réserve de sécurité et d'ouvrir la démo en lecture seule. Un budget déjà enregistré est chargé avec ses propres données. Les conseils du tableau de bord et de la page Conseils utilisent ce budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
+Un nouveau navigateur propose trois questions sur le solde bancaire, la prochaine rentrée certaine et les factures à payer. Le solde et les échéances saisies sont enregistrés ensemble, puis le premier vrai disponible s’affiche avec le détail du calcul. Le revenu et les factures saisis sont ponctuels. Un budget déjà enregistré ou restauré ouvre directement le tableau de bord. La démo en lecture seule et la restauration sont accessibles dès le premier écran.
+
+Les conseils utilisent les données du budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
+
+## Écran Aujourd’hui
+
+Le premier écran du budget affiche le vrai disponible, la date de fin de la projection et l’explication du point bas. Il présente ensuite les trois prochaines échéances et indique le nombre de retards. La courbe montre le solde prudent en fin de journée sur le même horizon. Le curseur permet de lire le solde à une date précise.
+
+## Échéancier
+
+L’échéancier réunit les charges, les dettes et les rentrées prévues dans la page **Échéancier**. Les échéances en retard sont regroupées en haut. Un appui sur **Payé** enregistre l’échéance et débite le solde. Le vrai disponible est recalculé. **Annuler** rétablit le dernier paiement effectué sur cette page tant que le budget reste inchangé. Si le paiement est déjà déduit de ton solde, enregistre-le depuis **Charges** ou **Dettes** en cochant la case correspondante.
+
+Les quatre onglets sont **Aujourd’hui**, **Échéances**, **Budget** et **Plus**. Dans **Plus → Réglages**, tu peux changer ton prénom et ta réserve, ouvrir la démo en lecture seule ou effacer le budget de cet appareil. L’écran **Aujourd’hui** donne aussi accès au réglage de la réserve.
+
+## Accessibilité
+
+Le premier lien au clavier donne accès au contenu. Les fenêtres de saisie gardent le focus dans la modale, se ferment avec Échap et rendent le focus à leur bouton d’ouverture. Les actions principales ont une cible d’au moins 44 pixels. Les contrôles axe-core WCAG 2.0 à 2.2 A/AA ont signalé zéro violation dans Chromium à 390 × 667 sur les pages du budget, les formulaires en modale et les trois étapes du premier budget.
+
+## Remboursement des dettes
+
+La page **Dettes** affiche le restant dû et, quand le calendrier le permet, la date de fin estimée au rythme des paiements prévus. La dernière mensualité est limitée au restant dû. Pour une dette sans échéance ouverte, tu peux saisir directement le montant payé. Le paiement diminue le restant dû et le solde, sauf quand tu indiques que le paiement est déjà déduit du solde.
+
+## Application installable
+
+Utilise le build de production sur HTTPS, ou sur localhost pour un test. Ouvre l’application en ligne jusqu’à ce que **Plus** affiche **Mode hors ligne prêt**. Le cache garde les pages et les ressources de cette version. Le budget reste dans le stockage local. Le parcours hors ligne a été vérifié dans Chromium avec un profil mobile Android. L’installation sur les téléphones du pilote reste à vérifier.
+
+Dans **Plus → Réglages**, utilise **Demander le stockage persistant** pour solliciter la protection du navigateur contre l’effacement automatique. L’écran affiche le résultat. La décision dépend du navigateur. Garde une copie JSON dans les fichiers de ton appareil.
+
+Les pages **Confidentialité** et **Mentions légales** sont accessibles dans **Plus**. La confidentialité décrit le traitement des données techniques par Vercel. Les mentions légales indiquent la dénomination, l’adresse, l’e-mail, le numéro d’entreprise (BCE) et le numéro de TVA de Start’OnLab.
+
+Les pages et les ressources HTTP portent la directive `noindex`. Le fichier `robots.txt` laisse les moteurs consulter les URL pour qu’ils puissent lire cette directive et retirer les URL déjà indexées. [Documentation Google sur la désindexation](https://developers.google.com/search/docs/crawling-indexing/block-indexing)
 
 ## Sauvegarde du budget
 
 Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui contient le budget complet en centimes. Pour le restaurer, choisis le fichier puis confirme le remplacement du budget sur cet appareil.
+
+**Aujourd’hui** affiche la date du dernier téléchargement JSON lancé pour le budget depuis cet appareil. Un rappel s’affiche dès la première sauvegarde à faire, puis à partir de sept jours après le dernier export. Un import ou un effacement remet la date à zéro. Le rappel est affiché dans l’application.
 
 Le même schéma contrôle le fichier et le stockage du navigateur. Une version incompatible, une date invalide ou une dette avec un montant négatif est signalée. L'application charge les données avant de les écrire et ne remplace le budget actif qu'après l'enregistrement réussi de l'import. La migration automatique d'un ancien budget conserve la copie v1.
 
@@ -64,6 +96,6 @@ Le tableau de bord affiche une seule carte de solde. Une suppression demande une
 1. P0-1, P0-4, P0-6 : tests, retrait de la démo par défaut, hygiène.
 2. P0-2, P0-3, P0-5 : modèle daté, vrai disponible par point bas, export et import.
 3. P1 : onboarding, écran « Aujourd'hui », échéancier, navigation, accessibilité.
-4. Tests avec 5 utilisateurs réels, puis décision d'aller ou non plus loin.
+4. [Pilote avec cinq utilisateurs réels](pilote-p1.md), puis décision d'aller ou non plus loin.
 
 Le détail, les efforts et les critères d'acceptation sont dans le rapport F.

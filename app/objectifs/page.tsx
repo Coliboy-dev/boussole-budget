@@ -55,11 +55,11 @@ export default function ObjectifsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-800">🎯 Mes objectifs</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Tes projets d&apos;épargne</p>
+            <p className="text-sm text-gray-600 mt-0.5">Tes projets d&apos;épargne</p>
           </div>
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="flex items-center gap-1.5 bg-teal-500 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-600 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 bg-teal-700 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-800 transition-colors shadow-sm"
           >
             + Ajouter
           </button>
@@ -68,16 +68,16 @@ export default function ObjectifsPage() {
         <Card className="bg-teal-50 border-teal-200">
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
-              <p className="text-xs text-gray-500 mb-1">Épargné</p>
+              <p className="text-xs text-gray-600 mb-1">Épargné</p>
               <p className="text-lg font-bold text-teal-700">{formatCurrency(totalSaved)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Objectif total</p>
+              <p className="text-xs text-gray-600 mb-1">Objectif total</p>
               <p className="text-lg font-bold text-gray-700">{formatCurrency(totalTarget)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">/mois réservé</p>
-              <p className="text-lg font-bold text-teal-600">{formatCurrency(totalMonthlyNeeded)}</p>
+              <p className="text-xs text-gray-600 mb-1">/mois réservé</p>
+              <p className="text-lg font-bold text-teal-800">{formatCurrency(totalMonthlyNeeded)}</p>
             </div>
           </div>
         </Card>
@@ -94,7 +94,7 @@ export default function ObjectifsPage() {
         {goals.length === 0 && (
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="w-full border-2 border-dashed border-teal-200 rounded-2xl py-6 text-center text-teal-500 font-semibold hover:bg-teal-50 transition-colors"
+            className="w-full border-2 border-dashed border-teal-200 rounded-2xl py-6 text-center text-teal-800 font-semibold hover:bg-teal-50 transition-colors"
           >
             + Définir ton premier objectif
           </button>

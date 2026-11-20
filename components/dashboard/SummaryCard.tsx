@@ -1,83 +1,58 @@
-import Card from '@/components/ui/Card';
-import { formatCurrency, formatDate } from '@/lib/budget-calculations';
+import { formatCurrency, formatDate, formatShortDate } from '@/lib/budget-calculations';
 import type { BudgetSummary } from '@/lib/types';
 
 interface SummaryCardProps {
   summary: BudgetSummary;
   hasUndatedPayments: boolean;
+  hasRecordedBalance?: boolean;
 }
 
 const riskConfig = {
-  safe: {
-    label: 'Situation stable',
-    color: 'text-green-600',
-    bg: 'bg-green-50',
-    border: 'border-green-200',
-    dot: 'bg-green-500',
-  },
-  fragile: {
-    label: 'Situation fragile',
-    color: 'text-amber-600',
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
-    dot: 'bg-amber-500',
-  },
-  danger: {
-    label: 'Situation critique',
-    color: 'text-red-600',
-    bg: 'bg-red-50',
-    border: 'border-red-200',
-    dot: 'bg-red-500',
-  },
+  safe: { color: 'text-teal-950', border: 'border-teal-200', background: 'bg-teal-50' },
+  fragile: { color: 'text-amber-950', border: 'border-amber-200', background: 'bg-amber-50' },
+  danger: { color: 'text-red-950', border: 'border-red-200', background: 'bg-red-50' },
 };
 
-export default function SummaryCard({ summary, hasUndatedPayments }: SummaryCardProps) {
+export default function SummaryCard({ summary, hasUndatedPayments, hasRecordedBalance = false }: SummaryCardProps) {
   const risk = riskConfig[summary.riskLevel];
   const forecast = summary.availableForecast;
+  const end = forecast.dailyBalances.at(-1);
   const causes = forecast.causes.slice(0, 2).join(', ');
 
   return (
-    <div>
-      <Card className={`border ${risk.border} ${risk.bg}`}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`text-xs font-semibold uppercase tracking-wide ${risk.color}`}>
-                Vrai disponible
-              </span>
-              <span className={`w-2 h-2 rounded-full ${risk.dot}`} />
-            </div>
-            <p className={`text-2xl font-bold ${risk.color}`}>
-              {formatCurrency(summary.trueAvailable)}
-            </p>
-            {summary.emptyBudget ? (
-              <p className="text-xs text-gray-500 mt-1">Saisis ton solde et tes échéances pour obtenir la projection.</p>
-            ) : (
-              <p className="text-xs text-gray-500 mt-1">
-                Point bas sur {forecast.horizon} jours le {formatDate(forecast.date)} à{' '}
-                {formatCurrency(forecast.balance)}{causes && ` après ${causes}`}.
-                Réserve déduite de {formatCurrency(summary.safetyReserve)}.
-              </p>
-            )}
-            {forecast.optimisticAvailable > summary.trueAvailable && (
-              <p className="text-xs text-gray-600 mt-1">
-                Si les revenus incertains arrivent aux dates prévues{' '}
-                <strong>{formatCurrency(forecast.optimisticAvailable)}</strong>.
-              </p>
-            )}
-            {hasUndatedPayments && (
-              <p className="text-xs text-amber-800 mt-2">
-                Projection partielle. Renseigne les dates des charges et mensualités pour les inclure.
-              </p>
-            )}
-          </div>
-          <div className="text-right">
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${risk.bg} ${risk.color} border ${risk.border}`}>
-              {risk.label}
-            </span>
-          </div>
-        </div>
-      </Card>
-    </div>
+    <section className={`space-y-3 rounded-2xl border p-4 shadow-sm ${risk.border} ${risk.background}`}>
+      <div className={risk.color}>
+        <h2 className="text-sm font-semibold">Vrai disponible</h2>
+        <p className="mt-1 text-4xl font-bold leading-tight tracking-tight tabular-nums wrap-anywhere sm:text-5xl">
+          {formatCurrency(summary.trueAvailable)}
+        </p>
+        {end && (!summary.emptyBudget || hasRecordedBalance) && (
+          <p className="mt-1 text-sm font-medium">
+            Jusqu’au <time dateTime={end.date}>{formatDate(end.date)}</time>
+          </p>
+        )}
+      </div>
+      {summary.emptyBudget ? (
+        <p className="text-sm text-gray-700">
+          {hasRecordedBalance ? 'Aucune échéance saisie pour l’instant.' : 'Saisis ton solde et tes échéances pour obtenir la projection.'}
+        </p>
+      ) : (
+        <p className="text-sm leading-relaxed text-gray-700">
+          Point bas prévu le <time dateTime={forecast.date}>{formatShortDate(forecast.date)}</time> à{' '}
+          {formatCurrency(forecast.balance)}{causes && ` après ${causes}`}, moins {formatCurrency(summary.safetyReserve)} de réserve.
+        </p>
+      )}
+      {hasUndatedPayments && (
+        <p className="text-sm text-amber-900">
+          Projection partielle. Renseigne les dates des charges et mensualités pour les inclure.
+        </p>
+      )}
+      {forecast.optimisticAvailable > summary.trueAvailable && (
+        <details className="text-sm text-gray-700">
+          <summary className="cursor-pointer font-medium">Si les revenus incertains arrivent</summary>
+          <p className="mt-2">Vrai disponible estimé à <strong>{formatCurrency(forecast.optimisticAvailable)}</strong>.</p>
+        </details>
+      )}
+    </section>
   );
 }

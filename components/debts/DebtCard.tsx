@@ -3,12 +3,12 @@
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import ProgressBar from '@/components/ui/ProgressBar';
-import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
+import { formatCurrency, formatDate, formatShortDate } from '@/lib/budget-calculations';
 import type { Debt, DebtStatus } from '@/lib/types';
 import { useApp } from '@/lib/context/AppContext';
-import { addDays } from '@/lib/local-date';
-import { debtOccurrences, isOpenOccurrence } from '@/lib/occurrences';
+import { estimateDebtEndDate, nextDebtOccurrence } from '@/lib/debt-payoff';
 import OccurrencePayment from '@/components/budget/OccurrencePayment';
+import UnscheduledDebtPayment from './UnscheduledDebtPayment';
 
 interface DebtCardProps {
   debt: Debt;
@@ -31,9 +31,8 @@ const statusConfig: Record<
 
 export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
   const { today } = useApp();
-  const nextYear = addDays(today, 366);
-  const end = debt.nextDueDate && debt.nextDueDate > nextYear ? debt.nextDueDate : nextYear;
-  const next = debtOccurrences(debt, today, end).find(isOpenOccurrence);
+  const next = nextDebtOccurrence(debt, today);
+  const estimatedEnd = estimateDebtEndDate(debt, next, today);
   const status = statusConfig[debt.status];
   const progressPercent =
     debt.initialAmount > 0
@@ -62,13 +61,13 @@ export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-lg font-bold text-gray-800">{formatCurrency(debt.remainingAmount)}</p>
-          <p className="text-xs text-gray-400">restant</p>
+          <p className="text-xs text-gray-600">restant</p>
         </div>
       </div>
 
       {debt.initialAmount > 0 && (
         <div className="mb-3">
-          <div className="flex justify-between text-xs text-gray-400 mb-1">
+          <div className="flex justify-between text-xs text-gray-600 mb-1">
             <span>Initial: {formatCurrency(debt.initialAmount)}</span>
             <span>{Math.round(progressPercent)}% remboursé</span>
           </div>
@@ -76,25 +75,34 @@ export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
         </div>
       )}
 
-      <div className="flex items-center justify-between text-xs text-gray-500 flex-wrap gap-2">
+      <div className="flex items-center justify-between text-xs text-gray-600 flex-wrap gap-2">
         {debt.monthlyPayment > 0 ? (
           <span className="font-medium">💳 {formatCurrency(debt.monthlyPayment)}/mois</span>
         ) : (
-          <span className="text-gray-400">Aucun paiement mensuel</span>
+          <span className="text-gray-600">Aucun paiement mensuel</span>
         )}
         {next && (
           <span>
-            {next.status === 'late' ? 'En retard depuis le ' : 'Échéance du '}
-            {formatShortDate(next.dueDate)}
+            {debt.nextDueDate ? (
+              <>{next.status === 'late' ? 'En retard depuis le ' : 'Échéance du '}
+                <time dateTime={next.dueDate}>{formatShortDate(next.dueDate)}</time></>
+            ) : 'Date non renseignée'}
           </span>
         )}
         {!debt.nextDueDate && debt.monthlyPayment > 0 && !next && <span>Date à renseigner</span>}
       </div>
 
-      {next && <OccurrencePayment key={next.dueDate} occurrence={next} />}
+      {estimatedEnd && (
+        <p className="mt-2 text-sm font-medium text-gray-800">
+          Fin estimée le <time dateTime={estimatedEnd}>{formatDate(estimatedEnd)}</time>
+        </p>
+      )}
+      {next ? <OccurrencePayment key={next.dueDate} occurrence={next} /> : (
+        <UnscheduledDebtPayment debt={debt} />
+      )}
 
       {debt.notes && (
-        <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-50 italic">
+        <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-50 italic">
           {debt.notes}
         </p>
       )}
@@ -104,7 +112,7 @@ export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
           {onEdit && (
             <button
               onClick={() => onEdit(debt)}
-              className="text-xs text-teal-600 font-semibold hover:underline"
+              className="text-xs text-teal-800 font-semibold hover:underline"
             >
               Modifier
             </button>
@@ -114,7 +122,7 @@ export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
               onClick={() => {
                 if (confirm('Supprimer cette dette ?')) onDelete(debt.id);
               }}
-              className="text-xs text-red-400 font-semibold hover:underline"
+              className="text-xs text-red-800 font-semibold hover:underline"
             >
               Supprimer
             </button>

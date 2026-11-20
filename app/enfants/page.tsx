@@ -84,11 +84,11 @@ export default function EnfantsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-800">👨‍👧‍👦 Frais enfants</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Dépenses pour tes enfants</p>
+            <p className="text-sm text-gray-600 mt-0.5">Dépenses pour tes enfants</p>
           </div>
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="flex items-center gap-1.5 bg-teal-500 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-600 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 bg-teal-700 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-800 transition-colors shadow-sm"
           >
             + Ajouter
           </button>
@@ -97,15 +97,15 @@ export default function EnfantsPage() {
         <Card className="bg-purple-50 border-purple-200">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-gray-500 mb-1">Total avancé</p>
+              <p className="text-xs text-gray-600 mb-1">Total avancé</p>
               <p className="text-xl font-bold text-purple-700">{formatCurrency(total)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">À rembourser</p>
-              <p className="text-xl font-bold text-amber-600">{formatCurrency(pendingReimbursement)}</p>
+              <p className="text-xs text-gray-600 mb-1">À rembourser</p>
+              <p className="text-xl font-bold text-amber-800">{formatCurrency(pendingReimbursement)}</p>
             </div>
           </div>
-          <p className="text-xs text-gray-400 mt-3 pt-2 border-t border-purple-100">
+          <p className="text-xs text-gray-600 mt-3 pt-2 border-t border-purple-100">
             💡 N&apos;oublie pas d&apos;envoyer les justificatifs pour te faire rembourser.
           </p>
         </Card>
@@ -139,7 +139,7 @@ export default function EnfantsPage() {
                             <Badge variant="neutral">{catConfig.label}</Badge>
                             <Badge variant={status.variant}>{status.label}</Badge>
                           </div>
-                          <div className="mt-1 text-xs text-gray-400">
+                          <div className="mt-1 text-xs text-gray-600">
                             <span>{formatShortDate(expense.date)}</span>
                             {expense.shareAmount > 0 && (
                               <span className="ml-2">
@@ -148,20 +148,20 @@ export default function EnfantsPage() {
                             )}
                           </div>
                           {expense.receiptSent && (
-                            <p className="text-xs text-green-600 mt-1">✅ Justificatif envoyé</p>
+                            <p className="text-xs text-green-800 mt-1">✅ Justificatif envoyé</p>
                           )}
                           {!expense.receiptSent && expense.status === 'pending' && (
-                            <p className="text-xs text-amber-500 mt-1">
+                            <p className="text-xs text-amber-800 mt-1">
                               📎 Justificatif non encore envoyé
                             </p>
                           )}
                           {expense.notes && (
-                            <p className="text-xs text-gray-400 mt-1 italic">{expense.notes}</p>
+                            <p className="text-xs text-gray-600 mt-1 italic">{expense.notes}</p>
                           )}
                           <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
                             <button
                               onClick={() => handleEdit(expense)}
-                              className="text-xs text-teal-600 font-semibold hover:underline"
+                              className="text-xs text-teal-800 font-semibold hover:underline"
                             >
                               Modifier
                             </button>
@@ -169,7 +169,7 @@ export default function EnfantsPage() {
                               onClick={() => {
                                 if (confirm('Supprimer ce frais ?')) deleteChildExpense(expense.id);
                               }}
-                              className="text-xs text-red-400 font-semibold hover:underline"
+                              className="text-xs text-red-800 font-semibold hover:underline"
                             >
                               Supprimer
                             </button>
@@ -187,7 +187,7 @@ export default function EnfantsPage() {
         {childExpenses.length === 0 && (
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="w-full border-2 border-dashed border-purple-200 rounded-2xl py-6 text-center text-purple-500 font-semibold hover:bg-purple-50 transition-colors"
+            className="w-full border-2 border-dashed border-purple-200 rounded-2xl py-6 text-center text-purple-800 font-semibold hover:bg-purple-50 transition-colors"
           >
             + Ajouter un premier frais enfant
           </button>

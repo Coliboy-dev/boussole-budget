@@ -58,11 +58,11 @@ export default function DettesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-800">💳 Mes dettes</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Suivi de tes remboursements</p>
+            <p className="text-sm text-gray-600 mt-0.5">Suivi de tes remboursements</p>
           </div>
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="flex items-center gap-1.5 bg-teal-500 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-600 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 bg-teal-700 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-800 transition-colors shadow-sm"
           >
             + Ajouter
           </button>
@@ -79,30 +79,30 @@ export default function DettesPage() {
         <Card className="bg-amber-50 border-amber-200">
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
-              <p className="text-xs text-gray-500 mb-1">Total restant</p>
-              <p className="text-lg font-bold text-amber-700">{formatCurrency(totalRemaining)}</p>
+              <p className="text-xs text-gray-600 mb-1">Total restant</p>
+              <p className="text-lg font-bold text-amber-800">{formatCurrency(totalRemaining)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Mensualités</p>
-              <p className="text-lg font-bold text-amber-700">{formatCurrency(totalMonthly)}</p>
+              <p className="text-xs text-gray-600 mb-1">Mensualités</p>
+              <p className="text-lg font-bold text-amber-800">{formatCurrency(totalMonthly)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Remboursé</p>
-              <p className="text-lg font-bold text-green-600">{repaidPercent}%</p>
+              <p className="text-xs text-gray-600 mb-1">Remboursé</p>
+              <p className="text-lg font-bold text-green-800">{repaidPercent}%</p>
             </div>
           </div>
           <div className="mt-3 flex gap-3 text-xs text-center">
             <div className="flex-1 bg-indigo-100 rounded-lg py-1.5">
               <span className="font-semibold text-indigo-700">{mediationDebts.length}</span>
-              <p className="text-indigo-600">en médiation</p>
+              <p className="text-indigo-800">en médiation</p>
             </div>
             <div className="flex-1 bg-red-100 rounded-lg py-1.5">
               <span className="font-semibold text-red-700">{lateDebts.length}</span>
-              <p className="text-red-600">en retard</p>
+              <p className="text-red-800">en retard</p>
             </div>
             <div className="flex-1 bg-gray-100 rounded-lg py-1.5">
               <span className="font-semibold text-gray-700">{debts.length}</span>
-              <p className="text-gray-500">total</p>
+              <p className="text-gray-600">total</p>
             </div>
           </div>
         </Card>
@@ -112,7 +112,7 @@ export default function DettesPage() {
         {debts.length === 0 && (
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="w-full border-2 border-dashed border-teal-200 rounded-2xl py-6 text-center text-teal-500 font-semibold hover:bg-teal-50 transition-colors"
+            className="w-full border-2 border-dashed border-teal-200 rounded-2xl py-6 text-center text-teal-800 font-semibold hover:bg-teal-50 transition-colors"
           >
             + Ajouter ta première dette
           </button>

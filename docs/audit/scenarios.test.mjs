@@ -14,10 +14,12 @@ import {
   LEGACY_BUDGET_STORAGE_KEY,
   cancelExpenseOccurrence,
   deserializeBudget,
+  deserializeStoredBudget,
   emptyBudgetState,
   migrateLegacyBudget,
   readBudgetSnapshot,
   recordPayment,
+  recordUnscheduledDebtPayment,
   serializeBudget,
   writeBudgetSnapshot,
 } from '../../lib/budget-state.ts';
@@ -33,6 +35,8 @@ import {
   mockUser,
 } from '../../lib/mock-data.ts';
 import { buildProjection } from '../../lib/projection.ts';
+import { estimateDebtEndDate, nextDebtOccurrence } from '../../lib/debt-payoff.ts';
+import { createFirstBudget, parseAmountInput } from '../../lib/onboarding.ts';
 
 process.env.TZ = 'Europe/Brussels';
 
@@ -420,6 +424,95 @@ test('Le premier budget reste vide, y compris après enregistrement', () => {
   assert.deepEqual(generateAdvice(summary, blank.incomes, blank.debts), []);
 });
 
+test('Les montants saisis au démarrage acceptent la virgule, les centimes et les découverts', () => {
+  assert.equal(parseAmountInput(' 1\u202f234,56 '), 1234.56);
+  assert.equal(parseAmountInput('-12,50'), -12.5);
+  assert.equal(parseAmountInput('12.50'), 12.5);
+  for (const invalid of ['', '1,234', '1 2,00', '1e3', '10 euros']) {
+    assert.equal(Number.isNaN(parseAmountInput(invalid)), true);
+  }
+});
+
+test('Le premier budget conserve les dates et calcule le vrai disponible avant le prochain versement', () => {
+  const today = '2026-11-19';
+  const budget = createFirstBudget(emptyBudgetState, {
+    balance: 800,
+    income: { amount: 1000, date: '2026-11-25' },
+    bills: [
+      { label: 'Loyer', amount: 300, date: '2026-11-20' },
+      { label: 'Électricité', amount: 50, date: '2026-11-21' },
+    ],
+  }, today);
+  const restored = deserializeBudget(serializeBudget(budget));
+  const summary = calculateBudgetSummary(
+    restored.currentBalance, restored.incomes, restored.expenses, restored.debts, restored.childExpenses,
+    restored.userProfile.safetyReserve, restored.goals, today,
+  );
+
+  assert.equal(restored.balanceDate, today);
+  assert.equal(restored.incomes[0].isConfirmed, true);
+  assert.equal(restored.incomes[0].frequency, 'one_time');
+  assert.deepEqual(restored.expenses.map(({ frequency, dueDate }) => [frequency, dueDate]), [
+    ['one_time', '2026-11-20'], ['one_time', '2026-11-21'],
+  ]);
+  assert.equal(summary.availableForecast.date, '2026-11-21');
+  assert.equal(summary.trueAvailable, 400);
+  assert.deepEqual(emptyBudgetState.incomes, []);
+  assert.deepEqual(emptyBudgetState.expenses, []);
+});
+
+test('La courbe du solde et le vrai disponible partagent la projection prudente sur 35 jours', () => {
+  const today = '2026-11-19';
+  const budget = createFirstBudget(emptyBudgetState, {
+    balance: 800,
+    income: { amount: 1000, date: '2026-11-25' },
+    bills: [{ label: 'Loyer', amount: 350, date: '2026-11-21' }],
+  }, today);
+  const incomes = [...budget.incomes, income(200, {
+    id: 'incertain',
+    frequency: 'one_time',
+    expectedDate: '2026-11-20',
+    isConfirmed: false,
+  })];
+  const summary = calculateBudgetSummary(
+    budget.currentBalance, incomes, budget.expenses, [], [], budget.userProfile.safetyReserve, [], today,
+  );
+  const { dailyBalances, date, balance, optimisticAvailable } = summary.availableForecast;
+
+  assert.equal(dailyBalances.length, 36);
+  assert.deepEqual(dailyBalances[0], { date: today, balance: 800 });
+  assert.deepEqual(dailyBalances[1], { date: '2026-11-20', balance: 800 });
+  assert.deepEqual(dailyBalances[2], { date, balance });
+  assert.deepEqual(dailyBalances.at(-1), { date: '2026-12-24', balance: 1450 });
+  assert.equal(summary.trueAvailable, 400);
+  assert.equal(optimisticAvailable, 600);
+});
+
+test('Les prochaines échéances peuvent reprendre l’horizon du vrai disponible', () => {
+  const expenseAtEnd = expense(20, { frequency: 'one_time', dueDate: '2026-12-24' });
+  const today = '2026-11-19';
+  assert.deepEqual(getUpcomingReminders([expenseAtEnd], [], [], today), []);
+  assert.equal(getUpcomingReminders([expenseAtEnd], [], [], today, 35)[0].dueDate, '2026-12-24');
+});
+
+test('Le démarrage accepte un solde nul sans échéances et refuse une saisie incomplète', () => {
+  const today = '2026-11-19';
+  const input = { balance: 0, bills: [] };
+  const budget = createFirstBudget(emptyBudgetState, input, today);
+  assert.equal(budget.currentBalance, 0);
+  assert.equal(budget.balanceDate, today);
+  assert.deepEqual(budget.incomes, []);
+  assert.deepEqual(budget.expenses, []);
+  assert.throws(
+    () => createFirstBudget(emptyBudgetState, { ...input, income: { amount: 100, date: '2026-11-18' } }, today),
+    /prochaine rentrée/,
+  );
+  assert.throws(
+    () => createFirstBudget(emptyBudgetState, { ...input, bills: [{ label: '', amount: 20, date: today }] }, today),
+    /tes factures/,
+  );
+});
+
 test('Une charge ancrée au 31 mai revient en juin, juillet et août sans dériver', () => {
   const rent = expense(50, {
     dueDate: '2026-05-31',
@@ -492,6 +585,80 @@ test('Un versement déjà déduit solde la dette sans débiter de nouveau le com
   assert.equal(paid.debts[0].status, 'completed');
 });
 
+test('Une dette signalée en retard sans date reste dans les retards et peut être payée', () => {
+  const today = '2026-05-29';
+  const state = {
+    ...emptyState,
+    currentBalance: 500,
+    debts: [debt('Arriéré sans date', 40.15, 0, undefined, 'late')],
+  };
+  const projection = buildProjection(state.currentBalance, [], [], state.debts, [], 50, { today });
+  const [arrear] = projection.events;
+
+  assert.equal(arrear.isLate, true);
+  assert.equal(projection.lowestBalance, 459.85);
+  assert.equal(getUpcomingReminders([], state.debts, [], today)[0].isLate, true);
+
+  const paid = recordPayment(state, {
+    type: 'debt', id: arrear.sourceId, today, dueDate: arrear.dueDate, balanceIncludesPayment: false,
+  });
+  assert.equal(paid.currentBalance, 459.85);
+  assert.equal(paid.debts[0].remainingAmount, 0);
+  assert.deepEqual(buildProjection(paid.currentBalance, [], [], paid.debts, [], 50, { today }).events, []);
+});
+
+test('La fin estimée tient compte des arriérés, des mois courts et d’une échéance annulée', () => {
+  const date = '2026-05-29';
+  const credit = {
+    ...debt('Crédit', 240.15, 100, '2026-01-31', 'late'),
+    occurrenceStatuses: { '2026-06-30': 'cancelled' },
+  };
+  const next = nextDebtOccurrence(credit, date);
+  assert.equal(next.dueDate, '2026-01-31');
+  assert.equal(estimateDebtEndDate(credit, next, date), '2026-07-31');
+  const stopped = { ...credit, endDate: '2026-06-30' };
+  assert.equal(estimateDebtEndDate(stopped, nextDebtOccurrence(stopped, date), date), undefined);
+  const unscheduled = debt('Sans date', 100, 0, undefined);
+  assert.equal(estimateDebtEndDate(unscheduled, nextDebtOccurrence(unscheduled, date), date), undefined);
+});
+
+test('Un paiement sans échéance met à jour le solde et le restant dû en centimes', () => {
+  const state = {
+    ...emptyState,
+    currentBalance: 85.25,
+    debts: [debt('Sans échéance', 31.20, 0, undefined)],
+  };
+  const payment = { id: 'Sans échéance', amount: 11.15, today: '2026-05-29', balanceIncludesPayment: false };
+  const paid = recordUnscheduledDebtPayment(state, payment);
+  assert.equal(paid.currentBalance, 74.10);
+  assert.equal(paid.debts[0].remainingAmount, 20.05);
+  assert.equal(recordUnscheduledDebtPayment(paid, { ...payment, amount: 25 }), paid);
+  const completed = recordUnscheduledDebtPayment(paid, { ...payment, amount: 20.05, balanceIncludesPayment: true });
+  assert.equal(completed.currentBalance, 74.10);
+  assert.equal(completed.debts[0].remainingAmount, 0);
+  assert.equal(completed.debts[0].status, 'completed');
+});
+
+test('Payer une facture avant la prochaine rentrée recalcule le point bas', () => {
+  const today = '2026-05-29';
+  const state = {
+    ...emptyState,
+    currentBalance: 500,
+    incomes: [income(400, { frequency: 'one_time', expectedDate: '2026-06-01' })],
+    expenses: [expense(100, { dueDate: '2026-06-03' })],
+  };
+  const before = calculateBudgetSummary(state.currentBalance, state.incomes, state.expenses, [], [], 50, [], today);
+  const paid = recordPayment(state, {
+    type: 'expense', id: 'expense', today, dueDate: '2026-06-03', balanceIncludesPayment: false,
+  });
+  const after = calculateBudgetSummary(paid.currentBalance, paid.incomes, paid.expenses, [], [], 50, [], today);
+
+  assert.equal(before.trueAvailable, 450);
+  assert.equal(paid.currentBalance, 400);
+  assert.equal(after.trueAvailable, 350);
+  assert.deepEqual(getUpcomingReminders(paid.expenses, [], [], today, 35).map(({ dueDate }) => dueDate), ['2026-07-03']);
+});
+
 test('Un revenu reçu et déjà inclus dans le solde ne compte plus dans la projection', () => {
   const state = {
     ...emptyState,
@@ -548,6 +715,17 @@ test('La sauvegarde v2 restaure le budget complet avec les centimes et les statu
   assert.equal(JSON.parse(contents).state.currentBalance, -1234);
   assert.deepEqual(JSON.parse(JSON.stringify(deserializeBudget(contents))), budget);
   assert.equal(serializeBudget(deserializeBudget(contents)), contents);
+});
+
+test('La date du dernier export reste locale et les anciens budgets v2 restent lisibles', () => {
+  const budget = { ...emptyBudgetState, currentBalance: 129.50 };
+  const previous = serializeBudget(budget);
+  const stored = serializeBudget(budget, '2026-11-20');
+
+  assert.equal(deserializeStoredBudget(previous).lastBackupDate, null);
+  assert.equal(deserializeStoredBudget(stored).lastBackupDate, '2026-11-20');
+  assert.equal(serializeBudget(deserializeBudget(stored)), previous);
+  assert.equal(deserializeStoredBudget(stored.replace('2026-11-20', '2026-02-31')).lastBackupDate, null);
 });
 
 test('Un fichier tronqué, incompatible ou incohérent est refusé', () => {

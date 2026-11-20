@@ -38,7 +38,7 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
   const nextYear = addDays(today, 366);
   if (incomes.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-400">
+      <div className="text-center py-8 text-gray-600">
         <p className="text-4xl mb-2">💰</p>
         <p className="text-sm">Aucun revenu enregistré.</p>
       </div>
@@ -60,9 +60,9 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-semibold text-gray-800">{income.label}</p>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <p className="text-base font-bold text-green-600">
+                  <p className="text-base font-bold text-green-800">
                     {formatCurrency(income.amount)}
-                    <span className="text-xs font-normal text-gray-400 ml-1">
+                    <span className="text-xs font-normal text-gray-600 ml-1">
                       {freqLabels[income.frequency] || ''}
                     </span>
                   </p>
@@ -76,27 +76,27 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
                   <Badge variant="warning">Incertain</Badge>
                 )}
                 {income.frequency !== 'monthly' && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-600">
                     ≈ {formatCurrency(monthlyEquiv)}/mois
                   </span>
                 )}
               </div>
               {next && (
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-600 mt-1">
                   Prochain versement : {formatShortDate(next.dueDate)}
                 </p>
               )}
-              {!income.expectedDate && <p className="text-xs text-amber-700 mt-1">Date à renseigner</p>}
+              {!income.expectedDate && <p className="text-xs text-amber-800 mt-1">Date à renseigner</p>}
               {next && <OccurrencePayment key={next.dueDate} occurrence={next} />}
               {income.notes && (
-                <p className="text-xs text-gray-400 mt-1 italic">{income.notes}</p>
+                <p className="text-xs text-gray-600 mt-1 italic">{income.notes}</p>
               )}
               {(onEdit || onDelete) && (
                 <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
                   {onEdit && (
                     <button
                       onClick={() => onEdit(income)}
-                      className="text-xs text-teal-600 font-semibold hover:underline"
+                      className="text-xs text-teal-800 font-semibold hover:underline"
                     >
                       Modifier
                     </button>
@@ -106,7 +106,7 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
                       onClick={() => {
                         if (confirm('Supprimer ce revenu ?')) onDelete(income.id);
                       }}
-                      className="text-xs text-red-400 font-semibold hover:underline"
+                      className="text-xs text-red-800 font-semibold hover:underline"
                     >
                       Supprimer
                     </button>

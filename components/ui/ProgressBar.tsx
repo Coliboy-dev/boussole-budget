@@ -6,7 +6,7 @@ interface ProgressBarProps {
 }
 
 const colorClasses: Record<string, string> = {
-  primary: 'bg-teal-500',
+  primary: 'bg-teal-700',
   success: 'bg-green-500',
   warning: 'bg-amber-500',
   danger: 'bg-red-500',
@@ -39,7 +39,7 @@ export default function ProgressBar({
         />
       </div>
       {showLabel && (
-        <p className="text-xs text-gray-500 mt-1 text-right">{Math.round(clampedValue)}%</p>
+        <p className="text-xs text-gray-600 mt-1 text-right">{Math.round(clampedValue)}%</p>
       )}
     </div>
   );

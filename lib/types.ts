@@ -143,6 +143,11 @@ export interface DocumentItem {
   isConfidential: boolean;
 }
 
+export interface DailyBalance {
+  date: string;
+  balance: number;
+}
+
 // Budget summary (computed)
 export interface BudgetSummary {
   currentBalance: number;
@@ -160,6 +165,7 @@ export interface BudgetSummary {
     balance: number;
     causes: string[];
     horizon: number;
+    dailyBalances: DailyBalance[];
     optimisticAvailable: number;
   };
 }

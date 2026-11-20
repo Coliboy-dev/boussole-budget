@@ -10,6 +10,7 @@ export function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
+    "worker-src 'self'",
     `connect-src 'self'${development ? ' ws: wss:' : ''}`,
     "object-src 'none'",
     "base-uri 'none'",
@@ -26,5 +27,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|service-worker.js).*)'],
 };

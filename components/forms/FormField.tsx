@@ -20,14 +20,14 @@ export default function FormField({ label, required, hint, error, children }: Fo
     <div className="mb-4">
       <label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-gray-700">
         {label}
-        {required && <span aria-hidden="true" className="ml-0.5 text-red-500">*</span>}
+        {required && <span aria-hidden="true" className="ml-0.5 text-red-800">*</span>}
       </label>
       {cloneElement(children, {
         id,
         'aria-invalid': error ? true : children.props['aria-invalid'],
         'aria-describedby': description || undefined,
       })}
-      {hint && <p id={`${id}-hint`} className="mt-1 text-xs text-gray-500">{hint}</p>}
+      {hint && <p id={`${id}-hint`} className="mt-1 text-xs text-gray-600">{hint}</p>}
       {error && <p id={`${id}-error`} role="alert" className="mt-1 text-xs text-red-700">{error}</p>}
     </div>
   );

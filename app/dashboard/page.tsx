@@ -4,30 +4,41 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context/AppContext';
 import SummaryCard from '@/components/dashboard/SummaryCard';
-import BudgetChart from '@/components/dashboard/BudgetChart';
+import BudgetOnboarding, { OnboardingResult } from '@/components/onboarding/BudgetOnboarding';
+import DailyBalanceCurve from '@/components/dashboard/DailyBalanceCurve';
 import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
-import FormField from '@/components/forms/FormField';
+import BackupStatus from '@/components/dashboard/BackupStatus';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import AlertBanner from '@/components/ui/AlertBanner';
 import Card from '@/components/ui/Card';
 import { getUpcomingReminders, formatCurrency, formatDate } from '@/lib/budget-calculations';
-import { isBudgetAmount, isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { isBudgetAmount } from '@/lib/budget-schema';
 import { isLocalDate } from '@/lib/local-date';
-import { fromCents, toCents } from '@/lib/money';
 
 export default function DashboardPage() {
+  const { isBudgetLoading, needsOnboarding } = useApp();
+  const [showFirstResult, setShowFirstResult] = useState(false);
+
+  if (isBudgetLoading) {
+    return <p role="status" className="px-4 py-6 text-sm text-gray-600">Chargement du budget…</p>;
+  }
+  if (showFirstResult) return <OnboardingResult onContinue={() => setShowFirstResult(false)} />;
+  if (needsOnboarding) return <BudgetOnboarding onComplete={() => setShowFirstResult(true)} />;
+
+  return <SavedBudgetDashboard />;
+}
+
+function SavedBudgetDashboard() {
   const {
     summary, advice, userProfile, expenses, debts, currentBalance, setBalance,
-    balanceDate, storageBlocked, today, updateProfile,
+    balanceDate, storageBlocked, today, goals, lastBackupDate,
   } = useApp();
   const [editingBalance, setEditingBalance] = useState(false);
   const [balanceInput, setBalanceInput] = useState('');
   const balanceValidation = useFormValidation();
-  const reserveValidation = useFormValidation();
-  const firstName = userProfile.firstName?.trim();
 
-  const reminders = getUpcomingReminders(expenses, debts, [], today);
+  const reminders = getUpcomingReminders(expenses, debts, [], today, summary.availableForecast.horizon);
   const hasUndatedPayments = expenses.some((expense) => !expense.isPaid && !isLocalDate(expense.dueDate))
     || debts.some((debt) => debt.monthlyPayment > 0 && debt.remainingAmount > 0
       && debt.status !== 'suspended' && debt.status !== 'completed' && debt.status !== 'late'
@@ -49,16 +60,6 @@ export default function DashboardPage() {
     setEditingBalance(true);
   }
 
-  function handleReserveSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = String(new FormData(event.currentTarget).get('reserve') ?? '');
-    const amount = Number(value);
-    if (!reserveValidation.validate(event.currentTarget, {
-      reserve: value !== '' && isNonNegativeBudgetAmount(amount) ? undefined : 'Saisis un montant valide et positif ou nul.',
-    })) return;
-    updateProfile({ safetyReserve: fromCents(toCents(amount)) });
-  }
-
   const quickLinks = [
     { href: '/revenus', label: 'Revenus', icon: '💰' },
     { href: '/charges', label: 'Charges', icon: '📋' },
@@ -68,27 +69,32 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      {/* Greeting */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">
-            {firstName ? `Bonjour ${firstName}` : 'Bonjour'} 👋
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Voici ta situation financière</p>
-        </div>
-      </div>
+    <div className="space-y-4 px-4 py-4">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="text-xl font-bold text-gray-900">Aujourd’hui</h1>
+        <time dateTime={today} className="text-sm text-gray-600">{formatDate(today)}</time>
+      </header>
 
-      {/* Balance card — editable */}
       {storageBlocked && (
         <AlertBanner variant="warning" title="Stockage indisponible">
           Les données enregistrées ne peuvent pas être mises à jour dans ce navigateur.
         </AlertBanner>
       )}
+      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments} hasRecordedBalance={Boolean(balanceDate)} />
+      <BackupStatus today={today} lastBackupDate={lastBackupDate} hasBudget={!summary.emptyBudget || Boolean(balanceDate) || goals.length > 0} />
+      {!summary.emptyBudget && <UpcomingDeadlines reminders={reminders} horizon={summary.availableForecast.horizon} />}
+      {(!summary.emptyBudget || balanceDate) && (
+        <DailyBalanceCurve
+          points={summary.availableForecast.dailyBalances}
+          lowestDate={summary.availableForecast.date}
+          reserve={summary.safetyReserve}
+        />
+      )}
+
       <Card className="bg-white border-gray-100">
         <div className="flex items-center justify-between">
           <div>
-            <p id="bank-balance-label" className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">
+            <p id="bank-balance-label" className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1">
               Solde bancaire actuel
             </p>
             {editingBalance ? (
@@ -105,7 +111,7 @@ export default function DashboardPage() {
                     required
                     value={balanceInput}
                     onChange={(e) => setBalanceInput(e.target.value)}
-                    className="w-36 border border-teal-300 rounded-xl px-3 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    className="w-36 border border-teal-300 rounded-xl px-3 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-teal-700"
                     placeholder="0,00"
                   />
                   {balanceValidation.errors.balance && (
@@ -116,7 +122,7 @@ export default function DashboardPage() {
                 </div>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-teal-500 text-white text-sm font-bold rounded-xl hover:bg-teal-600"
+                  className="px-3 py-1.5 bg-teal-700 text-white text-sm font-bold rounded-xl hover:bg-teal-800"
                 >
                   OK
                 </button>
@@ -135,7 +141,7 @@ export default function DashboardPage() {
                 </p>
                 <button
                   onClick={startEditBalance}
-                  className="text-xs text-teal-500 font-semibold bg-teal-50 px-2.5 py-1 rounded-lg hover:bg-teal-100 transition-colors"
+                  className="text-xs text-teal-800 font-semibold bg-teal-50 px-2.5 py-1 rounded-lg hover:bg-teal-100 transition-colors"
                 >
                   Modifier
                 </button>
@@ -144,37 +150,17 @@ export default function DashboardPage() {
           </div>
           <div className="text-3xl">🏦</div>
         </div>
-        <p className="text-xs text-gray-400 mt-2">
+        <p className="text-xs text-gray-600 mt-2">
           {balanceDate ? `Solde au ${formatDate(balanceDate)}.` : 'Mets à jour ton solde depuis ton compte.'}
         </p>
       </Card>
 
       <Card className="space-y-2">
-        <details>
-          <summary className="cursor-pointer text-sm font-medium text-gray-700">
-            Réserve de sécurité · {formatCurrency(userProfile.safetyReserve)}
-          </summary>
-          <form onSubmit={handleReserveSubmit} onChange={reserveValidation.clearFieldError} noValidate className="mt-3 flex flex-wrap items-start gap-2">
-            <FormField label="Montant de la réserve (€)" required error={reserveValidation.errors.reserve}>
-              <input
-                key={userProfile.safetyReserve}
-                name="reserve"
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                defaultValue={userProfile.safetyReserve}
-                className="mt-1 block w-36 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-              />
-            </FormField>
-            <button type="submit" className="mt-6 rounded-lg bg-teal-700 px-3 py-2 text-xs font-medium text-white">
-              Enregistrer la réserve
-            </button>
-          </form>
-        </details>
+        <Link href="/reglages#reserve" className="inline-flex min-h-11 items-center text-sm font-medium text-teal-800 underline">
+          Réserve de sécurité · {formatCurrency(userProfile.safetyReserve)}
+        </Link>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-teal-700">
-          <Link href="/sauvegarde" className="underline">Sauvegarder ou restaurer le budget</Link>
-          <Link href="/demo" prefetch={false} className="underline">Voir un budget de démonstration</Link>
+          <Link href="/demo" prefetch={false} className="inline-flex min-h-11 items-center underline">Voir un budget de démonstration</Link>
         </div>
       </Card>
 
@@ -189,15 +175,6 @@ export default function DashboardPage() {
           Ta marge est très limitée ce mois-ci. Évite les dépenses imprévues.
         </AlertBanner>
       )}
-
-      {/* Summary cards */}
-      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments} />
-
-      {/* Budget breakdown */}
-      <BudgetChart summary={summary} />
-
-      {/* Upcoming deadlines */}
-      {reminders.length > 0 && <UpcomingDeadlines reminders={reminders} />}
 
       {/* Advice */}
       {advice.length > 0 && <AdviceWidget advice={advice} />}

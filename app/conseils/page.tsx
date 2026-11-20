@@ -6,7 +6,7 @@ import { useApp } from '@/lib/context/AppContext';
 
 const typeConfig: Record<string, { icon: string; bg: string; border: string; text: string; label: string }> = {
   info: { icon: 'ℹ️', bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-700', label: 'Info' },
-  warning: { icon: '⚠️', bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-700', label: 'Attention' },
+  warning: { icon: '⚠️', bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-800', label: 'Attention' },
   positive: { icon: '✨', bg: 'bg-green-50', border: 'border-green-100', text: 'text-green-700', label: 'Positif' },
   action: { icon: '👉', bg: 'bg-indigo-50', border: 'border-indigo-100', text: 'text-indigo-700', label: 'À faire' },
 };

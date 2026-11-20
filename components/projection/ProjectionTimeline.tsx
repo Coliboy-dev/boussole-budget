@@ -13,7 +13,7 @@ const riskConfig = {
   },
   fragile: {
     dot: 'bg-amber-400 border-amber-300',
-    text: 'text-amber-700',
+    text: 'text-amber-800',
     bg: 'bg-amber-50 border-amber-200',
     label: 'Fragile',
     icon: '⚠️',
@@ -50,7 +50,7 @@ export default function ProjectionTimeline({ milestones }: Props) {
                 <span className="text-xs">{cfg.icon}</span>
               </div>
               {/* Label */}
-              <p className="text-xs font-semibold text-gray-500 text-center leading-tight mb-1">
+              <p className="text-xs font-semibold text-gray-600 text-center leading-tight mb-1">
                 {m.label}
               </p>
               {/* Balance */}

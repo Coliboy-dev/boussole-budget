@@ -112,9 +112,9 @@ function convertAmounts(state: AppState, convert: (amount: number) => number): A
   };
 }
 
-export function serializeBudget(state: AppState): string {
+export function serializeBudget(state: AppState, lastBackupDate?: string): string {
   assertBudgetState(state, 'euros');
-  return JSON.stringify({ version: BUDGET_VERSION, state: convertAmounts(state, toCents) });
+  return JSON.stringify({ version: BUDGET_VERSION, state: convertAmounts(state, toCents), lastBackupDate });
 }
 
 function parseBudgetJSON(contents: string): unknown {
@@ -125,7 +125,7 @@ function parseBudgetJSON(contents: string): unknown {
   }
 }
 
-export function deserializeBudget(stored: string): AppState {
+export function deserializeStoredBudget(stored: string): { budget: AppState; lastBackupDate: string | null } {
   const value = parseBudgetJSON(stored);
   if (!value || typeof value !== 'object' || !('version' in value) || !('state' in value)) {
     throw new Error('Ce fichier ne contient pas de sauvegarde Boussole Budget.');
@@ -133,7 +133,14 @@ export function deserializeBudget(stored: string): AppState {
   if (value.version !== BUDGET_VERSION) throw new Error('Cette version de sauvegarde n’est pas prise en charge.');
 
   assertBudgetState(value.state, 'cents');
-  return convertAmounts(value.state, fromCents);
+  return {
+    budget: convertAmounts(value.state, fromCents),
+    lastBackupDate: 'lastBackupDate' in value && isLocalDate(value.lastBackupDate) ? value.lastBackupDate : null,
+  };
+}
+
+export function deserializeBudget(stored: string): AppState {
+  return deserializeStoredBudget(stored).budget;
 }
 
 export function migrateLegacyBudget(stored: string, defaults: AppState, today: string): AppState {
@@ -212,6 +219,33 @@ export function recordPayment(state: AppState, payment: Payment): AppState {
       }
       return updated;
     }) : state.debts,
+  };
+}
+
+export interface UnscheduledDebtPayment {
+  id: string;
+  amount: number;
+  today: string;
+  balanceIncludesPayment: boolean;
+}
+
+export function recordUnscheduledDebtPayment(state: AppState, payment: UnscheduledDebtPayment): AppState {
+  const debt = state.debts.find(({ id }) => id === payment.id);
+  const amount = toCents(payment.amount);
+  if (!debt || debt.status === 'completed' || !Number.isSafeInteger(amount) || amount <= 0) return state;
+
+  const remaining = toCents(debt.remainingAmount) - amount;
+  if (remaining < 0) return state;
+
+  return {
+    ...state,
+    balanceDate: payment.balanceIncludesPayment ? state.balanceDate : payment.today,
+    currentBalance: payment.balanceIncludesPayment ? state.currentBalance : fromCents(toCents(state.currentBalance) - amount),
+    debts: state.debts.map((item) => item === debt ? {
+      ...debt,
+      remainingAmount: fromCents(remaining),
+      status: remaining === 0 ? 'completed' : debt.status,
+    } : item),
   };
 }
 

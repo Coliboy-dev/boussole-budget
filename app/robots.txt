@@ -1,0 +1,3 @@
+# Les robots doivent pouvoir lire la directive noindex dans les réponses du site.
+User-agent: *
+Allow: /
