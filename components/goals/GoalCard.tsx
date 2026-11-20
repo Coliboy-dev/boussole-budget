@@ -3,11 +3,12 @@
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import ProgressBar from '@/components/ui/ProgressBar';
-import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
+import { formatCurrency, formatShortDate, type GoalFeasibility } from '@/lib/budget-calculations';
 import type { Goal, GoalStatus } from '@/lib/types';
 
 interface GoalCardProps {
   goal: Goal;
+  feasibility: GoalFeasibility;
   onEdit?: (goal: Goal) => void;
   onDelete?: (id: string) => void;
 }
@@ -22,11 +23,11 @@ const statusConfig: Record<
 > = {
   realistic: { label: 'Réalisable', variant: 'success', progressColor: 'success' },
   fragile: { label: 'Fragile', variant: 'warning', progressColor: 'warning' },
-  to_postpone: { label: '⏸️ À reporter', variant: 'neutral', progressColor: 'primary' },
+  to_postpone: { label: 'À reporter', variant: 'neutral', progressColor: 'primary' },
 };
 
-export default function GoalCard({ goal, onEdit, onDelete }: GoalCardProps) {
-  const status = statusConfig[goal.status];
+export default function GoalCard({ goal, feasibility, onEdit, onDelete }: GoalCardProps) {
+  const status = statusConfig[feasibility.status];
   const percent =
     goal.targetAmount > 0 ? Math.min(100, (goal.savedAmount / goal.targetAmount) * 100) : 0;
   const remaining = goal.targetAmount - goal.savedAmount;
@@ -40,6 +41,8 @@ export default function GoalCard({ goal, onEdit, onDelete }: GoalCardProps) {
         </div>
         <Badge variant={status.variant}>{status.label}</Badge>
       </div>
+
+      {feasibility.reason && <p className="mb-3 text-sm leading-relaxed text-gray-700">{feasibility.reason}</p>}
 
       <div className="flex items-end justify-between mb-2">
         <div>

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 import { generateAdvice } from '../../lib/advice-engine.ts';
 import {
+  assessGoalFeasibility,
   calculateBudgetSummary,
   calculateGoalFeasibility,
   calculateTotalMonthlyExpenses,
@@ -369,6 +370,48 @@ test('S14 — un objectif à 400 €/mois dépasse la marge de 200 €/mois', ()
     },
     { remainingSavings: 0, goalStatus: 'fragile' },
   );
+});
+
+test('P2-7 — un objectif est réalisable quand les versements couvrent le reste à la date cible', () => {
+  const goal = { targetAmount: 500, savedAmount: 100, monthlyContribution: 100, targetDate: '2027-03-20' };
+  assert.equal(calculateGoalFeasibility(goal, 200, '2026-11-20'), 'realistic');
+});
+
+test('P2-7 — un objectif fragile indique l’écart entre mise de côté et capacité', () => {
+  const goal = { targetAmount: 1000, savedAmount: 0, monthlyContribution: 400 };
+  const feasibility = assessGoalFeasibility(goal, 200, '2026-11-20');
+  assert.equal(feasibility.status, 'fragile');
+  assert.match(feasibility.reason, /400,00\s*€\/mois.*200,00\s*€\/mois/);
+});
+
+test('P2-7 — un objectif est fragile si le délai laisse trop peu de versements', () => {
+  const goal = { targetAmount: 500, savedAmount: 400, monthlyContribution: 80, targetDate: '2027-01-19' };
+  // Le versement du 20 janvier est après l’échéance du 19. Les 400 € déjà épargnés
+  // réduisent le reste à 100 € et ne comptent pas une deuxième fois.
+  const feasibility = assessGoalFeasibility(goal, 200, '2026-11-20');
+  assert.equal(feasibility.status, 'fragile');
+  assert.match(feasibility.reason, /80,00\s*€.*100,00\s*€/);
+});
+
+test('P2-7 — un objectif est à reporter sans capacité ou sans mise de côté', () => {
+  const goal = { targetAmount: 500, savedAmount: 0, monthlyContribution: 50 };
+  const noCapacity = assessGoalFeasibility(goal, 0, '2026-11-20');
+  const noContribution = assessGoalFeasibility({ ...goal, monthlyContribution: undefined }, 200, '2026-11-20');
+  assert.equal(noCapacity.status, 'to_postpone');
+  assert.match(noCapacity.reason, /0,00\s*€/);
+  assert.equal(noContribution.status, 'to_postpone');
+  assert.match(noContribution.reason, /mise de côté mensuelle.*200,00\s*€/);
+});
+
+test('P2-7 — sans date, la faisabilité dépend de la mise de côté mensuelle', () => {
+  const goal = { targetAmount: 1000, savedAmount: 0, monthlyContribution: 80 };
+  assert.equal(calculateGoalFeasibility(goal, 200, '2026-11-20'), 'realistic');
+  assert.equal(calculateGoalFeasibility({ ...goal, monthlyContribution: 180 }, 200, '2026-11-20'), 'fragile');
+});
+
+test('P2-7 — un objectif déjà financé reste réalisable avec une capacité nulle', () => {
+  const goal = { targetAmount: 500, savedAmount: 500, targetDate: '2026-11-19' };
+  assert.equal(calculateGoalFeasibility(goal, 0, '2026-11-20'), 'realistic');
 });
 
 test('S15 — la démo du 29 mai laisse 98,50 € disponibles après réserve', () => {
