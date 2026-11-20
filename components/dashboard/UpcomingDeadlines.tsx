@@ -3,10 +3,13 @@ import { Check } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import { Icon } from '@/components/ui/icons';
 import { formatShortDate, formatCurrency } from '@/lib/budget-calculations';
+import { selectUpcomingPaymentReminders } from '@/lib/payment-reminders';
+import { usePaymentReminders } from '@/lib/use-payment-reminders';
 import type { Reminder } from '@/lib/types';
 
 interface UpcomingDeadlinesProps {
   reminders: Reminder[];
+  today: string;
   horizon: number;
   /** Enregistre le paiement d’une charge ou d’une mensualité et débite le solde. */
   onPay?: (reminder: Reminder) => void;
@@ -15,8 +18,9 @@ interface UpcomingDeadlinesProps {
 
 const payable = (reminder: Reminder) => (reminder.type === 'expense' || reminder.type === 'debt') && Boolean(reminder.refId);
 
-export default function UpcomingDeadlines({ reminders, horizon, onPay, payDisabled = false }: UpcomingDeadlinesProps) {
-  const upcoming = reminders.filter(({ isLate }) => !isLate).slice(0, 3);
+export default function UpcomingDeadlines({ reminders, today, horizon, onPay, payDisabled = false }: UpcomingDeadlinesProps) {
+  const remindersEnabled = usePaymentReminders();
+  const upcoming = selectUpcomingPaymentReminders(reminders, today, remindersEnabled);
   const lateCount = reminders.filter(({ isLate }) => isLate).length;
 
   return (
@@ -29,12 +33,15 @@ export default function UpcomingDeadlines({ reminders, horizon, onPay, payDisabl
         <p className="mt-3 text-sm text-gray-600">Aucune échéance prévue dans les {horizon} prochains jours.</p>
       ) : (
         <ul className="mt-1 divide-y divide-gray-100">
-          {upcoming.map((reminder) => (
+          {upcoming.map(({ reminder, remindTomorrow }) => (
             <li key={reminder.id} className="flex items-center justify-between gap-3 py-2">
               <div className="min-w-0">
                 <p className="wrap-break-word text-sm font-medium text-gray-800">{reminder.label}</p>
-                <time dateTime={reminder.dueDate} className="text-xs text-gray-600">
-                  {formatShortDate(reminder.dueDate)}
+                <time
+                  dateTime={reminder.dueDate}
+                  className={remindTomorrow ? 'text-xs font-semibold text-amber-800' : 'text-xs text-gray-600'}
+                >
+                  {remindTomorrow ? 'À payer demain' : formatShortDate(reminder.dueDate)}
                 </time>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -61,7 +68,7 @@ export default function UpcomingDeadlines({ reminders, horizon, onPay, payDisabl
           ))}
         </ul>
       )}
-      {onPay && upcoming.some(payable) && (
+      {onPay && upcoming.some(({ reminder }) => payable(reminder)) && (
         <p className="mt-1 text-xs text-gray-600">« Payé » déduit le montant de ton solde.</p>
       )}
       {lateCount > 0 && (

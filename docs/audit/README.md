@@ -97,6 +97,10 @@ Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui 
 
 Le même schéma contrôle le fichier et le stockage du navigateur. Une version incompatible, une date invalide ou une dette avec un montant négatif est signalée. L'application charge les données avant de les écrire et ne remplace le budget actif qu'après l'enregistrement réussi de l'import. La migration automatique d'un ancien budget conserve la copie v1.
 
+## Rappels d’échéance (P2-4)
+
+Dans **Aujourd’hui**, la mention **À payer demain** s’affiche pour chaque facture ou mensualité encore à payer le lendemain, à la date de Bruxelles. Les rappels sont visibles en ouvrant l’application, y compris hors ligne. Tu peux les désactiver dans **Plus → Réglages → Rappels d’échéance**. Le réglage est enregistré sur cet appareil.
+
 ## Synchronisation chiffrée entre appareils (P2-3)
 
 **Plus → Synchroniser mes appareils** est facultatif. La personne se connecte avec un code reçu par e-mail, puis choisit une phrase secrète d’au moins 12 caractères. Le budget est chiffré sur l’appareil (AES-GCM 256 bits, clé dérivée par PBKDF2-SHA-256, 600 000 itérations) avant tout envoi. La clé reste sur l’appareil, non exportable, dans IndexedDB. Le serveur Supabase (Irlande) ne stocke que l’e-mail, le bloc chiffré, un numéro de version et la date de mise à jour.

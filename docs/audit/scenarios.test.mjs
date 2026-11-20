@@ -39,6 +39,7 @@ import { buildProjection } from '../../lib/projection.ts';
 import { estimateDebtEndDate, nextDebtOccurrence } from '../../lib/debt-payoff.ts';
 import { createFirstBudget } from '../../lib/onboarding.ts';
 import { parseAmountInput } from '../../lib/money.ts';
+import { selectUpcomingPaymentReminders } from '../../lib/payment-reminders.ts';
 import { simulatePurchase } from '../../lib/purchase-simulation.ts';
 
 process.env.TZ = 'Europe/Brussels';
@@ -314,6 +315,43 @@ test('S11 — les rappels incluent les échéances du jour et les retards', () =
     getUpcomingReminders(expenses, [], []).map(({ label }) => label).sort(),
     ['Due aujourd’hui', 'En retard'],
   );
+});
+
+test('P2-4 — seuls les paiements ouverts du lendemain déclenchent un rappel', () => {
+  const expenses = [
+    expense(100, { id: 'retard', isRecurring: false, dueDate: '2026-05-28' }),
+    expense(100, { id: 'jour', isRecurring: false, dueDate: '2026-05-29' }),
+    expense(100, { id: 'demain', dueDate: '2026-04-30' }),
+    expense(100, { id: 'payee', dueDate: '2026-05-30', isPaid: true }),
+    expense(100, { id: 'annulee', dueDate: '2026-05-30', occurrenceStatuses: { '2026-05-30': 'cancelled' } }),
+    expense(100, { id: 'apres', isRecurring: false, dueDate: '2026-05-31' }),
+  ];
+  const debts = [
+    debt('mensualite', 90, 50, '2026-05-30'),
+    debt('suspendue', 90, 50, '2026-05-30', 'suspended'),
+  ];
+  const reminders = getUpcomingReminders(expenses, debts, [], '2026-05-29');
+
+  assert.deepEqual(
+    selectUpcomingPaymentReminders(reminders, '2026-05-29', true)
+      .filter(({ remindTomorrow }) => remindTomorrow)
+      .map(({ reminder }) => reminder.refId),
+    ['demain', 'mensualite'],
+  );
+});
+
+test('P2-4 — le rappel couvre aussi la quatrième échéance, sauf si le réglage est désactivé', () => {
+  const expenses = ['eau', 'loyer', 'internet', 'électricité'].map((id) =>
+    expense(20, { id, isRecurring: false, dueDate: '2026-06-01' }),
+  );
+  const reminders = getUpcomingReminders(expenses, [], [], '2026-05-31');
+  const enabled = selectUpcomingPaymentReminders(reminders, '2026-05-31', true);
+  const disabled = selectUpcomingPaymentReminders(reminders, '2026-05-31', false);
+
+  assert.deepEqual(enabled.map(({ reminder }) => reminder.refId), expenses.map(({ id }) => id));
+  assert.ok(enabled.every(({ remindTomorrow }) => remindTomorrow));
+  assert.deepEqual(disabled.map(({ reminder }) => reminder.refId), expenses.slice(0, 3).map(({ id }) => id));
+  assert.ok(disabled.every(({ remindTomorrow }) => !remindTomorrow));
 });
 
 test('S12 — un arriéré sans mensualité reste dû et la dernière mensualité est plafonnée', () => {
