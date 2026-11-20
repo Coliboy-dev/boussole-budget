@@ -59,6 +59,12 @@ L’échéancier réunit les charges, les dettes et les rentrées prévues dans 
 
 Les quatre onglets sont **Aujourd’hui**, **Échéances**, **Budget** et **Plus**. Dans **Plus → Réglages**, tu peux changer ton prénom et ta réserve, ouvrir la démo en lecture seule ou effacer le budget de cet appareil. L’écran **Aujourd’hui** donne aussi accès au réglage de la réserve.
 
+## Listes et page Budget
+
+**Revenus**, **Charges** et **Dettes** affichent une ligne par élément : icône, libellé, échéance et montant. Seules les situations à traiter portent un badge (retard, date à renseigner, revenu incertain, médiation). Un appui ouvre le détail, qui regroupe les chiffres, l’enregistrement du paiement, **Modifier** et **Supprimer**. La suppression demande une confirmation dans le détail.
+
+**Budget** indique le chiffre clé de chaque rubrique et la **Répartition du mois** : revenus certains, charges, dettes et reste, en moyenne mensuelle. Les revenus incertains ne sont pas comptés. Un dépassement est signalé. Cette carte reprend les totaux du moteur de calcul sans le modifier ; le vrai disponible reste le chiffre qui tient compte des dates.
+
 ## Accessibilité
 
 Le premier lien au clavier donne accès au contenu. Les fenêtres de saisie gardent le focus dans la modale, se ferment avec Échap et rendent le focus à leur bouton d’ouverture. Les actions principales ont une cible d’au moins 44 pixels. Les contrôles axe-core WCAG 2.0 à 2.2 A/AA ont signalé zéro violation dans Chromium à 390 × 667 sur les pages du budget, les formulaires en modale et les trois étapes du premier budget.
