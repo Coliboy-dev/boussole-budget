@@ -42,6 +42,8 @@ type BudgetPersistence = {
   needsMigration: boolean;
 };
 
+type ScheduledPayment = Pick<Payment, 'id' | 'dueDate'> & { type: 'expense' | 'debt' };
+
 function subscribeToCalendar(listener: () => void): () => void {
   const timer = window.setInterval(listener, 60_000);
   window.addEventListener('focus', listener);
@@ -221,6 +223,8 @@ export interface AppContextType extends AppState {
   deleteGoal: (id: string) => void;
   updateMediation: (data: Partial<MediationFile>) => void;
   recordPayment: (payment: Omit<Payment, 'today'>) => void;
+  recordScheduledPayment: (payment: ScheduledPayment) => void;
+  undoScheduledPayment: () => void;
   cancelExpenseOccurrence: (id: string, dueDate: string) => void;
 }
 
@@ -233,6 +237,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     storageRevision: 0,
   });
   const persistence = useRef<BudgetPersistence | null>(null);
+  const scheduledPaymentUndo = useRef<{ before: AppState; after: RuntimeState } | null>(null);
   const today = useSyncExternalStore(subscribeToCalendar, todayInBrussels, serverDate);
 
   useEffect(() => {
@@ -279,7 +284,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return serializeBudget(budget);
   }
 
-  function restoreBudget(imported: AppState): void {
+  function saveBudget(imported: AppState): RuntimeState {
     const previous = persistence.current;
     if (!previous || storageStatus === 'loading') throw new Error('Le stockage du navigateur est indisponible.');
     if (storageRevision !== previous.saved.storageRevision) throw new Error('Une restauration est déjà en cours.');
@@ -294,11 +299,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // A save queued before restoration must not overwrite the newly imported version.
     persistence.current = { snapshot: { current: contents, legacy: null }, saved: restored, needsMigration: false };
     dispatch({ type: 'HYDRATE', payload: restored });
+    return restored;
   }
 
   function finishOnboarding(input?: FirstBudgetInput): void {
     if (storageStatus !== 'fresh') throw new Error('Un budget existe déjà sur cet appareil.');
-    restoreBudget(input ? createFirstBudget(budget, input, today) : budget);
+    saveBudget(input ? createFirstBudget(budget, input, today) : budget);
+  }
+
+  function recordScheduledPayment(payment: ScheduledPayment): void {
+    if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
+      throw new Error('Le budget doit être enregistré avant de pouvoir payer cette échéance.');
+    }
+    const paid = recordPayment(budget, { ...payment, today, balanceIncludesPayment: false });
+    if (paid === budget) throw new Error('Cette échéance ne peut plus être marquée comme payée.');
+
+    scheduledPaymentUndo.current = { before: budget, after: saveBudget(paid) };
+  }
+
+  function undoScheduledPayment(): void {
+    const payment = scheduledPaymentUndo.current;
+    // An undo can only restore the exact state replaced by this payment.
+    if (!payment || state !== payment.after || state !== persistence.current?.saved) {
+      throw new Error('Le budget a changé depuis ce paiement. L’annulation n’est plus disponible.');
+    }
+    saveBudget(payment.before);
+    scheduledPaymentUndo.current = null;
   }
 
   const summary = calculateBudgetSummary(
@@ -322,7 +348,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     needsOnboarding: storageStatus === 'fresh',
     canExportBudget,
     exportBudget,
-    restoreBudget,
+    restoreBudget: saveBudget,
     finishOnboarding,
     setBalance: (amount) => dispatch({ type: 'SET_BALANCE', payload: { amount, today } }),
     updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
@@ -344,6 +370,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteGoal: (id) => dispatch({ type: 'DELETE_GOAL', payload: id }),
     updateMediation: (data) => dispatch({ type: 'UPDATE_MEDIATION', payload: data }),
     recordPayment: (payment) => dispatch({ type: 'RECORD_PAYMENT', payload: { ...payment, today } }),
+    recordScheduledPayment,
+    undoScheduledPayment,
     cancelExpenseOccurrence: (id, dueDate) => dispatch({ type: 'CANCEL_EXPENSE_OCCURRENCE', payload: { id, dueDate, today } }),
   };
 

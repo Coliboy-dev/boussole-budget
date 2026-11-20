@@ -47,6 +47,10 @@ Le tableau de bord permet de régler la réserve de sécurité. Les conseils uti
 
 Le premier écran du budget affiche le vrai disponible, la date de fin de la projection et l’explication du point bas. Il présente ensuite les trois prochaines échéances et indique le nombre de retards. La courbe montre le solde prudent en fin de journée sur le même horizon. Le curseur permet de lire le solde à une date précise.
 
+## Échéancier
+
+L’échéancier réunit les charges, les dettes et les rentrées prévues dans la page **Échéancier**. Les échéances en retard sont regroupées en haut. Un appui sur **Payé** enregistre l’échéance et débite le solde. Le vrai disponible est recalculé. **Annuler** rétablit le dernier paiement effectué sur cette page tant que le budget reste inchangé. Si le paiement est déjà déduit de ton solde, enregistre-le depuis **Charges** ou **Dettes** en cochant la case correspondante.
+
 ## Sauvegarde du budget
 
 Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui contient le budget complet en centimes. Pour le restaurer, choisis le fichier puis confirme le remplacement du budget sur cet appareil.

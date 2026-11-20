@@ -582,6 +582,48 @@ test('Un versement déjà déduit solde la dette sans débiter de nouveau le com
   assert.equal(paid.debts[0].status, 'completed');
 });
 
+test('Une dette signalée en retard sans date reste dans les retards et peut être payée', () => {
+  const today = '2026-05-29';
+  const state = {
+    ...emptyState,
+    currentBalance: 500,
+    debts: [debt('Arriéré sans date', 40.15, 0, undefined, 'late')],
+  };
+  const projection = buildProjection(state.currentBalance, [], [], state.debts, [], 50, { today });
+  const [arrear] = projection.events;
+
+  assert.equal(arrear.isLate, true);
+  assert.equal(projection.lowestBalance, 459.85);
+  assert.equal(getUpcomingReminders([], state.debts, [], today)[0].isLate, true);
+
+  const paid = recordPayment(state, {
+    type: 'debt', id: arrear.sourceId, today, dueDate: arrear.dueDate, balanceIncludesPayment: false,
+  });
+  assert.equal(paid.currentBalance, 459.85);
+  assert.equal(paid.debts[0].remainingAmount, 0);
+  assert.deepEqual(buildProjection(paid.currentBalance, [], [], paid.debts, [], 50, { today }).events, []);
+});
+
+test('Payer une facture avant la prochaine rentrée recalcule le point bas', () => {
+  const today = '2026-05-29';
+  const state = {
+    ...emptyState,
+    currentBalance: 500,
+    incomes: [income(400, { frequency: 'one_time', expectedDate: '2026-06-01' })],
+    expenses: [expense(100, { dueDate: '2026-06-03' })],
+  };
+  const before = calculateBudgetSummary(state.currentBalance, state.incomes, state.expenses, [], [], 50, [], today);
+  const paid = recordPayment(state, {
+    type: 'expense', id: 'expense', today, dueDate: '2026-06-03', balanceIncludesPayment: false,
+  });
+  const after = calculateBudgetSummary(paid.currentBalance, paid.incomes, paid.expenses, [], [], 50, [], today);
+
+  assert.equal(before.trueAvailable, 450);
+  assert.equal(paid.currentBalance, 400);
+  assert.equal(after.trueAvailable, 350);
+  assert.deepEqual(getUpcomingReminders(paid.expenses, [], [], today, 35).map(({ dueDate }) => dueDate), ['2026-07-03']);
+});
+
 test('Un revenu reçu et déjà inclus dans le solde ne compte plus dans la projection', () => {
   const state = {
     ...emptyState,

@@ -14,7 +14,7 @@ const mainNavItems = [
 const moreNavItems = [
   { href: '/enfants', label: 'Enfants', icon: '👨‍👧‍👦' },
   { href: '/objectifs', label: 'Objectifs', icon: '🎯' },
-  { href: '/projection', label: 'Projection', icon: '📅' },
+  { href: '/projection', label: 'Échéancier', icon: '📅' },
   { href: '/conseils', label: 'Conseils', icon: '💡' },
   { href: '/sauvegarde', label: 'Sauvegarde', icon: '💾' },
 ];

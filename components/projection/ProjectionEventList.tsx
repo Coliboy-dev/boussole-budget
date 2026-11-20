@@ -1,127 +1,95 @@
-'use client';
-
-import { formatCurrency } from '@/lib/budget-calculations';
-import { daysBetween, parseLocalDate } from '@/lib/local-date';
-import { fromCents, toCents } from '@/lib/money';
+import { formatCurrency, formatDate } from '@/lib/budget-calculations';
 import type { ProjectionEvent } from '@/lib/projection';
 
-const typeConfig = {
-  income: { icon: '💰', color: 'text-green-600', bg: 'bg-green-50' },
-  expense: { icon: '📋', color: 'text-gray-700', bg: 'bg-gray-50' },
-  child: { icon: '👨‍👧‍👦', color: 'text-green-600', bg: 'bg-green-50' },
-  debt: { icon: '💳', color: 'text-amber-700', bg: 'bg-amber-50' },
+const eventLabels = {
+  income: 'Revenu',
+  expense: 'Charge',
+  child: 'Remboursement enfant',
+  debt: 'Dette',
 };
-
-function formatEventDate(dateStr: string): string {
-  return new Intl.DateTimeFormat('fr-BE', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  }).format(parseLocalDate(dateStr));
-}
-
-function daysUntilLabel(days: number): string {
-  if (days === 0) return "Aujourd'hui";
-  if (days === 1) return 'Demain';
-  return `J+${days}`;
-}
 
 interface Props {
   events: ProjectionEvent[];
   today: string;
+  horizon: number;
+  onPay: (event: ProjectionEvent) => void;
+  storageBlocked: boolean;
 }
 
-export default function ProjectionEventList({ events, today }: Props) {
-  if (events.length === 0) {
+export default function ProjectionEventList({ events, today, horizon, onPay, storageBlocked }: Props) {
+  const late = events.filter((event) => event.isLate);
+  const upcoming = new Map<string, ProjectionEvent[]>();
+  for (const event of events) {
+    if (event.isLate) continue;
+    const day = upcoming.get(event.dueDate) ?? [];
+    day.push(event);
+    upcoming.set(event.dueDate, day);
+  }
+
+  function renderEvent(event: ProjectionEvent) {
+    const payable = event.amount < 0 && (event.type === 'expense' || event.type === 'debt');
+
     return (
-      <div className="text-center py-8 text-gray-400">
-        <p className="text-3xl mb-2">📅</p>
-        <p className="text-sm">Aucun événement financier sur cette période.</p>
-        <p className="text-xs mt-1">Ajoute des dates d&apos;échéance à tes charges et dettes.</p>
-      </div>
+      <li key={event.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-2 sm:px-4">
+        <div className="min-w-0">
+          <p className="wrap-break-word text-sm font-semibold text-gray-900">{event.label}</p>
+          <p className="text-xs text-gray-600">
+            {eventLabels[event.type]}
+            {event.isEstimated && ' · Montant incertain'}
+            {event.isLate && (
+              event.dueDate === today
+                ? ' · Date non renseignée'
+                : <> · <time dateTime={event.dueDate}>{formatDate(event.dueDate)}</time></>
+            )}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-x-3">
+          <span className={`shrink-0 text-sm font-semibold tabular-nums ${event.amount > 0 ? 'text-teal-800' : 'text-gray-900'}`}>
+            {event.amount > 0 ? '+' : ''}{formatCurrency(event.amount)}
+          </span>
+          {payable && (
+            <button
+              type="button"
+              id={`pay-${event.id}`}
+              aria-label={`Payé — ${event.label}`}
+              onClick={() => onPay(event)}
+              disabled={storageBlocked}
+              className="min-h-11 min-w-14 rounded-lg bg-teal-700 px-2 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-50"
+            >
+              Payé
+            </button>
+          )}
+        </div>
+      </li>
     );
   }
 
-  // Group by date
-  const grouped: Record<string, ProjectionEvent[]> = {};
-  events.forEach((e) => {
-    if (!grouped[e.date]) grouped[e.date] = [];
-    grouped[e.date].push(e);
-  });
-
   return (
     <div className="space-y-4">
-      {Object.entries(grouped).map(([date, dayEvents]) => {
-        const dayTotal = fromCents(dayEvents.reduce((sum, event) => sum + toCents(event.amount), 0));
-        const days = daysBetween(today, date);
+      <section id="en-retard" aria-labelledby="late-heading" className="scroll-mt-4 rounded-2xl border border-amber-200 bg-amber-50">
+        <h2 id="late-heading" className="px-3 py-2.5 text-sm font-semibold text-amber-950 sm:px-4">En retard</h2>
+        {late.length > 0 ? (
+          <ul className="divide-y divide-amber-100 rounded-b-2xl border-t border-amber-200 bg-white">
+            {late.map(renderEvent)}
+          </ul>
+        ) : (
+          <p className="px-3 pb-3 text-sm text-amber-950 sm:px-4">Aucune échéance en retard.</p>
+        )}
+      </section>
 
-        return (
-          <div key={date}>
-            {/* Date header */}
-            <div className="flex items-center justify-between mb-1.5 px-1">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    days === 0
-                      ? 'bg-teal-100 text-teal-700'
-                      : days === 1
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {daysUntilLabel(days)}
-                </span>
-                <span className="text-xs text-gray-500 capitalize">{formatEventDate(date)}</span>
-              </div>
-              <span
-                className={`text-xs font-bold ${dayTotal >= 0 ? 'text-green-600' : 'text-gray-500'}`}
-              >
-                {dayTotal >= 0 ? '+' : ''}
-                {formatCurrency(dayTotal)}
-              </span>
-            </div>
-
-            {/* Events for this day */}
-            <div className="space-y-1.5">
-              {dayEvents.map((event) => {
-                const cfg = typeConfig[event.type];
-                const isIncome = event.amount > 0;
-                return (
-                  <div
-                    key={event.id}
-                    className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-3 py-2.5 shadow-sm"
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.bg}`}
-                    >
-                      <span className="text-sm">{cfg.icon}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-medium text-gray-800 truncate">{event.label}</p>
-                        {event.isLate && (
-                          <span className="text-xs text-red-700">En retard depuis le {formatEventDate(event.dueDate)}</span>
-                        )}
-                        {event.isEstimated && (
-                          <span className="text-xs text-gray-400 flex-shrink-0">~estimé</span>
-                        )}
-                      </div>
-                    </div>
-                    <p
-                      className={`text-sm font-bold flex-shrink-0 ${
-                        isIncome ? 'text-green-600' : cfg.color
-                      }`}
-                    >
-                      {isIncome ? '+' : ''}
-                      {formatCurrency(Math.abs(event.amount))}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+      <section aria-labelledby="upcoming-heading" className="space-y-3">
+        <h2 id="upcoming-heading" className="text-sm font-semibold text-gray-900">À venir · {horizon} jours</h2>
+        {upcoming.size === 0 && <p className="text-sm text-gray-600">Aucune échéance à venir sur cette période.</p>}
+        {[...upcoming].map(([date, day]) => (
+          <div key={date} className="rounded-2xl border border-gray-200 bg-white">
+            <h3 className="border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-700 sm:px-4">
+              {date === today && 'Aujourd’hui · '}
+              <time dateTime={date}>{formatDate(date)}</time>
+            </h3>
+            <ul className="divide-y divide-gray-100">{day.map(renderEvent)}</ul>
           </div>
-        );
-      })}
+        ))}
+      </section>
     </div>
   );
 }

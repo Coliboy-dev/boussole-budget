@@ -66,7 +66,7 @@ export function buildProjection(
   const byDate = new Map<string, Occurrence[]>();
   const events = occurrences.map((occurrence): ProjectionEvent => {
     const { dueDate, amountCents, sourceId, type, label, isEstimated } = occurrence;
-    const isLate = dueDate < today;
+    const isLate = occurrence.status === 'late';
     const date = isLate ? today : dueDate;
     const day = byDate.get(date) ?? [];
     day.push(occurrence);
