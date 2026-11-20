@@ -41,7 +41,7 @@ Le disponible correspond au plus bas des soldes projetés en fin de journée sur
 
 Depuis **Aujourd’hui** ou **Budget**, **Simuler un achat** teste une dépense à une date comprise dans la projection de 35 jours. Le montant est déduit à partir de cette date. Le résultat affiche le nouveau point bas et la marge après réserve et provisions. L’achat simulé ne change pas le budget enregistré.
 
-Une charge récurrente annuelle et datée réserve un douzième de son montant dans le vrai disponible lorsque sa prochaine échéance impayée se trouve après l’horizon. Une taxe de 300 € prévue en mars réserve ainsi 25 € sur une projection qui s’arrête en décembre. Si la facture tombe dans l’horizon, son montant complet figure dans la projection. La mensualisation de la charge reste comprise dans le total mensuel des charges.
+Une charge récurrente annuelle et datée réserve, dans le vrai disponible, ce qu’il faudrait déjà avoir mis de côté pour la payer à temps en épargnant un douzième par mois. Une taxe de 300 € prévue le 15 mars laisse trois versements de 25 € à partir du 20 novembre : 225 € sont réservés ce jour-là, puis la réserve grandit chaque mois. Juste après l’échéance précédente, il reste onze versements et un douzième suffit. Si la facture tombe dans l’horizon de 35 jours, son montant complet figure dans la projection. Le disponible baisse ainsi progressivement, sans chute brutale à l’approche de la facture. La mensualisation de la charge reste comprise dans le total mensuel des charges.
 
 ## Première ouverture et conseils
 
@@ -84,6 +84,16 @@ Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui 
 **Aujourd’hui** affiche la date du dernier téléchargement JSON lancé pour le budget depuis cet appareil. Un rappel s’affiche dès la première sauvegarde à faire, puis à partir de sept jours après le dernier export. Un import ou un effacement remet la date à zéro. Le rappel est affiché dans l’application.
 
 Le même schéma contrôle le fichier et le stockage du navigateur. Une version incompatible, une date invalide ou une dette avec un montant négatif est signalée. L'application charge les données avant de les écrire et ne remplace le budget actif qu'après l'enregistrement réussi de l'import. La migration automatique d'un ancien budget conserve la copie v1.
+
+## Synchronisation chiffrée entre appareils (P2-3)
+
+**Plus → Synchroniser mes appareils** est facultatif. La personne se connecte avec un code reçu par e-mail, puis choisit une phrase secrète d’au moins 12 caractères. Le budget est chiffré sur l’appareil (AES-GCM 256 bits, clé dérivée par PBKDF2-SHA-256, 600 000 itérations) avant tout envoi. La clé reste sur l’appareil, non exportable, dans IndexedDB. Le serveur Supabase (Irlande) ne stocke que l’e-mail, le bloc chiffré, un numéro de version et la date de mise à jour.
+
+Chaque modification est envoyée environ 1,5 seconde après la saisie. Chaque ouverture de l’application récupère la copie en ligne si l’appareil n’a rien changé de son côté. Si les deux côtés ont changé, Boussole demande quelle version garder et n’écrase rien en silence. Le serveur refuse une mise à jour basée sur une version dépassée.
+
+La base est décrite dans `supabase/migrations/`. Chaque compte ne peut lire, modifier ou supprimer que sa propre ligne ; le rôle anonyme n’a aucun droit. **Supprimer mon compte en ligne** efface le compte et sa copie chiffrée ; le budget du téléphone est conservé. Sans les variables `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, la page indique que la synchronisation n’est pas disponible et le reste de l’application fonctionne normalement.
+
+`tests/cloud-sync.test.mjs` vérifie le chiffrement (aller-retour, mauvaise phrase, bloc altéré, absence de montant lisible) et toutes les décisions de synchronisation. Un test de bout en bout à deux navigateurs sur le vrai projet a validé l’activation, la récupération sur un second appareil, le refus d’une mauvaise phrase, la propagation d’une modification, le conflit et la suppression du compte.
 
 ## Hygiène technique et formulaires
 

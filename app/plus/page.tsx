@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 const moreLinks = [
   { href: '/reglages', label: 'Réglages' },
   { href: '/conseils', label: 'Conseils' },
+  { href: '/synchronisation', label: 'Synchroniser mes appareils' },
   { href: '/sauvegarde', label: 'Sauvegarder ou restaurer' },
   { href: '/demo', label: 'Budget de démonstration' },
   { href: '/confidentialite', label: 'Confidentialité' },

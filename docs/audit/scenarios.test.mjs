@@ -730,17 +730,33 @@ test('La date du dernier export reste locale et les anciens budgets v2 restent l
   assert.equal(deserializeStoredBudget(stored.replace('2026-11-20', '2026-02-31')).lastBackupDate, null);
 });
 
-test('P2-2 — une taxe annuelle de 300 € hors horizon réserve 25 € et ne modifie pas le solde', () => {
+// La provision est ce qu'il faut déjà avoir mis de côté pour payer à temps en épargnant 1/12 par mois.
+// Du 20 novembre au 15 mars, il reste 3 versements de 25 € : 300 − 75 = 225 € à réserver aujourd'hui.
+// (Version précédente : 25 € seulement, ce qui laissait le disponible chuter d'un coup à l'approche de la facture.)
+test('P2-2 — une taxe annuelle de 300 € dans quatre mois réserve ce qui devrait déjà être mis de côté', () => {
   const today = '2026-11-20';
   const tax = expense(300, { id: 'taxe', frequency: 'annual', dueDate: '2027-03-15' });
   const salary = income(600, { expectedDate: '2027-01-01' });
   const summary = calculateBudgetSummary(500, [salary], [tax], [], [], 50, [], today);
-  assert.equal(summary.trueAvailable, 425);
+  assert.equal(summary.trueAvailable, 225);
   assert.equal(summary.availableForecast.balance, 500);
-  assert.equal(summary.availableForecast.annualProvision, 25);
-  assert.equal(summary.availableForecast.reservedAmount, 75);
+  assert.equal(summary.availableForecast.annualProvision, 225);
+  assert.equal(summary.availableForecast.reservedAmount, 275);
   assert.equal(summary.totalMonthlyExpenses, 25);
   assert.equal(summary.savingsCapacity, 575);
+});
+
+test('P2-2 — le disponible baisse progressivement à l’approche d’une taxe annuelle, sans chute brutale', () => {
+  const tax = expense(600, { id: 'taxe', frequency: 'annual', dueDate: '2027-03-15' });
+  const availableOn = (today) => calculateBudgetSummary(1000, [], [tax], [], [], 50, [], today).trueAvailable;
+  // 3, 1 et 1 versements restants, puis la facture entre dans la projection de 35 jours.
+  assert.equal(availableOn('2026-11-20'), 500);
+  assert.equal(availableOn('2027-01-15'), 450);
+  assert.equal(availableOn('2027-02-05'), 400);
+  assert.equal(availableOn('2027-02-10'), 350);
+  // Juste après l'échéance précédente, il reste 11 versements : un douzième suffit.
+  assert.equal(calculateBudgetSummary(1000, [], [expense(600, { id: 'loin', frequency: 'annual', dueDate: '2027-11-25' })],
+    [], [], 50, [], '2026-11-20').availableForecast.annualProvision, 50);
 });
 
 test('P2-2 — la facture annuelle proche est comptée une fois, y compris après son paiement', () => {
@@ -779,7 +795,8 @@ test('P2-1 — déplacer un achat après une rentrée certaine change la répons
     income(200, { id: 'salaire', frequency: 'one_time', expectedDate: incomeDate }),
     income(1000, { id: 'incertain', frequency: 'one_time', expectedDate: today, isConfirmed: false }),
   ];
-  const tax = expense(300, { frequency: 'annual', dueDate: '2027-03-15' });
+  // Échéance dans 11 versements mensuels : la provision reste de 25 €, le test porte sur la simulation.
+  const tax = expense(300, { frequency: 'annual', dueDate: '2027-11-01' });
   const { availableForecast } = calculateBudgetSummary(300, incomes, [tax], [], [], 50, [], today);
   assert.deepEqual(simulatePurchase(availableForecast, 250, today), {
     affordable: false, lowestDate: today, lowestBalance: 50, available: -25,

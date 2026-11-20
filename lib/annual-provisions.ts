@@ -1,8 +1,22 @@
-import { addMonths, isLocalDate } from './local-date.ts';
-import { monthlyCents } from './money.ts';
+import { addMonths, isLocalDate, monthsBetween } from './local-date.ts';
+import { monthlyCents, toCents } from './money.ts';
 import { expenseOccurrences, isOpenOccurrence } from './occurrences.ts';
 import type { Expense } from './types.ts';
 
+/**
+ * Mensualités encore possibles avant l’échéance : un versement par mois entier restant.
+ * Du 20 novembre au 15 mars, il reste 3 versements (20 déc., 20 janv., 20 févr.).
+ */
+function contributionsBefore(today: string, dueDate: string): number {
+  const months = monthsBetween(today, dueDate) - (Number(today.slice(8)) > Number(dueDate.slice(8)) ? 1 : 0);
+  return Math.min(11, Math.max(0, months));
+}
+
+/**
+ * Montant à garder de côté aujourd’hui pour payer chaque charge annuelle à temps
+ * en mettant ensuite 1/12 de côté par mois. La réserve grandit à mesure que
+ * l’échéance approche, jusqu’à ce que la facture entre dans la projection.
+ */
 export function annualProvisionsCents(expenses: Expense[], today: string, end: string): number {
   let total = 0;
 
@@ -21,7 +35,9 @@ export function annualProvisionsCents(expenses: Expense[], today: string, end: s
       status === 'paid' && dueDate >= today && dueDate <= end);
 
     if (nextUnpaid && nextUnpaid.dueDate > end && !prepaidInPeriod) {
-      total += monthlyCents(expense.amount, 'annual');
+      const amount = toCents(expense.amount);
+      const stillToSave = monthlyCents(expense.amount, 'annual') * contributionsBefore(today, nextUnpaid.dueDate);
+      total += Math.max(0, amount - stillToSave);
     }
   }
 
