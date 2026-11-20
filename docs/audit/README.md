@@ -53,7 +53,7 @@ Les conseils utilisent les données du budget. La rubrique Documents reste masqu
 
 Le brouillon **Plus → Suivi de médiation** permet d’associer une rentrée existante au pécule, de recopier le plan communiqué et de noter la date et les questions du rendez-vous. Le pécule suit le montant, la fréquence et le caractère certain ou incertain de la rentrée associée. Les remboursements du plan sont des informations de suivi. Les échéances à payer restent celles que tu as saisies dans le budget.
 
-Pour modifier le suivi dans le brouillon, enregistre d’abord ton solde dans **Aujourd’hui**. La synchronisation se sert notamment de cette saisie pour reconnaître un budget existant.
+Tu peux commencer le suivi avant de saisir un solde. Si tu actives la synchronisation, un dossier renseigné compte comme une donnée locale. Quand le dossier local et la copie en ligne ont changé séparément, Boussole te demande quelle version garder.
 
 **Imprimer la synthèse** ouvre la fenêtre d’impression du navigateur pour préparer une copie A4. Le document reprend le rendez-vous, le pécule, le plan et les questions à aborder.
 

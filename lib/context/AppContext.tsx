@@ -340,11 +340,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   function updateMediation(data: Partial<MediationFile>): void {
-    if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
+    if ((storageStatus !== 'ready' && storageStatus !== 'fresh') || state !== persistence.current?.saved) {
       throw new Error('Le budget doit être chargé avant d’enregistrer le suivi de médiation.');
-    }
-    if (!budget.balanceDate) {
-      throw new Error('Enregistre ton solde dans Aujourd’hui avant de modifier le suivi.');
     }
     saveBudget({ ...budget, mediationFile: { ...budget.mediationFile, ...data } });
   }

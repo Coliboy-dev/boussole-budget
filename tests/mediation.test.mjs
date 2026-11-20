@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { calculateBudgetSummary } from '../lib/budget-calculations.ts';
-import { deserializeBudget, emptyBudgetState, serializeBudget } from '../lib/budget-state.ts';
+import { deserializeBudget, emptyBudgetState, isBudgetEmptyForSync, serializeBudget } from '../lib/budget-state.ts';
+import { decideSync } from '../lib/cloud-sync.ts';
 
 const budget = {
   ...emptyBudgetState,
@@ -68,4 +69,46 @@ test('P2-6 — associer le pécule et enregistrer un plan ne dédouble aucun flu
 
   assert.equal(after.totalMonthlyIncome, 485.25);
   assert.deepEqual(after, before);
+});
+
+test('P2-6 — un dossier seul peut créer une copie et déclenche un conflit devant une copie existante', () => {
+  const onlyMediation = deserializeBudget(serializeBudget({
+    ...emptyBudgetState,
+    mediationFile: { ...emptyBudgetState.mediationFile, proposedPlan: tracked.mediationFile.proposedPlan },
+  }));
+  const localIsEmpty = isBudgetEmptyForSync(onlyMediation, true);
+  const input = { memory: null, localFingerprint: 'dossier-local', localIsEmpty };
+
+  assert.equal(localIsEmpty, false);
+  assert.deepEqual(decideSync({ ...input, remoteVersion: null }), { action: 'create' });
+  assert.deepEqual(decideSync({ ...input, remoteVersion: 4 }), { action: 'conflict' });
+});
+
+test('P2-6 — un rendez-vous, une note ou une autre donnée du dossier suffit à préserver le budget', () => {
+  const emptyFile = emptyBudgetState.mediationFile;
+  const details = {
+    status: 'in_progress',
+    mediatorName: 'Camille',
+    mediatorOrganization: 'Service fictif',
+    procedure: 'amicable',
+    allowanceIncomeId: 'ancienne-rentree',
+    startDate: '2026-11-01',
+    nextAppointment: '2026-12-02',
+    proposedPlan: tracked.mediationFile.proposedPlan,
+    steps: [{ id: 'rdv', date: '2026-12-02', title: 'Rendez-vous', description: '', status: 'pending' }],
+    questionsForMediator: ['Question pour le rendez-vous'],
+  };
+
+  for (const [key, value] of Object.entries(details)) {
+    const local = { ...emptyBudgetState, mediationFile: { ...emptyFile, [key]: value } };
+    assert.equal(isBudgetEmptyForSync(local, true), false, key);
+  }
+});
+
+test('P2-6 — un dossier vierge laisse un budget vide récupérer la copie en ligne', () => {
+  const localIsEmpty = isBudgetEmptyForSync(emptyBudgetState, true);
+  const decision = decideSync({ remoteVersion: 4, memory: null, localFingerprint: 'budget-vide', localIsEmpty });
+
+  assert.equal(localIsEmpty, true);
+  assert.deepEqual(decision, { action: 'pull' });
 });

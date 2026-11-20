@@ -18,7 +18,7 @@ const procedureLabels = {
 };
 
 export default function MediationPage() {
-  const { incomes, mediationFile, today, isBudgetLoading, storageBlocked, balanceDate, updateMediation } = useApp();
+  const { incomes, mediationFile, today, isBudgetLoading, storageBlocked, updateMediation } = useApp();
   const [editing, setEditing] = useState(false);
 
   if (isBudgetLoading) {
@@ -49,13 +49,8 @@ export default function MediationPage() {
             Les modifications ne peuvent pas être enregistrées actuellement.
           </AlertBanner>
         )}
-        {!balanceDate && (
-          <Link href="/dashboard" className="inline-flex min-h-11 items-center text-sm font-semibold text-teal-800 underline">
-            Enregistrer ton solde dans Aujourd’hui pour modifier le suivi
-          </Link>
-        )}
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={storageBlocked || !balanceDate} onClick={() => setEditing(true)}
+          <button type="button" disabled={storageBlocked} onClick={() => setEditing(true)}
             className="min-h-11 rounded-xl bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">
             Modifier le suivi
           </button>

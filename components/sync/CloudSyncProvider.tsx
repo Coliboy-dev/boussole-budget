@@ -9,7 +9,7 @@ import {
   saveStoredKey, updateVault, type RemoteVault, type StoredKey,
 } from '@/lib/cloud-remote';
 import { clearSyncMemory, decideSync, readSyncMemory, writeSyncMemory } from '@/lib/cloud-sync';
-import { deserializeStoredBudget, serializeBudget } from '@/lib/budget-state';
+import { deserializeStoredBudget, isBudgetEmptyForSync, serializeBudget } from '@/lib/budget-state';
 import { useApp } from '@/lib/context/AppContext';
 
 export type SyncPhase =
@@ -65,19 +65,25 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     appRef.current = app;
   });
 
-  const localIsEmpty = () => {
-    const { needsOnboarding, summary, balanceDate, goals } = appRef.current;
-    return needsOnboarding || (summary.emptyBudget && !balanceDate && goals.length === 0);
-  };
-
-  const pull = useCallback(async (userId: string, key: StoredKey, remote: RemoteVault) => {
+  const pull = useCallback(async (userId: string, key: StoredKey, remote: RemoteVault, expectedLocal?: string) => {
     const plaintext = await decryptText(key.key, remote);
     const { budget } = deserializeStoredBudget(plaintext);
-    appRef.current.restoreBudget(budget);
-    writeSyncMemory(localStorage, { userId, version: remote.version, fingerprint: await fingerprint(serializeBudget(budget)) });
+    const remoteFingerprint = await fingerprint(serializeBudget(budget));
+    const latest = appRef.current;
+    // Un dossier peut avoir été saisi pendant la lecture de la copie en ligne.
+    if (expectedLocal !== undefined) {
+      if (latest.storageBlocked || !latest.canExportBudget) {
+        throw new Error('Le budget de cet appareil est indisponible. Recharge la page avant de synchroniser.');
+      }
+      if (latest.exportBudget() !== expectedLocal) return false;
+    }
+
+    latest.restoreBudget(budget);
+    writeSyncMemory(localStorage, { userId, version: remote.version, fingerprint: remoteFingerprint });
+    return true;
   }, []);
 
-  const runSync = useCallback(async () => {
+  const runSync = useCallback(async function syncBudget() {
     const key = keyRef.current;
     if (!key) return;
     const current = appRef.current;
@@ -98,7 +104,10 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
       setRemoteExists(Boolean(remote));
       const memory = readSyncMemory(localStorage, userId);
       const decision = decideSync({
-        remoteVersion: remote?.version ?? null, memory, localFingerprint, localIsEmpty: localIsEmpty(),
+        remoteVersion: remote?.version ?? null,
+        memory,
+        localFingerprint,
+        localIsEmpty: isBudgetEmptyForSync(current, current.summary.emptyBudget),
       });
 
       switch (decision.action) {
@@ -124,7 +133,10 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
           break;
         }
         case 'pull':
-          await pull(userId, key, remote!);
+          if (!await pull(userId, key, remote!, local)) {
+            again.current = true;
+            return;
+          }
           break;
         case 'conflict':
           setConflictRemoteDate(remote?.updatedAt ?? null);
@@ -149,7 +161,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
       busy.current = false;
       if (again.current) {
         again.current = false;
-        window.setTimeout(() => void runSync(), 300);
+        window.setTimeout(() => void syncBudget(), 300);
       }
     }
   }, [pull]);
