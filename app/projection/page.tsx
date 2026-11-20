@@ -116,7 +116,7 @@ export default function ProjectionPage() {
       )}
 
       <Card padding="sm">
-        <p className="text-xs font-semibold text-gray-500 mb-2 px-1">Horizon de projection</p>
+        <p className="text-xs font-semibold text-gray-600 mb-2 px-1">Horizon de projection</p>
         <div className="flex gap-2">
           {HORIZONS.map((h) => (
             <button
@@ -126,8 +126,8 @@ export default function ProjectionPage() {
               onClick={() => setHorizon(h)}
               className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${
                 horizon === h
-                  ? 'bg-teal-500 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  ? 'bg-teal-700 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {h} jours
@@ -168,7 +168,7 @@ export default function ProjectionPage() {
               : 'bg-green-50 border-green-200'
         }
       >
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1">
           Solde prudent dans {horizon} jours
         </p>
         <p
@@ -176,7 +176,7 @@ export default function ProjectionPage() {
             endRisk === 'danger'
               ? 'text-red-700'
               : endRisk === 'fragile'
-                ? 'text-amber-700'
+                ? 'text-amber-800'
                 : 'text-green-700'
           }`}
         >
@@ -186,34 +186,34 @@ export default function ProjectionPage() {
         {/* Breakdown */}
         <div className="grid grid-cols-2 gap-2 text-xs border-t border-gray-200 pt-3">
           <div>
-            <p className="text-gray-400">Solde aujourd&apos;hui</p>
+            <p className="text-gray-600">Solde aujourd&apos;hui</p>
             <p className="font-bold text-gray-700">{formatCurrency(currentBalance)}</p>
           </div>
           <div>
-            <p className="text-gray-400">Revenus certains</p>
-            <p className="font-bold text-green-600">
+            <p className="text-gray-600">Revenus certains</p>
+            <p className="font-bold text-green-800">
               +{formatCurrency(fromCents(confirmedIncome))}
               {estimatedIncome > 0 && (
-                <span className="text-gray-400 font-normal ml-1">
+                <span className="text-gray-600 font-normal ml-1">
                   (+{formatCurrency(fromCents(estimatedIncome))} incertains)
                 </span>
               )}
             </p>
           </div>
           <div>
-            <p className="text-gray-400">Charges prévues</p>
+            <p className="text-gray-600">Charges prévues</p>
             <p className="font-bold text-gray-600">-{formatCurrency(fromCents(totalExpenses))}</p>
           </div>
           <div>
-            <p className="text-gray-400">Remboursements dettes</p>
-            <p className="font-bold text-amber-600">-{formatCurrency(fromCents(totalDebts))}</p>
+            <p className="text-gray-600">Remboursements dettes</p>
+            <p className="font-bold text-amber-800">-{formatCurrency(fromCents(totalDebts))}</p>
           </div>
         </div>
       </Card>
 
       {/* Disclaimer */}
       <Card className="bg-gray-50 border-dashed border-gray-200">
-        <p className="text-xs text-gray-400 text-center leading-relaxed">
+        <p className="text-xs text-gray-600 text-center leading-relaxed">
           📊 Cette projection est basée sur tes données actuelles. Les montants marqués
           &quot;estimés&quot; sont approximatifs. Les dates et montants réels peuvent varier.
           Ne prends pas de décision financière importante basée uniquement sur cette projection.

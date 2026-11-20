@@ -22,7 +22,7 @@ const questions: Record<Step, string> = {
   2: 'Quand arrive ta prochaine rentrée d’argent ?',
   3: 'Quelles factures dois-tu encore payer ?',
 };
-const inputClass = 'min-w-0 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-base text-gray-900 focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-600/30';
+const inputClass = 'min-w-0 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-base text-gray-900 focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700';
 const primaryClass = 'w-full rounded-xl bg-teal-700 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-teal-800';
 const secondaryClass = 'rounded-xl px-3 py-2.5 text-sm font-medium text-teal-800 hover:bg-teal-50';
 const positiveAmountError = 'Saisis un montant supérieur à zéro avec deux décimales au maximum.';
@@ -202,8 +202,8 @@ export default function BudgetOnboarding({ onComplete }: { onComplete: () => voi
 
       {step === 1 && (
         <div className="flex flex-wrap gap-x-5 gap-y-3 text-sm font-medium text-teal-800">
-          <Link href="/sauvegarde" className="underline">Restaurer une sauvegarde</Link>
-          <Link href="/demo" prefetch={false} className="underline">Voir la démo</Link>
+          <Link href="/sauvegarde" className="inline-flex min-h-11 items-center underline">Restaurer une sauvegarde</Link>
+          <Link href="/demo" prefetch={false} className="inline-flex min-h-11 items-center underline">Voir la démo</Link>
           <button type="button" className="underline" onClick={() => finish()}>Passer pour l’instant</button>
         </div>
       )}

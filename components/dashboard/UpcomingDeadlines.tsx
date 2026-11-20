@@ -16,7 +16,7 @@ export default function UpcomingDeadlines({ reminders, horizon }: UpcomingDeadli
     <Card>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-gray-900">Prochaines échéances</h2>
-        <Link href="/projection" className="text-xs font-medium text-teal-800 underline">Voir l’échéancier</Link>
+        <Link href="/projection" className="inline-flex min-h-11 items-center text-xs font-medium text-teal-800 underline">Voir l’échéancier</Link>
       </div>
       {upcoming.length === 0 ? (
         <p className="mt-3 text-sm text-gray-600">Aucune échéance prévue dans les {horizon} prochains jours.</p>
@@ -40,7 +40,7 @@ export default function UpcomingDeadlines({ reminders, horizon }: UpcomingDeadli
         </ul>
       )}
       {lateCount > 0 && (
-        <Link href="/projection#en-retard" className="mt-2 inline-block text-xs font-medium text-red-800 underline">
+        <Link href="/projection#en-retard" className="inline-flex min-h-11 items-center text-xs font-medium text-red-800 underline">
           {lateCount} {lateCount === 1 ? 'échéance en retard' : 'échéances en retard'}
         </Link>
       )}

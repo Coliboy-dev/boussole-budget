@@ -42,7 +42,7 @@ export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListP
   const nextYear = addDays(today, 366);
   if (expenses.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-400">
+      <div className="text-center py-8 text-gray-600">
         <p className="text-4xl mb-2">📋</p>
         <p className="text-sm">Aucune charge enregistrée.</p>
       </div>
@@ -88,7 +88,7 @@ export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListP
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         {next && (
                           <>
-                            <span className="text-xs text-gray-500">Échéance du {formatShortDate(next.dueDate)}</span>
+                            <span className="text-xs text-gray-600">Échéance du {formatShortDate(next.dueDate)}</span>
                             <Badge variant={next.status === 'late' ? 'danger' : 'neutral'}>
                               {next.status === 'late' ? 'En retard' : 'À payer'}
                             </Badge>
@@ -101,14 +101,14 @@ export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListP
                       </div>
                       {next && <OccurrencePayment key={next.dueDate} occurrence={next} />}
                       {expense.notes && (
-                        <p className="text-xs text-gray-400 mt-0.5 italic">{expense.notes}</p>
+                        <p className="text-xs text-gray-600 mt-0.5 italic">{expense.notes}</p>
                       )}
                       {(onEdit || onDelete) && (
                         <div className="flex gap-2 mt-1.5 pt-1.5 border-t border-gray-50">
                           {onEdit && (
                             <button
                               onClick={() => onEdit(expense)}
-                              className="text-xs text-teal-600 font-semibold hover:underline"
+                              className="text-xs text-teal-800 font-semibold hover:underline"
                             >
                               Modifier
                             </button>
@@ -118,7 +118,7 @@ export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListP
                               onClick={() => {
                                 if (confirm('Supprimer cette charge ?')) onDelete(expense.id);
                               }}
-                              className="text-xs text-red-400 font-semibold hover:underline"
+                              className="text-xs text-red-800 font-semibold hover:underline"
                             >
                               Supprimer
                             </button>

@@ -8,7 +8,7 @@ import FormField from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
-  'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 bg-white';
+  'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 focus:border-teal-400 bg-white';
 
 interface Props {
   initial?: Income;
@@ -168,7 +168,7 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
         </button>
         <button
           type="submit"
-          className="flex-1 py-3 rounded-xl bg-teal-500 text-white text-sm font-bold hover:bg-teal-600 transition-colors"
+          className="flex-1 py-3 rounded-xl bg-teal-700 text-white text-sm font-bold hover:bg-teal-800 transition-colors"
         >
           {initial ? 'Enregistrer' : 'Ajouter'}
         </button>

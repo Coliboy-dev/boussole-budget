@@ -12,7 +12,7 @@ interface DebtListProps {
 export default function DebtList({ debts, onEdit, onDelete }: DebtListProps) {
   if (debts.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-400">
+      <div className="text-center py-8 text-gray-600">
         <p className="text-4xl mb-2">🎉</p>
         <p className="text-sm">Aucune dette enregistrée.</p>
       </div>

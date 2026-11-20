@@ -36,3 +36,26 @@ body {
 * {
   box-sizing: border-box;
 }
+
+@layer base {
+  html {
+    scroll-padding-block: 4rem 5rem;
+  }
+
+  :where(button, input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, summary) {
+    min-block-size: 44px;
+  }
+
+  :where(button, summary) {
+    min-inline-size: 44px;
+  }
+
+  label:has(> input:is([type="checkbox"], [type="radio"])) {
+    min-block-size: 44px;
+  }
+
+  :where(a, button, input, select, summary, textarea):focus-visible {
+    outline: 2px solid var(--color-teal-800);
+    outline-offset: 2px;
+  }
+}

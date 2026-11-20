@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [showErase, setShowErase] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [formRevision, setFormRevision] = useState(0);
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,6 +45,7 @@ export default function SettingsPage() {
     try {
       clearBudget();
       validation.reset();
+      setFormRevision((revision) => revision + 1);
       setMessage('Budget effacé de cet appareil.');
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Impossible d’effacer le budget.');
@@ -69,7 +71,7 @@ export default function SettingsPage() {
 
       <Card>
         <form
-          key={JSON.stringify([userProfile.firstName, userProfile.safetyReserve])}
+          key={formRevision}
           className="space-y-4"
           onSubmit={save}
           onChange={validation.clearFieldError}
@@ -79,7 +81,7 @@ export default function SettingsPage() {
             <input name="firstName" autoComplete="given-name" maxLength={80} defaultValue={userProfile.firstName}
               className="min-h-11 w-full rounded-lg border border-gray-400 px-3 py-2 text-sm" />
           </FormField>
-          <div id="reserve" className="scroll-mt-20">
+          <div id="reserve" tabIndex={-1} className="scroll-mt-4">
             <FormField label="Réserve de sécurité (€)" required error={validation.errors.reserve}>
               <input name="reserve" type="number" min="0" step="0.01" required defaultValue={userProfile.safetyReserve}
                 className="min-h-11 w-full rounded-lg border border-gray-400 px-3 py-2 text-sm" />

@@ -92,7 +92,7 @@ function SavedBudgetDashboard() {
       <Card className="bg-white border-gray-100">
         <div className="flex items-center justify-between">
           <div>
-            <p id="bank-balance-label" className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">
+            <p id="bank-balance-label" className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1">
               Solde bancaire actuel
             </p>
             {editingBalance ? (
@@ -109,7 +109,7 @@ function SavedBudgetDashboard() {
                     required
                     value={balanceInput}
                     onChange={(e) => setBalanceInput(e.target.value)}
-                    className="w-36 border border-teal-300 rounded-xl px-3 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    className="w-36 border border-teal-300 rounded-xl px-3 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-teal-700"
                     placeholder="0,00"
                   />
                   {balanceValidation.errors.balance && (
@@ -120,7 +120,7 @@ function SavedBudgetDashboard() {
                 </div>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-teal-500 text-white text-sm font-bold rounded-xl hover:bg-teal-600"
+                  className="px-3 py-1.5 bg-teal-700 text-white text-sm font-bold rounded-xl hover:bg-teal-800"
                 >
                   OK
                 </button>
@@ -139,7 +139,7 @@ function SavedBudgetDashboard() {
                 </p>
                 <button
                   onClick={startEditBalance}
-                  className="text-xs text-teal-500 font-semibold bg-teal-50 px-2.5 py-1 rounded-lg hover:bg-teal-100 transition-colors"
+                  className="text-xs text-teal-800 font-semibold bg-teal-50 px-2.5 py-1 rounded-lg hover:bg-teal-100 transition-colors"
                 >
                   Modifier
                 </button>
@@ -148,7 +148,7 @@ function SavedBudgetDashboard() {
           </div>
           <div className="text-3xl">🏦</div>
         </div>
-        <p className="text-xs text-gray-400 mt-2">
+        <p className="text-xs text-gray-600 mt-2">
           {balanceDate ? `Solde au ${formatDate(balanceDate)}.` : 'Mets à jour ton solde depuis ton compte.'}
         </p>
       </Card>
@@ -158,8 +158,8 @@ function SavedBudgetDashboard() {
           Réserve de sécurité · {formatCurrency(userProfile.safetyReserve)}
         </Link>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-teal-700">
-          <Link href="/sauvegarde" className="underline">Sauvegarder ou restaurer le budget</Link>
-          <Link href="/demo" prefetch={false} className="underline">Voir un budget de démonstration</Link>
+          <Link href="/sauvegarde" className="inline-flex min-h-11 items-center underline">Sauvegarder ou restaurer le budget</Link>
+          <Link href="/demo" prefetch={false} className="inline-flex min-h-11 items-center underline">Voir un budget de démonstration</Link>
         </div>
       </Card>
 

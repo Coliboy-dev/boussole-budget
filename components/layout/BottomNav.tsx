@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 
 const items = [
   { href: '/dashboard', label: 'Aujourd’hui', icon: '🏠', routes: ['/'] },
@@ -12,6 +13,14 @@ const items = [
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const previousPath = useRef(pathname);
+
+  useEffect(() => {
+    if (previousPath.current === pathname) return;
+    previousPath.current = pathname;
+    const anchor = document.getElementById(window.location.hash.slice(1));
+    (anchor ?? document.getElementById('contenu'))?.focus({ preventScroll: true });
+  }, [pathname]);
 
   return (
     <nav aria-label="Navigation principale" className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white shadow-lg">

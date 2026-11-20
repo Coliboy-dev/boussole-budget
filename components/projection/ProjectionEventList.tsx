@@ -66,7 +66,7 @@ export default function ProjectionEventList({ events, today, horizon, onPay, sto
 
   return (
     <div className="space-y-4">
-      <section id="en-retard" aria-labelledby="late-heading" className="scroll-mt-4 rounded-2xl border border-amber-200 bg-amber-50">
+      <section id="en-retard" tabIndex={-1} aria-labelledby="late-heading" className="scroll-mt-4 rounded-2xl border border-amber-200 bg-amber-50">
         <h2 id="late-heading" className="px-3 py-2.5 text-sm font-semibold text-amber-950 sm:px-4">En retard</h2>
         {late.length > 0 ? (
           <ul className="divide-y divide-amber-100 rounded-b-2xl border-t border-amber-200 bg-white">

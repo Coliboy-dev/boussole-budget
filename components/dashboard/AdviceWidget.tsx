@@ -8,7 +8,7 @@ interface AdviceWidgetProps {
 
 const typeConfig: Record<string, { icon: string; bg: string; border: string; text: string }> = {
   info: { icon: 'ℹ️', bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-700' },
-  warning: { icon: '⚠️', bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-700' },
+  warning: { icon: '⚠️', bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-800' },
   positive: { icon: '✨', bg: 'bg-green-50', border: 'border-green-100', text: 'text-green-700' },
   action: { icon: '👉', bg: 'bg-indigo-50', border: 'border-indigo-100', text: 'text-indigo-700' },
 };
@@ -20,7 +20,7 @@ export default function AdviceWidget({ advice }: AdviceWidgetProps) {
     <Card>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-gray-700">💡 Conseils</h3>
-        <Link href="/conseils" className="text-xs text-teal-600 font-medium hover:underline">
+        <Link href="/conseils" className="text-xs text-teal-800 font-medium hover:underline">
           Voir tout
         </Link>
       </div>

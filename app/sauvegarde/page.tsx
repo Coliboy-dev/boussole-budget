@@ -102,7 +102,7 @@ export default function SauvegardePage() {
             accept=".json,application/json"
             onChange={selectBackup}
             disabled={isBudgetLoading || reading}
-            className="mt-2 block w-full text-sm text-gray-600 file:mr-2 file:rounded-lg file:border-0 file:bg-teal-50 file:px-3 file:py-2 file:font-medium file:text-teal-800 disabled:opacity-50"
+            className="mt-2 block w-full text-sm text-gray-600 file:mr-2 file:min-h-11 file:rounded-lg file:border-0 file:bg-teal-50 file:px-3 file:py-2 file:font-medium file:text-teal-800 disabled:opacity-50"
           />
         </label>
         {reading && <p role="status" className="text-sm text-gray-600">Vérification du fichier…</p>}
