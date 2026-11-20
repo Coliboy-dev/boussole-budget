@@ -2,28 +2,30 @@
 
 import { formatCurrency } from '@/lib/budget-calculations';
 import type { ProjectionMilestone } from '@/lib/projection';
+import { CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react';
+import { Icon } from '@/components/ui/icons';
 
 const riskConfig = {
   safe: {
-    dot: 'bg-green-500 border-green-400',
+    dot: 'border-green-600 text-green-700',
     text: 'text-green-700',
     bg: 'bg-green-50 border-green-200',
     label: 'Stable',
-    icon: '✅',
+    icon: CircleCheck,
   },
   fragile: {
-    dot: 'bg-amber-400 border-amber-300',
+    dot: 'border-amber-500 text-amber-800',
     text: 'text-amber-800',
     bg: 'bg-amber-50 border-amber-200',
     label: 'Fragile',
-    icon: '⚠️',
+    icon: TriangleAlert,
   },
   danger: {
-    dot: 'bg-red-500 border-red-400',
+    dot: 'border-red-600 text-red-700',
     text: 'text-red-700',
     bg: 'bg-red-50 border-red-200',
     label: 'Critique',
-    icon: '🔴',
+    icon: CircleAlert,
   },
 };
 
@@ -47,7 +49,7 @@ export default function ProjectionTimeline({ milestones }: Props) {
               <div
                 className={`w-8 h-8 rounded-full border-2 flex items-center justify-center z-10 mb-2 ${cfg.dot} bg-white`}
               >
-                <span className="text-xs">{cfg.icon}</span>
+                <Icon icon={cfg.icon} className="size-4" />
               </div>
               {/* Label */}
               <p className="text-xs font-semibold text-gray-600 text-center leading-tight mb-1">

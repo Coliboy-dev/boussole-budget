@@ -77,7 +77,7 @@ export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
 
       <div className="flex items-center justify-between text-xs text-gray-600 flex-wrap gap-2">
         {debt.monthlyPayment > 0 ? (
-          <span className="font-medium">💳 {formatCurrency(debt.monthlyPayment)}/mois</span>
+          <span className="font-medium">{formatCurrency(debt.monthlyPayment)}/mois</span>
         ) : (
           <span className="text-gray-600">Aucun paiement mensuel</span>
         )}

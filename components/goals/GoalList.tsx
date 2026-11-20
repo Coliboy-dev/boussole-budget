@@ -2,6 +2,8 @@
 
 import GoalCard from './GoalCard';
 import type { Goal } from '@/lib/types';
+import { Target } from 'lucide-react';
+import { Icon } from '@/components/ui/icons';
 
 interface GoalListProps {
   goals: Goal[];
@@ -13,7 +15,7 @@ export default function GoalList({ goals, onEdit, onDelete }: GoalListProps) {
   if (goals.length === 0) {
     return (
       <div className="text-center py-8 text-gray-600">
-        <p className="text-4xl mb-2">🎯</p>
+        <Icon icon={Target} className="mx-auto mb-2 size-9 text-teal-700" />
         <p className="text-sm">Aucun objectif défini pour l&apos;instant.</p>
       </div>
     );

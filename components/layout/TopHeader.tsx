@@ -1,5 +1,8 @@
 'use client';
 
+import Link from 'next/link';
+import { Compass, Settings } from 'lucide-react';
+import { Icon } from '@/components/ui/icons';
 import { useApp } from '@/lib/context/AppContext';
 
 export default function TopHeader() {
@@ -7,19 +10,25 @@ export default function TopHeader() {
   const initial = Array.from(userProfile.firstName?.trim() ?? '')[0]?.toLocaleUpperCase('fr-BE');
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm">
-      <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🧭</span>
-            <span className="font-bold text-teal-700 text-lg tracking-tight">Boussole Budget</span>
-          </div>
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+      <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-8 items-center justify-center rounded-[10px] border border-teal-200 bg-teal-50 text-teal-700">
+            <Icon icon={Compass} />
+          </span>
+          <span className="font-display text-lg font-bold tracking-tight text-teal-800">Boussole Budget</span>
         </div>
-        {initial && (
-          <div aria-hidden="true" className="w-9 h-9 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-sm">
-            {initial}
-          </div>
-        )}
+        <Link
+          href="/reglages"
+          aria-label="Réglages"
+          className="flex size-11 items-center justify-center rounded-full text-sm font-bold text-teal-800 hover:bg-teal-50"
+        >
+          {initial ? (
+            <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-full bg-teal-100">{initial}</span>
+          ) : (
+            <Icon icon={Settings} className="size-5 text-slate-600" />
+          )}
+        </Link>
       </div>
     </header>
   );

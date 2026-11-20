@@ -77,16 +77,16 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
           value={form.category}
           onChange={(e) => set('category', e.target.value as ExpenseCategory)}
         >
-          <option value="rent">🏠 Logement</option>
-          <option value="energy">⚡ Énergie</option>
-          <option value="phone">📱 Téléphone / Internet</option>
-          <option value="insurance">🛡️ Assurance</option>
-          <option value="groceries">🛒 Courses alimentaires</option>
-          <option value="transport">🚌 Transport</option>
-          <option value="health">💊 Santé / Mutuelle</option>
-          <option value="school">📚 Scolarité</option>
-          <option value="subscriptions">📺 Abonnements</option>
-          <option value="other">💸 Autre</option>
+          <option value="rent">Logement</option>
+          <option value="energy">Énergie</option>
+          <option value="phone">Téléphone / Internet</option>
+          <option value="insurance">Assurance</option>
+          <option value="groceries">Courses alimentaires</option>
+          <option value="transport">Transport</option>
+          <option value="health">Santé / Mutuelle</option>
+          <option value="school">Scolarité</option>
+          <option value="subscriptions">Abonnements</option>
+          <option value="other">Autre</option>
         </select>
       </FormField>
 

@@ -8,6 +8,8 @@ import { useApp } from '@/lib/context/AppContext';
 import { addDays } from '@/lib/local-date';
 import { incomeOccurrences, isOpenOccurrence } from '@/lib/occurrences';
 import OccurrencePayment from './OccurrencePayment';
+import { Wallet } from 'lucide-react';
+import { Icon } from '@/components/ui/icons';
 
 interface IncomeListProps {
   incomes: Income[];
@@ -39,7 +41,7 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
   if (incomes.length === 0) {
     return (
       <div className="text-center py-8 text-gray-600">
-        <p className="text-4xl mb-2">💰</p>
+        <Icon icon={Wallet} className="mx-auto mb-2 size-9 text-teal-700" />
         <p className="text-sm">Aucun revenu enregistré.</p>
       </div>
     );
@@ -53,8 +55,8 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
         const next = incomeOccurrences(income, today, end).find(isOpenOccurrence);
         return (
           <Card key={income.id} className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-xl flex-shrink-0">
-              💰
+            <div className="w-10 h-10 rounded-xl bg-green-50 text-green-800 flex items-center justify-center flex-shrink-0">
+              <Icon icon={Wallet} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">

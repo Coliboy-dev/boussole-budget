@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
+import { CalendarDays, Ellipsis, House, Wallet } from 'lucide-react';
+import { Icon } from '@/components/ui/icons';
 
 const items = [
-  { href: '/dashboard', label: 'Aujourd’hui', icon: '🏠', routes: ['/'] },
-  { href: '/projection', label: 'Échéances', icon: '📅', routes: [] },
-  { href: '/budget', label: 'Budget', icon: '📋', routes: ['/revenus', '/charges', '/dettes', '/enfants', '/objectifs'] },
-  { href: '/plus', label: 'Plus', icon: '⋯', routes: ['/reglages', '/demo', '/conseils', '/sauvegarde', '/confidentialite', '/mentions-legales'] },
+  { href: '/dashboard', label: 'Aujourd’hui', icon: House, routes: ['/'] },
+  { href: '/projection', label: 'Échéances', icon: CalendarDays, routes: [] },
+  { href: '/budget', label: 'Budget', icon: Wallet, routes: ['/revenus', '/charges', '/dettes', '/enfants', '/objectifs'] },
+  { href: '/plus', label: 'Plus', icon: Ellipsis, routes: ['/reglages', '/demo', '/conseils', '/sauvegarde', '/confidentialite', '/mentions-legales'] },
 ];
 
 export default function BottomNav() {
@@ -35,7 +37,7 @@ export default function BottomNav() {
               aria-current={pathname === href ? 'page' : active ? 'location' : undefined}
               className={`relative flex flex-col items-center justify-center gap-0.5 rounded-t-lg text-xs font-semibold focus-visible:z-10 ${active ? 'bg-teal-50 text-teal-800' : 'text-gray-700 hover:bg-gray-100'}`}
             >
-              <span className="text-xl leading-6" aria-hidden="true">{icon}</span>
+              <Icon icon={icon} className="size-6" strokeWidth={active ? 2.2 : 1.85} />
               {label}
               {active && <span className="absolute bottom-0 h-0.5 w-10 rounded-t-full bg-teal-700" />}
             </Link>

@@ -214,7 +214,7 @@ export default function ProjectionPage() {
       {/* Disclaimer */}
       <Card className="bg-gray-50 border-dashed border-gray-200">
         <p className="text-xs text-gray-600 text-center leading-relaxed">
-          📊 Cette projection est basée sur tes données actuelles. Les montants marqués
+          Cette projection est basée sur tes données actuelles. Les montants marqués
           &quot;estimés&quot; sont approximatifs. Les dates et montants réels peuvent varier.
           Ne prends pas de décision financière importante basée uniquement sur cette projection.
         </p>

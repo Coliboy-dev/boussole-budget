@@ -81,12 +81,12 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
             value={form.category}
             onChange={(e) => set('category', e.target.value as ChildExpenseCategory)}
           >
-            <option value="school">📚 Scolarité</option>
-            <option value="clothing">👕 Vêtements</option>
-            <option value="activities">⚽ Activités</option>
-            <option value="health">💊 Santé</option>
-            <option value="transport">🚌 Transport</option>
-            <option value="other">📦 Autre</option>
+            <option value="school">Scolarité</option>
+            <option value="clothing">Vêtements</option>
+            <option value="activities">Activités</option>
+            <option value="health">Santé</option>
+            <option value="transport">Transport</option>
+            <option value="other">Autre</option>
           </select>
         </FormField>
       </div>

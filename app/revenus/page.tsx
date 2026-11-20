@@ -53,7 +53,7 @@ export default function RevenusPage() {
       <div className="px-4 py-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">💰 Mes revenus</h1>
+            <h1 className="text-xl font-bold text-gray-800">Mes revenus</h1>
             <p className="text-sm text-gray-600 mt-0.5">Tous tes revenus mensuels</p>
           </div>
           <button
@@ -79,7 +79,7 @@ export default function RevenusPage() {
           </div>
           {unconfirmedTotal > 0 && (
             <p className="text-xs text-amber-800 mt-2 pt-2 border-t border-green-200">
-              ⚠️ {formatCurrency(unconfirmedTotal)} de revenus incertains inclus
+              {formatCurrency(unconfirmedTotal)} de revenus incertains inclus
             </p>
           )}
         </Card>
