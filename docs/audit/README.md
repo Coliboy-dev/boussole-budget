@@ -47,7 +47,17 @@ Une charge récurrente annuelle et datée réserve, dans le vrai disponible, ce 
 
 Un nouveau navigateur propose trois questions sur le solde bancaire, la prochaine rentrée certaine et les factures à payer. Le solde et les échéances saisies sont enregistrés ensemble, puis le premier vrai disponible s’affiche avec le détail du calcul. Le revenu et les factures saisis sont ponctuels. Un budget déjà enregistré ou restauré ouvre directement le tableau de bord. La démo en lecture seule et la restauration sont accessibles dès le premier écran.
 
-Les conseils utilisent les données du budget. Les pages de médiation et de documents sont masquées jusqu'à leur implémentation.
+Les conseils utilisent les données du budget. La rubrique Documents reste masquée.
+
+## Suivi de médiation (P2-6)
+
+Le brouillon **Plus → Suivi de médiation** permet d’associer une rentrée existante au pécule, de recopier le plan communiqué et de noter la date et les questions du rendez-vous. Le pécule suit le montant, la fréquence et le caractère certain ou incertain de la rentrée associée. Les remboursements du plan sont des informations de suivi. Les échéances à payer restent celles que tu as saisies dans le budget.
+
+Tu peux commencer le suivi avant de saisir un solde. Si tu actives la synchronisation, un dossier renseigné compte comme une donnée locale. Quand le dossier local et la copie en ligne ont changé séparément, Boussole te demande quelle version garder.
+
+**Imprimer la synthèse** ouvre la fenêtre d’impression du navigateur pour préparer une copie A4. Le document reprend le rendez-vous, le pécule, le plan et les questions à aborder.
+
+Présenter le brouillon avec des données fictives à deux services de médiation de dettes. Pour chaque service, relever le type de suivi couvert, les informations dont il a besoin en rendez-vous et celles qui manquent dans la synthèse. Le critère du rapport F est qu’une personne qui pratique la médiation juge le document utilisable tel quel.
 
 ## Écran Aujourd’hui
 

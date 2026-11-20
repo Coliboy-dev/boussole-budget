@@ -74,6 +74,25 @@ export const emptyBudgetState: AppState = {
   documents: [],
 };
 
+export function isBudgetEmptyForSync(
+  { balanceDate, goals, mediationFile }: Pick<AppState, 'balanceDate' | 'goals' | 'mediationFile'>,
+  emptyFinancialBudget: boolean,
+): boolean {
+  return emptyFinancialBudget
+    && !balanceDate
+    && goals.length === 0
+    && mediationFile.status === 'not_started'
+    && !mediationFile.mediatorName
+    && !mediationFile.mediatorOrganization
+    && !mediationFile.procedure
+    && !mediationFile.allowanceIncomeId
+    && !mediationFile.startDate
+    && !mediationFile.nextAppointment
+    && !mediationFile.proposedPlan
+    && mediationFile.steps.length === 0
+    && mediationFile.questionsForMediator.length === 0;
+}
+
 function convertAmounts(state: AppState, convert: (amount: number) => number): AppState {
   const plan = state.mediationFile.proposedPlan;
   return {
