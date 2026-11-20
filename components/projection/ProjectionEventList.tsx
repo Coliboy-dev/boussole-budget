@@ -6,6 +6,7 @@ const eventLabels = {
   expense: 'Charge',
   child: 'Remboursement enfant',
   debt: 'Dette',
+  envelope: 'Enveloppe',
 };
 
 interface Props {

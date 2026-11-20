@@ -43,6 +43,15 @@ function list(check: Check): Check {
   };
 }
 
+function record(check: Check): Check {
+  return (value, path) => {
+    for (const [key, item] of Object.entries(asObject(value, path))) {
+      identifier(key, path);
+      check(item, `${path}.${key}`);
+    }
+  };
+}
+
 function entities(fields: Fields): Check {
   const check = list(object({ id: identifier, ...fields }));
   return (value, path) => {
@@ -74,6 +83,11 @@ export function isNonNegativeBudgetAmount(value: number): boolean {
   return value >= 0 && isBudgetAmount(value);
 }
 
+export function isSpendingAmount(value: number): boolean {
+  const cents = toCents(value);
+  return Number.isSafeInteger(cents) && cents > 0 && fromCents(cents) === value;
+}
+
 function amount(unit: Unit, allowNegative = false): Check {
   return checkValue((value) => {
     if (typeof value !== 'number') return false;
@@ -84,6 +98,7 @@ function amount(unit: Unit, allowNegative = false): Check {
 
 const frequency = oneOf('monthly', 'weekly', 'bi_monthly', 'quarterly', 'annual', 'one_time');
 const status = oneOf('paid', 'cancelled');
+const spendingCategory = oneOf('groceries', 'restaurants', 'transport', 'health', 'leisure', 'clothing', 'home', 'children', 'cash', 'other');
 
 const schedule = {
   endDate: optional(date),
@@ -98,9 +113,28 @@ const schedule = {
 
 function budgetCheck(unit: Unit): Check {
   const money = amount(unit);
+  const spendingAmount = checkValue((value) => typeof value === 'number' && (
+    unit === 'cents' ? value > 0 && isExactCents(value) : isSpendingAmount(value)
+  ));
+  const envelopeList = entities({ category: spendingCategory, label: text, monthlyAmount: money });
+
   return object({
     currentBalance: amount(unit, true),
     balanceDate: optional(date),
+    balanceRevision: optional(nonNegativeInteger),
+    envelopes: optional((value, path) => {
+      envelopeList(value, path);
+      const categories = (value as { category: string }[]).map(({ category }) => category);
+      if (new Set(categories).size !== categories.length) {
+        throw new Error(`Catégories en double dans « ${path} ».`);
+      }
+    }),
+    spendings: optional(entities({
+      date, amount: spendingAmount, category: spendingCategory, label: optional(text),
+      balanceIncluded: flag, debited: flag, balanceRevision: nonNegativeInteger,
+    })),
+    balanceGaps: optional(entities({ fromDate: date, date, amount: amount(unit, true) })),
+    merchantCategories: optional(record(spendingCategory)),
     userProfile: object({
       id: identifier,
       firstName: text,

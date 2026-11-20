@@ -33,6 +33,7 @@ import {
 import { todayInBrussels } from '@/lib/local-date';
 import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
 import { updateBalance, type SettledOccurrence } from '@/lib/balance-update';
+import { envelopesOf, spendingsOf } from '@/lib/spending';
 
 type RuntimeState = AppState & {
   lastBackupDate: string | null;
@@ -390,6 +391,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     state.userProfile.safetyReserve,
     state.goals,
     today,
+    { envelopes: envelopesOf(state), spendings: spendingsOf(state) },
   );
 
   const ctx: AppContextType = {
