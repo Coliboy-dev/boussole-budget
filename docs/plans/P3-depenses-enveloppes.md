@@ -4,6 +4,12 @@ Plan d’implémentation complet. Il est écrit pour être exécuté par un agen
 
 État de référence : `main` au commit `efa3995` (20 novembre 2026), 69 tests verts.
 
+### Corrections du 20 novembre (révision 3)
+Ces décisions remplacent le texte des révisions précédentes là où il diverge :
+1. **Champs absents = vides.** Les cinq nouveaux champs sont **facultatifs** dans le type `AppState` et dans le schéma. Ils ne sont **jamais ajoutés** à la lecture ni à `emptyBudgetState` : un budget qui ne les contient pas se relit et se réécrit à l’identique (le test existant de la sauvegarde v2 reste inchangé). Le code les lit **uniquement** via des accesseurs qui renvoient la valeur vide (§3.2). `withSpendingDefaults` est supprimée.
+2. **Horloge.** L’interdiction de lire l’horloge vise **les nouvelles fonctions P3** (`lib/envelopes.ts`, `lib/spending.ts`, `lib/spending-analysis.ts`, `lib/quick-entry.ts`, `lib/merchants.ts`, l’extension de `updateBalance`). Les paramètres par défaut existants (`today = todayInBrussels()` dans `calculateBudgetSummary`, `buildProjection`, etc.) restent tels quels.
+3. **Remplacement d’une charge par une enveloppe.** R3 est maintenu : une enveloppe réserve aussi le mois suivant dès le 1ᵉʳ, ce qui est plus prudent qu’une charge datée. Le remplacement peut donc **baisser** le vrai disponible. Le critère §4.6 est corrigé, le test 12 reçoit des attendus chiffrés et l’interface montre l’effet avant confirmation (R4).
+
 ### Corrections du 20 novembre (révision 2)
 Les incohérences relevées avant tout code ont été tranchées. Ces décisions remplacent le texte initial :
 1. **Pas de version 3 de sauvegarde.** On reste en version 2 ; les nouveaux champs sont facultatifs à la lecture et complétés par des valeurs par défaut (§3.2, §3.3). Les tests existants sur la version restent inchangés.
@@ -67,6 +73,7 @@ Ces réservations sont prudentes (`isEstimated: false`). Conséquences voulues :
 
 ### R4 — Pas de double comptage avec les charges
 Une charge existante (ex. « Courses 300 €/mois » saisie comme charge) et une enveloppe de même catégorie seraient comptées deux fois. L’interface le signale et propose de **remplacer la charge par l’enveloppe** (suppression de la charge après confirmation, création de l’enveloppe avec son équivalent mensuel `toMonthlyAmount`). Aucune migration automatique des données.
+Le remplacement n’est **pas neutre** : une charge datée (ex. le 20 de chaque mois) n’apparaît qu’à sa date dans l’horizon de 35 jours, alors que l’enveloppe réserve le reste du mois en cours dès aujourd’hui **et** le mois suivant dès le 1ᵉʳ. Avant confirmation, l’interface affiche le vrai disponible actuel et celui obtenu après remplacement (calculés avec `calculateBudgetSummary` sur une copie de l’état), avec la phrase : « Avec une enveloppe, Boussole met de côté tes courses du mois prochain dès le 1ᵉʳ. »
 
 ### R5 — Écart de solde (« Non encodé »)
 Quand la personne recopie le solde de sa banque (`updateBalance`, déjà en place) **et** qu’un solde précédent existait :
@@ -135,12 +142,12 @@ export interface BalanceGap {
 ```
 
 ### 3.2 État — `lib/budget-state.ts`
-- `AppState` reçoit : `envelopes: Envelope[]`, `spendings: Spending[]`, `balanceGaps: BalanceGap[]`, `merchantCategories: Record<string, SpendingCategory>`, `balanceRevision: number`.
-- `emptyBudgetState` : `[]`, `[]`, `[]`, `{}`, `0`.
+- `AppState` reçoit cinq champs **facultatifs** : `envelopes?: Envelope[]`, `spendings?: Spending[]`, `balanceGaps?: BalanceGap[]`, `merchantCategories?: Record<string, SpendingCategory>`, `balanceRevision?: number`.
+- `emptyBudgetState` **ne change pas** (aucun de ces champs).
+- Accesseurs exportés par `lib/spending.ts`, **seul moyen de lire ces champs** dans tout le code : `envelopesOf(state)` → `state.envelopes ?? []`, `spendingsOf(state)`, `balanceGapsOf(state)`, `merchantCategoriesOf(state)` → `{}`, `balanceRevisionOf(state)` → `0`. Les fonctions qui modifient l’état écrivent le champ complet (ex. `spendings: [...spendingsOf(state), nouvelle]`).
 - `convertAmounts` convertit `envelopes[].monthlyAmount`, `spendings[].amount`, `balanceGaps[].amount` (ce dernier peut être négatif).
 - **`BUDGET_VERSION` reste 2.** `serializeBudget` écrit toujours la version 2, avec les nouveaux champs. La lecture d’une version 3 reste refusée (test existant inchangé).
-- Nouvelle fonction exportée `withSpendingDefaults(value)` : complète un état lu avec `envelopes: []`, `spendings: []`, `balanceGaps: []`, `merchantCategories: {}`, `balanceRevision: 0` pour chaque champ **absent** (`undefined`), sans toucher aux champs présents.
-- `deserializeStoredBudget` applique `withSpendingDefaults` à `value.state` **avant** `assertBudgetState`. `migrateLegacyBudget` (v1) l’applique aussi (`{ ...defaults, ...value }` le fait déjà via `emptyBudgetState`, vérifier par un test).
+- `deserializeStoredBudget` et `migrateLegacyBudget` ne complètent rien : un champ absent reste absent. `convertAmounts` convertit les montants **seulement si le tableau existe** (ne jamais créer `envelopes: []` au passage, sinon l’aller-retour d’un budget sans ces champs ne serait plus identique).
 - Pourquoi pas de version 3 : `convertAmounts` part de `...state`, donc une ancienne version de l’app qui lit un fichier contenant les nouveaux champs les **conserve tels quels** et les réécrit à l’identique. Une version 3 serait refusée par un appareil pas encore mis à jour, qui écraserait ensuite la copie synchronisée sans ces champs.
 
 ### 3.3 Validation — `lib/budget-schema.ts`
@@ -149,7 +156,7 @@ export interface BalanceGap {
 - `spendings: entities({ date, amount: money strictement > 0, category: spendingCategory, label: optional(text), balanceIncluded: flag, debited: flag, balanceRevision: nonNegativeInteger })`.
 - `balanceGaps: entities({ fromDate: date, date, amount: amount(unit, true) })`.
 - `merchantCategories: record(spendingCategory)`, `balanceRevision: nonNegativeInteger`.
-- Ces cinq champs sont déclarés **`optional(...)`** dans le schéma (un état sans eux reste valide), mais **requis** dans le type TypeScript `AppState` : tout état construit par le code passe par `emptyBudgetState` ou `withSpendingDefaults`.
+- Ces cinq champs sont déclarés **`optional(...)`** dans le schéma : un état sans eux reste valide.
 
 ### 3.4 Moteur — `lib/occurrences.ts` et `lib/projection.ts`
 - **Ne pas modifier** le type `Occurrence` de `lib/occurrences.ts` : `getUpcomingReminders` copie `occurrence.type` dans `Reminder.type`, qui n’accepte pas `'envelope'` (erreur TypeScript garantie). Définir à la place dans `lib/envelopes.ts` : `export type EnvelopeOccurrence = Omit<Occurrence, 'type'> & { type: 'envelope' }`. `buildProjection` travaille sur `Occurrence | EnvelopeOccurrence`, et `ProjectionEvent.type` devient `Occurrence['type'] | 'envelope'`.
@@ -167,7 +174,7 @@ export interface BalanceGap {
 - `BudgetSummary.totalMonthlyEnvelopes` (euros) = somme des `monthlyAmount`.
 - La marge mensuelle de `savingsCapacity` retire aussi `totalMonthlyEnvelopes`.
 - `emptyBudget` reste faux dès qu’il existe une enveloppe ou une dépense.
-- `lib/context/AppContext.tsx` passe `{ envelopes: state.envelopes, spendings: state.spendings }` à `calculateBudgetSummary`. La page `/simulation` (`lib/purchase-simulation.ts`) part de `summary.availableForecast` : elle intègre donc les enveloppes sans modification ; ajouter un test qui le vérifie.
+- `lib/context/AppContext.tsx` passe `{ envelopes: envelopesOf(state), spendings: spendingsOf(state) }` à `calculateBudgetSummary`. La page `/simulation` (`lib/purchase-simulation.ts`) part de `summary.availableForecast` : elle intègre donc les enveloppes sans modification ; ajouter un test qui le vérifie.
 
 ### 3.6 Dépenses — `lib/spending.ts` (fonctions pures sur `AppState`)
 ```ts
@@ -178,7 +185,7 @@ upsertEnvelope(state, envelope: Envelope): AppState          // remplace l’env
 deleteEnvelope(state, id): AppState
 replaceExpenseWithEnvelope(state, expenseId, category: SpendingCategory): AppState // R4
 ```
-Règles R1, R2 (la valeur reçue est appliquée telle quelle ; le défaut est calculé par l’interface), R6, R8 (mise à jour de `merchantCategories` dans `addSpending` et `updateSpending` si libellé présent). Refuser silencieusement (retourner `state` inchangé) : montant ≤ 0 ou non exact au centime, date invalide ou postérieure à `today`, id inconnu. **Aucune fonction de `lib/` ne lit l’horloge** : la date du jour est toujours un paramètre (`today`), fourni par `AppContext`.
+Règles R1, R2 (la valeur reçue est appliquée telle quelle ; le défaut est calculé par l’interface), R6, R8 (mise à jour de `merchantCategories` dans `addSpending` et `updateSpending` si libellé présent). Refuser silencieusement (retourner `state` inchangé) : montant ≤ 0 ou non exact au centime, date invalide ou postérieure à `today`, id inconnu. **Aucune nouvelle fonction P3 ne lit l’horloge** : la date du jour est toujours un paramètre (`today`), fourni par `AppContext`. Les paramètres par défaut existants des fonctions déjà en place ne changent pas.
 
 ### 3.7 Mise à jour du solde — `lib/balance-update.ts`
 Étendre `updateBalance` (sans changer sa signature publique) : calcul de l’écart R5, fusion du même jour, incrément de `balanceRevision`. L’identifiant d’un écart : `gap-${today}`.
@@ -237,8 +244,11 @@ En tête : `process.env.TZ = 'Europe/Brussels'`. Scénario de base : `today = '2
 9. **Écarts sur le budget de `tests/balance-update.test.mjs`** (recopier ses données dans le nouveau fichier, le 3 décembre, nouveau solde 300 €) : loyer et ING cochés → `balanceGaps` vide ; aucune case cochée → un écart de **700 €** (`fromDate: '2026-11-25'`) ; seul le loyer coché → un écart de **50 €**. Le vrai disponible est identique avec ou sans écart enregistré.
 10. **Charges dans l’analyse** : loyer 650 € payé le 01/12 + dépense Courses 42,28 € → rows `rent` 65 000 et `groceries` 4 228, total 69 228.
 11. **Comparaison** : novembre Courses 300 €, décembre 200 €, aucune donnée avant novembre → pour décembre, `previousCents` = 30 000 et `averageCents` = 30 000 (seul novembre a des données parmi septembre, octobre et novembre) ; pour novembre, `previousCents` = 0 et `averageCents` = `null`.
-12. **Remplacement charge → enveloppe** : charge Courses 300 €/mois → après `replaceExpenseWithEnvelope`, plus de charge Courses, enveloppe 300 €, et le vrai disponible ne compte plus les 300 € deux fois.
-13. **Sérialisation** : le fichier écrit porte `version: 2` ; aller-retour identique avec enveloppes, dépenses, écarts et mémoire des commerces ; un fichier version 2 **sans** les nouveaux champs se charge avec les valeurs par défaut ; une enveloppe en double sur une catégorie est refusée ; une dépense à 0 € est refusée.
+12. **Remplacement charge → enveloppe** : budget distinct du scénario de base. `today = '2026-12-10'`, solde 1 000 €, réserve 50 €, aucune dépense ni enveloppe, une charge `{ id: 'courses', label: 'Courses', category: 'groceries', amount: 300, frequency: 'monthly', dueDate: '2026-12-20', isPaid: false, isRecurring: true }`.
+    - Avant : vrai disponible **650 €** (300 € le 20 décembre ; le 20 janvier est hors horizon).
+    - Après `replaceExpenseWithEnvelope(state, 'courses', 'groceries')` : plus aucune charge, une enveloppe `{ category: 'groceries', label: 'Courses', monthlyAmount: 300 }`, vrai disponible **350 €** (300 € réservés le 10 décembre, 300 € le 1ᵉʳ janvier).
+    - Contrôle anti-double comptage : charge **et** enveloppe ensemble (sans remplacement) donnent **50 €**.
+13. **Sérialisation** : le fichier écrit porte `version: 2` ; aller-retour identique avec enveloppes, dépenses, écarts et mémoire des commerces ; un budget **sans** les nouveaux champs se relit sans eux (aucune clé ajoutée) et se réécrit à l’identique, et les accesseurs renvoient `[]`, `{}` et `0` ; une enveloppe en double sur une catégorie est refusée ; une dépense à 0 € est refusée.
 14. **Saisie rapide** (tableau) : « 42,28 Colruyt » → 42.28 / « Colruyt » ; « j'ai dépensé 12 euros au primeur » → 12 / « primeur » ; « 42 euros 28 Delhaize » → 42.28 ; « €7,5 pharmacie » → 7.5 ; « Colruyt » → montant absent ; « 0 » → montant absent.
 15. **Commerce** : `merchantKey('COLRUYT MARBAIS MAR')` = `colruyt` ; `merchantKey('CRF EXP SCHAERBEEK')` = `crf` ; `merchantKey('Q8 Wavre')` = `q8` ; `merchantKey('H&M Namur')` = `h m` ; `suggestCategory('CRF EXP SCHAERBEEK', {})` = `groceries` ; `suggestCategory('Q8 Wavre', {})` = `transport` ; `suggestCategory('Louis Delhaize Tubize', {})` = `groceries` (préfixe de deux mots) ; `suggestCategory('Cadi Marbais', { cadi: 'home' })` = `home` (la mémoire gagne) ; `suggestCategory('Boulangerie Dupont', {})` = `undefined`.
 
@@ -283,7 +293,7 @@ Bouton « Ajouter la dépense ». Erreurs sous les champs via `useFormValidation
 - Ajouter une dépense depuis Aujourd’hui en 3 gestes (montant, catégorie, valider). Le vrai disponible ne bouge pas si la dépense reste dans l’enveloppe.
 - La dictée « 42,28 Colruyt » via le micro du clavier remplit montant, libellé et Courses.
 - Une catégorie corrigée pour « Cadi » est proposée d’office la fois suivante.
-- Remplacer « Courses 300 €/mois » par une enveloppe ne change pas le vrai disponible quand rien n’a été dépensé ce mois-ci.
+- Remplacer « Courses 300 €/mois » par une enveloppe affiche, avant confirmation, le vrai disponible actuel et le nouveau (ex. 650 € → 350 € dans le cas du test 12), puis applique exactement ce nouveau montant.
 - Tests navigateur (Playwright, 390 × 844) : ajout, annulation, modification, suppression, enveloppe dépassée, remplacement d’une charge, axe-core 0 violation sur `/depenses`, la feuille de saisie et le formulaire d’enveloppe.
 
 ---
