@@ -3,12 +3,12 @@
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import ProgressBar from '@/components/ui/ProgressBar';
-import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
+import { formatCurrency, formatDate, formatShortDate } from '@/lib/budget-calculations';
 import type { Debt, DebtStatus } from '@/lib/types';
 import { useApp } from '@/lib/context/AppContext';
-import { addDays } from '@/lib/local-date';
-import { debtOccurrences, isOpenOccurrence } from '@/lib/occurrences';
+import { estimateDebtEndDate, nextDebtOccurrence } from '@/lib/debt-payoff';
 import OccurrencePayment from '@/components/budget/OccurrencePayment';
+import UnscheduledDebtPayment from './UnscheduledDebtPayment';
 
 interface DebtCardProps {
   debt: Debt;
@@ -31,9 +31,8 @@ const statusConfig: Record<
 
 export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
   const { today } = useApp();
-  const nextYear = addDays(today, 366);
-  const end = debt.nextDueDate && debt.nextDueDate > nextYear ? debt.nextDueDate : nextYear;
-  const next = debtOccurrences(debt, today, end).find(isOpenOccurrence);
+  const next = nextDebtOccurrence(debt, today);
+  const estimatedEnd = estimateDebtEndDate(debt, next, today);
   const status = statusConfig[debt.status];
   const progressPercent =
     debt.initialAmount > 0
@@ -84,14 +83,23 @@ export default function DebtCard({ debt, onEdit, onDelete }: DebtCardProps) {
         )}
         {next && (
           <span>
-            {next.status === 'late' ? 'En retard depuis le ' : 'Échéance du '}
-            {formatShortDate(next.dueDate)}
+            {debt.nextDueDate ? (
+              <>{next.status === 'late' ? 'En retard depuis le ' : 'Échéance du '}
+                <time dateTime={next.dueDate}>{formatShortDate(next.dueDate)}</time></>
+            ) : 'Date non renseignée'}
           </span>
         )}
         {!debt.nextDueDate && debt.monthlyPayment > 0 && !next && <span>Date à renseigner</span>}
       </div>
 
-      {next && <OccurrencePayment key={next.dueDate} occurrence={next} />}
+      {estimatedEnd && (
+        <p className="mt-2 text-sm font-medium text-gray-800">
+          Fin estimée le <time dateTime={estimatedEnd}>{formatDate(estimatedEnd)}</time>
+        </p>
+      )}
+      {next ? <OccurrencePayment key={next.dueDate} occurrence={next} /> : (
+        <UnscheduledDebtPayment debt={debt} />
+      )}
 
       {debt.notes && (
         <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-50 italic">

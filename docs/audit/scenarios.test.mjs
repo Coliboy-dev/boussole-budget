@@ -18,6 +18,7 @@ import {
   migrateLegacyBudget,
   readBudgetSnapshot,
   recordPayment,
+  recordUnscheduledDebtPayment,
   serializeBudget,
   writeBudgetSnapshot,
 } from '../../lib/budget-state.ts';
@@ -33,6 +34,7 @@ import {
   mockUser,
 } from '../../lib/mock-data.ts';
 import { buildProjection } from '../../lib/projection.ts';
+import { estimateDebtEndDate, nextDebtOccurrence } from '../../lib/debt-payoff.ts';
 import { createFirstBudget, parseAmountInput } from '../../lib/onboarding.ts';
 
 process.env.TZ = 'Europe/Brussels';
@@ -602,6 +604,38 @@ test('Une dette signalée en retard sans date reste dans les retards et peut êt
   assert.equal(paid.currentBalance, 459.85);
   assert.equal(paid.debts[0].remainingAmount, 0);
   assert.deepEqual(buildProjection(paid.currentBalance, [], [], paid.debts, [], 50, { today }).events, []);
+});
+
+test('La fin estimée tient compte des arriérés, des mois courts et d’une échéance annulée', () => {
+  const date = '2026-05-29';
+  const credit = {
+    ...debt('Crédit', 240.15, 100, '2026-01-31', 'late'),
+    occurrenceStatuses: { '2026-06-30': 'cancelled' },
+  };
+  const next = nextDebtOccurrence(credit, date);
+  assert.equal(next.dueDate, '2026-01-31');
+  assert.equal(estimateDebtEndDate(credit, next, date), '2026-07-31');
+  const stopped = { ...credit, endDate: '2026-06-30' };
+  assert.equal(estimateDebtEndDate(stopped, nextDebtOccurrence(stopped, date), date), undefined);
+  const unscheduled = debt('Sans date', 100, 0, undefined);
+  assert.equal(estimateDebtEndDate(unscheduled, nextDebtOccurrence(unscheduled, date), date), undefined);
+});
+
+test('Un paiement sans échéance met à jour le solde et le restant dû en centimes', () => {
+  const state = {
+    ...emptyState,
+    currentBalance: 85.25,
+    debts: [debt('Sans échéance', 31.20, 0, undefined)],
+  };
+  const payment = { id: 'Sans échéance', amount: 11.15, today: '2026-05-29', balanceIncludesPayment: false };
+  const paid = recordUnscheduledDebtPayment(state, payment);
+  assert.equal(paid.currentBalance, 74.10);
+  assert.equal(paid.debts[0].remainingAmount, 20.05);
+  assert.equal(recordUnscheduledDebtPayment(paid, { ...payment, amount: 25 }), paid);
+  const completed = recordUnscheduledDebtPayment(paid, { ...payment, amount: 20.05, balanceIncludesPayment: true });
+  assert.equal(completed.currentBalance, 74.10);
+  assert.equal(completed.debts[0].remainingAmount, 0);
+  assert.equal(completed.debts[0].status, 'completed');
 });
 
 test('Payer une facture avant la prochaine rentrée recalcule le point bas', () => {

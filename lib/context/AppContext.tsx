@@ -22,11 +22,13 @@ import {
   migrateLegacyBudget,
   readBudgetSnapshot,
   recordPayment,
+  recordUnscheduledDebtPayment,
   serializeBudget,
   writeBudgetSnapshot,
   type AppState,
   type BudgetStorageSnapshot,
   type Payment,
+  type UnscheduledDebtPayment,
 } from '@/lib/budget-state';
 import { todayInBrussels } from '@/lib/local-date';
 import { fromCents, toCents } from '@/lib/money';
@@ -227,6 +229,7 @@ export interface AppContextType extends AppState {
   updateMediation: (data: Partial<MediationFile>) => void;
   recordPayment: (payment: Omit<Payment, 'today'>) => void;
   recordScheduledPayment: (payment: ScheduledPayment) => void;
+  recordUnscheduledDebtPayment: (payment: Omit<UnscheduledDebtPayment, 'today'>) => void;
   undoScheduledPayment: () => void;
   cancelExpenseOccurrence: (id: string, dueDate: string) => void;
 }
@@ -328,14 +331,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  function recordScheduledPayment(payment: ScheduledPayment): void {
+  function ensureSavedForPayment(): void {
     if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
-      throw new Error('Le budget doit être enregistré avant de pouvoir payer cette échéance.');
+      throw new Error('Le budget doit être chargé et enregistré avant de saisir un paiement.');
     }
+  }
+
+  function recordScheduledPayment(payment: ScheduledPayment): void {
+    ensureSavedForPayment();
     const paid = recordPayment(budget, { ...payment, today, balanceIncludesPayment: false });
     if (paid === budget) throw new Error('Cette échéance ne peut plus être marquée comme payée.');
 
     scheduledPaymentUndo.current = { before: budget, after: saveBudget(paid) };
+  }
+
+  function saveUnscheduledDebtPayment(payment: Omit<UnscheduledDebtPayment, 'today'>): void {
+    ensureSavedForPayment();
+    const paid = recordUnscheduledDebtPayment(budget, { ...payment, today });
+    if (paid === budget) throw new Error('Le paiement dépasse le restant dû ou la dette est déjà soldée.');
+    saveBudget(paid);
   }
 
   function undoScheduledPayment(): void {
@@ -394,6 +408,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateMediation: (data) => dispatch({ type: 'UPDATE_MEDIATION', payload: data }),
     recordPayment: (payment) => dispatch({ type: 'RECORD_PAYMENT', payload: { ...payment, today } }),
     recordScheduledPayment,
+    recordUnscheduledDebtPayment: saveUnscheduledDebtPayment,
     undoScheduledPayment,
     cancelExpenseOccurrence: (id, dueDate) => dispatch({ type: 'CANCEL_EXPENSE_OCCURRENCE', payload: { id, dueDate, today } }),
   };

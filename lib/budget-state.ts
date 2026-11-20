@@ -215,6 +215,33 @@ export function recordPayment(state: AppState, payment: Payment): AppState {
   };
 }
 
+export interface UnscheduledDebtPayment {
+  id: string;
+  amount: number;
+  today: string;
+  balanceIncludesPayment: boolean;
+}
+
+export function recordUnscheduledDebtPayment(state: AppState, payment: UnscheduledDebtPayment): AppState {
+  const debt = state.debts.find(({ id }) => id === payment.id);
+  const amount = toCents(payment.amount);
+  if (!debt || debt.status === 'completed' || !Number.isSafeInteger(amount) || amount <= 0) return state;
+
+  const remaining = toCents(debt.remainingAmount) - amount;
+  if (remaining < 0) return state;
+
+  return {
+    ...state,
+    balanceDate: payment.balanceIncludesPayment ? state.balanceDate : payment.today,
+    currentBalance: payment.balanceIncludesPayment ? state.currentBalance : fromCents(toCents(state.currentBalance) - amount),
+    debts: state.debts.map((item) => item === debt ? {
+      ...debt,
+      remainingAmount: fromCents(remaining),
+      status: remaining === 0 ? 'completed' : debt.status,
+    } : item),
+  };
+}
+
 export function cancelExpenseOccurrence(state: AppState, id: string, dueDate: string, today: string): AppState {
   const expense = state.expenses.find((item) => item.id === id);
   const through = dueDate > today ? dueDate : today;
