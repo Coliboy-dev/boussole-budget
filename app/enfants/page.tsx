@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import Modal from '@/components/ui/Modal';
@@ -95,6 +96,13 @@ export default function EnfantsPage() {
           </button>
         </div>
 
+        <Link
+          href="/enfants/decompte"
+          className="inline-flex min-h-11 items-center rounded-xl border border-teal-700 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
+        >
+          Préparer un relevé trimestriel
+        </Link>
+
         <Card className="bg-purple-50 border-purple-200">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -154,6 +162,11 @@ export default function EnfantsPage() {
                           {!expense.receiptSent && expense.status === 'pending' && (
                             <p className="text-xs text-amber-800 mt-1">
                               Justificatif non encore envoyé
+                            </p>
+                          )}
+                          {expense.receiptReference && (
+                            <p className="mt-1 wrap-anywhere text-xs text-gray-600">
+                              Réf. du justificatif {expense.receiptReference}
                             </p>
                           )}
                           {expense.notes && (

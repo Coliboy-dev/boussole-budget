@@ -53,6 +53,12 @@ export function monthsBetween(from: string, to: string): number {
   return (toYear - fromYear) * 12 + toMonth - fromMonth;
 }
 
+export function startOfQuarter(value: string): string {
+  const date = parseLocalDate(value);
+  date.setFullYear(date.getFullYear(), date.getMonth() - date.getMonth() % 3, 1);
+  return localDateString(date);
+}
+
 export function daysBetween(from: string, to: string): number {
   return Math.round((parseLocalDate(to).getTime() - parseLocalDate(from).getTime()) / 86400000);
 }

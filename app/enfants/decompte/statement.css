@@ -1,0 +1,27 @@
+@page child-expense-statement {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  body:has([data-expense-statement]) {
+    height: auto;
+    background: white;
+  }
+
+  body:has([data-expense-statement]) > div:has(> #contenu) {
+    display: block;
+    min-height: 0;
+    max-width: none;
+  }
+
+  body:has([data-expense-statement]) > div:has(> #contenu) > :not(#contenu) {
+    display: none;
+  }
+
+  #contenu:has([data-expense-statement]) {
+    overflow: visible;
+    padding: 0;
+    page: child-expense-statement;
+  }
+}
