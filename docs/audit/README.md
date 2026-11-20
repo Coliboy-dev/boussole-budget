@@ -121,7 +121,13 @@ Le format de sauvegarde reste en version 2. Les anciennes sauvegardes gardent le
 
 Le moteur réserve le reste de chaque enveloppe dès aujourd’hui, puis le montant complet de chaque mois qui commence dans l’horizon de projection. Le simulateur utilise cette même projection. Recopier le solde bancaire enregistre l’écart inexpliqué après avoir tenu compte des échéances cochées. Une dépense déjà comprise dans un solde peut réduire la part non encodée.
 
-Les calculs d’analyse utilisent le montant actuel des charges et des mensualités pour les échéances marquées comme payées. Un ancien paiement est donc estimé à partir du montant actuel si celui-ci a changé. Les règles de saisie rapide et de reconnaissance du commerce sont testées dans le moteur. Les écrans de saisie et d’analyse sont prévus dans les PR suivantes.
+Les calculs d’analyse utilisent le montant actuel des charges et des mensualités pour les échéances marquées comme payées. Un ancien paiement est donc estimé à partir du montant actuel si celui-ci a changé. Les règles de saisie rapide et de reconnaissance du commerce sont testées dans le moteur.
+
+## Saisie des dépenses et gestion des enveloppes (P3, PR 2)
+
+Dans **Aujourd’hui** ou **Budget → Dépenses du mois**, ajoute une dépense en renseignant son montant et sa catégorie. La saisie rapide accepte un montant suivi d’un commerce, par exemple « 42,28 Colruyt ». Boussole propose une catégorie et mémorise celle que tu confirmes. Tu peux annuler l’ajout jusqu’à la prochaine modification du budget.
+
+Dans **Dépenses du mois**, choisis un mois pour consulter les dépenses par jour et la part utilisée de chaque enveloppe. Ouvre une ligne pour la modifier ou la supprimer. Si une charge récurrente correspond à la catégorie d’une enveloppe, le formulaire propose de la remplacer et affiche le vrai disponible avant et après avec le montant que tu as saisi. L’Échéancier affiche aussi les réservations des enveloppes.
 
 ## Hygiène technique et formulaires
 

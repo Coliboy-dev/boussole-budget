@@ -1,10 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { Baby, ChevronRight, Calculator, HandCoins, Receipt, Target, Wallet, type LucideIcon } from 'lucide-react';
+import { Baby, ChevronRight, Calculator, HandCoins, Receipt, ShoppingBasket, Target, Wallet, type LucideIcon } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
 import { calculateTotalMonthlyIncome, formatCurrency } from '@/lib/budget-calculations';
 import { useApp } from '@/lib/context/AppContext';
+import { monthlySpendingTotals } from '@/lib/envelopes';
+import { fromCents, toCents } from '@/lib/money';
+import { envelopesOf, spendingsOf } from '@/lib/spending';
 
 interface Section {
   href: string;
@@ -38,10 +41,12 @@ function MonthBreakdown() {
   const { incomes, summary } = useApp();
   const certain = calculateTotalMonthlyIncome(incomes.filter((income) => income.isConfirmed));
   const uncertain = calculateTotalMonthlyIncome(incomes.filter((income) => !income.isConfirmed));
-  const charges = summary.totalMonthlyExpenses;
-  const debts = summary.totalMonthlyDebts;
-  const rest = certain - charges - debts;
-  const base = Math.max(certain, charges + debts);
+  const charges = toCents(summary.totalMonthlyExpenses);
+  const debts = toCents(summary.totalMonthlyDebts);
+  const envelopes = toCents(summary.totalMonthlyEnvelopes);
+  const allocated = charges + debts + envelopes;
+  const rest = toCents(certain) - allocated;
+  const base = Math.max(toCents(certain), allocated);
 
   return (
     <section aria-labelledby="repartition" className="space-y-3 rounded-2xl border border-line bg-white p-4">
@@ -58,18 +63,20 @@ function MonthBreakdown() {
           <div className="flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
             <div className="bg-teal-700" style={{ width: `${(charges / base) * 100}%` }} />
             <div className="bg-amber-500" style={{ width: `${(debts / base) * 100}%` }} />
+            <div className="bg-indigo-600" style={{ width: `${(envelopes / base) * 100}%` }} />
             {rest > 0 && <div className="bg-green-500" style={{ width: `${(rest / base) * 100}%` }} />}
           </div>
           <ul className="space-y-2">
-            <BreakdownSegment label="Charges" amount={charges} share={(charges / base) * 100} className="bg-teal-700" />
-            <BreakdownSegment label="Dettes" amount={debts} share={(debts / base) * 100} className="bg-amber-500" />
+            <BreakdownSegment label="Charges" amount={fromCents(charges)} share={(charges / base) * 100} className="bg-teal-700" />
+            <BreakdownSegment label="Dettes" amount={fromCents(debts)} share={(debts / base) * 100} className="bg-amber-500" />
+            <BreakdownSegment label="Enveloppes" amount={fromCents(envelopes)} share={(envelopes / base) * 100} className="bg-indigo-600" />
             {rest >= 0 && (
-              <BreakdownSegment label="Reste" amount={rest} share={(rest / base) * 100} className="bg-green-500" />
+              <BreakdownSegment label="Reste" amount={fromCents(rest)} share={(rest / base) * 100} className="bg-green-500" />
             )}
           </ul>
           {rest < 0 && (
             <p role="status" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900">
-              Tes charges et tes dettes dépassent tes revenus certains de {formatCurrency(-rest)} par mois.
+              Tes charges, dettes et enveloppes dépassent tes revenus certains de {formatCurrency(fromCents(-rest))} par mois.
             </p>
           )}
           <p className="text-xs text-slate-600">
@@ -84,7 +91,9 @@ function MonthBreakdown() {
 }
 
 export default function BudgetPage() {
-  const { summary, debts, childExpenses, goals } = useApp();
+  const state = useApp();
+  const { summary, debts, childExpenses, goals, today } = state;
+  const monthly = monthlySpendingTotals(spendingsOf(state), envelopesOf(state), today.slice(0, 7));
   const activeDebts = debts.filter((debt) => debt.status !== 'completed');
   const remainingDebt = activeDebts.reduce((sum, debt) => sum + debt.remainingAmount, 0);
   const toRecover = childExpenses
@@ -95,6 +104,10 @@ export default function BudgetPage() {
   const sections: Section[] = [
     { href: '/revenus', label: 'Revenus', icon: Wallet, detail: `${formatCurrency(summary.totalMonthlyIncome)}/mois` },
     { href: '/charges', label: 'Charges', icon: Receipt, detail: `${formatCurrency(summary.totalMonthlyExpenses)}/mois` },
+    {
+      href: '/depenses', label: 'Dépenses du mois', icon: ShoppingBasket,
+      detail: `${formatCurrency(fromCents(monthly.spentCents))} dépensés · ${formatCurrency(fromCents(monthly.remainingCents))} restants dans les enveloppes`,
+    },
     {
       href: '/dettes', label: 'Dettes', icon: HandCoins,
       detail: activeDebts.length > 0

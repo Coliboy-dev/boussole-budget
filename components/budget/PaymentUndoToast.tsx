@@ -9,14 +9,19 @@ interface PaymentUndoToastProps {
   error?: string;
   onUndo: () => void;
   undoRef?: Ref<HTMLButtonElement>;
+  spending?: boolean;
 }
 
 /** Confirmation fixe au-dessus de la navigation, avec annulation du dernier paiement. */
-export default function PaymentUndoToast({ label, paid, error, onUndo, undoRef }: PaymentUndoToastProps) {
+export default function PaymentUndoToast({ label, paid, error, onUndo, undoRef, spending }: PaymentUndoToastProps) {
+  const added = spending ? 'Dépense ajoutée' : 'Paiement enregistré';
+  const announcement = paid
+    ? `${added} : ${label}`
+    : spending ? 'Dépense annulée' : `Paiement annulé pour ${label}.`;
   return (
     <>
       <p role="status" className="sr-only">
-        {label && (paid ? `Paiement enregistré pour ${label}.` : `Paiement annulé pour ${label}.`)}
+        {label && (paid && !spending ? `Paiement enregistré pour ${label}.` : announcement)}
       </p>
       {(paid || error) && (
         <div className="fixed inset-x-0 bottom-16 z-30 mx-auto max-w-2xl px-4 pb-2">
@@ -25,7 +30,7 @@ export default function PaymentUndoToast({ label, paid, error, onUndo, undoRef }
             {paid && (
               <div className="flex items-center justify-between gap-2">
                 <p className="min-w-0 wrap-break-word text-sm">
-                  Paiement enregistré <span className="block text-xs text-teal-100">{label}</span>
+                  <span>{added}</span> <span className="block text-xs text-teal-100">{label}</span>
                 </p>
                 <button
                   type="button"

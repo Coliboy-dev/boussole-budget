@@ -7,6 +7,7 @@ import { AVAILABLE_HORIZON, buildProjection, type ProjectionEvent } from '@/lib/
 import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
 import { addDays } from '@/lib/local-date';
 import { fromCents, toCents } from '@/lib/money';
+import { envelopesOf, spendingsOf } from '@/lib/spending';
 import ProjectionTimeline from '@/components/projection/ProjectionTimeline';
 import ProjectionEventList from '@/components/projection/ProjectionEventList';
 import Card from '@/components/ui/Card';
@@ -17,10 +18,11 @@ const HORIZONS = [7, 15, 30, AVAILABLE_HORIZON] as const;
 type Horizon = (typeof HORIZONS)[number];
 
 export default function ProjectionPage() {
+  const state = useApp();
   const {
     currentBalance, balanceDate, incomes, expenses, debts, childExpenses, userProfile, today, summary,
     isBudgetLoading, storageBlocked, recordScheduledPayment, undoScheduledPayment,
-  } = useApp();
+  } = state;
   const [horizon, setHorizon] = useState<Horizon>(AVAILABLE_HORIZON);
   const [paymentFeedback, setPaymentFeedback] = useState<{ event: ProjectionEvent; paid: boolean }>();
   const [paymentError, setPaymentError] = useState('');
@@ -67,7 +69,7 @@ export default function ProjectionPage() {
     debts,
     childExpenses,
     userProfile.safetyReserve,
-    { today, horizon },
+    { today, horizon, envelopes: envelopesOf(state), spendings: spendingsOf(state) },
   );
 
   const { events, milestones } = projection;
@@ -86,6 +88,9 @@ export default function ProjectionPage() {
     .reduce((sum, event) => sum - toCents(event.amount), 0);
   const totalDebts = events
     .filter((event) => event.type === 'debt')
+    .reduce((sum, event) => sum - toCents(event.amount), 0);
+  const totalEnvelopes = events
+    .filter((event) => event.type === 'envelope')
     .reduce((sum, event) => sum - toCents(event.amount), 0);
 
   const availableThrough = addDays(today, summary.availableForecast.horizon);
@@ -137,7 +142,7 @@ export default function ProjectionPage() {
         </div>
       </Card>
 
-      {events.some((event) => event.amount < 0) && (
+      {events.some((event) => event.amount < 0 && (event.type === 'expense' || event.type === 'debt')) && (
         <p className="text-xs leading-relaxed text-gray-600">
           « Payé » déduit le montant du solde. Si le paiement y figure déjà, enregistre-le depuis{' '}
           <Link href="/charges" className="font-medium text-teal-800 underline">Charges</Link> ou{' '}
@@ -210,6 +215,12 @@ export default function ProjectionPage() {
             <p className="text-gray-600">Remboursements dettes</p>
             <p className="font-bold text-amber-800">-{formatCurrency(fromCents(totalDebts))}</p>
           </div>
+          {totalEnvelopes > 0 && (
+            <div>
+              <p className="text-gray-600">Enveloppes réservées</p>
+              <p className="font-bold text-gray-700">-{formatCurrency(fromCents(totalEnvelopes))}</p>
+            </div>
+          )}
         </div>
       </Card>
 

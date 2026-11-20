@@ -28,7 +28,7 @@ export const balanceRevisionOf = (state: AppState) => state.balanceRevision ?? 0
 type NewSpending = Omit<Spending, 'debited' | 'balanceRevision'>;
 type SpendingChanges = Partial<Pick<Spending, 'date' | 'amount' | 'category' | 'label'>>;
 
-function rememberCategory(state: AppState, spending: Spending): AppState {
+function rememberCategory<T extends AppState>(state: T, spending: Spending): T {
   const key = merchantKey(spending.label ?? '');
   return key
     ? { ...state, merchantCategories: { ...merchantCategoriesOf(state), [key]: spending.category } }
@@ -39,7 +39,7 @@ function affectsBalance(state: AppState, spending: Spending): boolean {
   return spending.debited && spending.balanceRevision === balanceRevisionOf(state);
 }
 
-export function addSpending(state: AppState, input: NewSpending, today: string): AppState {
+export function addSpending<T extends AppState>(state: T, input: NewSpending, today: string): T {
   const spendings = spendingsOf(state);
   if (!isSpendingAmount(input.amount) || !isLocalDate(input.date) || input.date > today
     || !input.id.trim() || spendings.some(({ id }) => id === input.id)) return state;
@@ -54,7 +54,7 @@ export function addSpending(state: AppState, input: NewSpending, today: string):
   }, spending);
 }
 
-export function updateSpending(state: AppState, id: string, changes: SpendingChanges, today: string): AppState {
+export function updateSpending<T extends AppState>(state: T, id: string, changes: SpendingChanges, today: string): T {
   const spendings = spendingsOf(state);
   const previous = spendings.find((spending) => spending.id === id);
   if (!previous) return state;
@@ -74,7 +74,7 @@ export function updateSpending(state: AppState, id: string, changes: SpendingCha
   }, spending);
 }
 
-export function deleteSpending(state: AppState, id: string): AppState {
+export function deleteSpending<T extends AppState>(state: T, id: string): T {
   const spendings = spendingsOf(state);
   const spending = spendings.find((item) => item.id === id);
   if (!spending) return state;
@@ -88,7 +88,7 @@ export function deleteSpending(state: AppState, id: string): AppState {
   };
 }
 
-export function upsertEnvelope(state: AppState, envelope: Envelope): AppState {
+export function upsertEnvelope<T extends AppState>(state: T, envelope: Envelope): T {
   const envelopes = envelopesOf(state);
   if (!isNonNegativeBudgetAmount(envelope.monthlyAmount) || !envelope.id.trim()
     || envelopes.some(({ id, category }) => id === envelope.id && category !== envelope.category)) return state;
@@ -100,13 +100,15 @@ export function upsertEnvelope(state: AppState, envelope: Envelope): AppState {
   return { ...state, envelopes: updated };
 }
 
-export function deleteEnvelope(state: AppState, id: string): AppState {
+export function deleteEnvelope<T extends AppState>(state: T, id: string): T {
   const envelopes = envelopesOf(state);
   const updated = envelopes.filter((envelope) => envelope.id !== id);
   return updated.length === envelopes.length ? state : { ...state, envelopes: updated };
 }
 
-export function replaceExpenseWithEnvelope(state: AppState, expenseId: string, category: SpendingCategory): AppState {
+export function replaceExpenseWithEnvelope<T extends AppState>(
+  state: T, expenseId: string, category: SpendingCategory, monthlyAmount?: number,
+): T {
   const expense = state.expenses.find(({ id }) => id === expenseId);
   if (!expense?.isRecurring || expense.frequency === 'one_time' || expense.category !== category) return state;
 
@@ -115,7 +117,7 @@ export function replaceExpenseWithEnvelope(state: AppState, expenseId: string, c
     id: existing?.id ?? `envelope-${expense.id}`,
     category,
     label: expense.label || spendingCategoryLabels[category],
-    monthlyAmount: toMonthlyAmount(expense.amount, expense.frequency),
+    monthlyAmount: monthlyAmount ?? toMonthlyAmount(expense.amount, expense.frequency),
   });
   return updated === state ? state : { ...updated, expenses: state.expenses.filter((item) => item !== expense) };
 }

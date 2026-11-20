@@ -11,6 +11,8 @@ import type {
   UserProfile,
   BudgetSummary,
   AdviceItem,
+  Envelope,
+  Spending,
 } from '@/lib/types';
 import { calculateBudgetSummary } from '@/lib/budget-calculations';
 import { generateAdvice } from '@/lib/advice-engine';
@@ -33,12 +35,25 @@ import {
 import { todayInBrussels } from '@/lib/local-date';
 import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
 import { updateBalance, type SettledOccurrence } from '@/lib/balance-update';
-import { envelopesOf, spendingsOf } from '@/lib/spending';
+import {
+  addSpending as insertSpending,
+  deleteEnvelope as removeEnvelope,
+  deleteSpending as removeSpending,
+  envelopesOf,
+  replaceExpenseWithEnvelope as replaceExpense,
+  spendingsOf,
+  updateSpending as editSpending,
+  upsertEnvelope,
+} from '@/lib/spending';
+
+type SpendingInput = Omit<Spending, 'id' | 'debited' | 'balanceRevision'>;
+type SpendingChanges = Partial<Pick<Spending, 'date' | 'amount' | 'category' | 'label'>>;
 
 type RuntimeState = AppState & {
   lastBackupDate: string | null;
   storageStatus: 'loading' | 'fresh' | 'ready' | 'unreadable' | 'unsaved';
   storageRevision: number;
+  lastAddedSpendingId?: string;
 };
 
 type BudgetPersistence = {
@@ -83,6 +98,12 @@ type AppAction =
   | { type: 'UPDATE_GOAL'; payload: { id: string; data: Partial<Goal> } }
   | { type: 'DELETE_GOAL'; payload: string }
   | { type: 'UPDATE_MEDIATION'; payload: Partial<MediationFile> }
+  | { type: 'ADD_SPENDING'; spending: SpendingInput & { id: string }; today: string }
+  | { type: 'UPDATE_SPENDING'; id: string; changes: SpendingChanges; today: string }
+  | { type: 'DELETE_SPENDING'; id: string }
+  | { type: 'UPSERT_ENVELOPE'; envelope: Envelope }
+  | { type: 'DELETE_ENVELOPE'; id: string }
+  | { type: 'REPLACE_EXPENSE_WITH_ENVELOPE'; expenseId: string; envelope: Envelope }
   | { type: 'RECORD_PAYMENT'; payload: Payment }
   | { type: 'CANCEL_EXPENSE_OCCURRENCE'; payload: { id: string; dueDate: string; today: string } };
 
@@ -90,7 +111,7 @@ function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
+function reduceBudget(state: RuntimeState, action: AppAction): RuntimeState {
   if (action.type === 'HYDRATE') return action.payload;
   if (state.storageStatus === 'loading') return state;
 
@@ -182,6 +203,25 @@ function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
       return { ...state, goals: state.goals.filter((g) => g.id !== action.payload) };
     case 'UPDATE_MEDIATION':
       return { ...state, mediationFile: { ...state.mediationFile, ...action.payload } };
+    case 'ADD_SPENDING': {
+      const next = insertSpending(state, action.spending, action.today);
+      return next === state ? state : { ...next, lastAddedSpendingId: action.spending.id };
+    }
+    case 'UPDATE_SPENDING':
+      return editSpending(state, action.id, action.changes, action.today);
+    case 'DELETE_SPENDING':
+      return removeSpending(state, action.id);
+    case 'UPSERT_ENVELOPE':
+      return upsertEnvelope(state, action.envelope);
+    case 'DELETE_ENVELOPE':
+      return removeEnvelope(state, action.id);
+    case 'REPLACE_EXPENSE_WITH_ENVELOPE': {
+      const { envelope, expenseId } = action;
+      const replaced = replaceExpense(state, expenseId, envelope.category, envelope.monthlyAmount);
+      if (replaced === state) return state;
+      const next = upsertEnvelope(replaced, envelope);
+      return next === replaced ? state : next;
+    }
     case 'RECORD_PAYMENT':
       return { ...state, ...recordPayment(state, action.payload) };
     case 'CANCEL_EXPENSE_OCCURRENCE':
@@ -192,6 +232,17 @@ function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
     default:
       return state;
   }
+}
+
+function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
+  const next = reduceBudget(state, action);
+  if (next === state || !next.lastAddedSpendingId || action.type === 'ADD_SPENDING' || action.type === 'HYDRATE') return next;
+  return { ...next, lastAddedSpendingId: undefined };
+}
+
+function splitRuntimeState(state: RuntimeState) {
+  const { storageStatus, storageRevision, lastBackupDate, lastAddedSpendingId, ...budget } = state;
+  return { storageStatus, storageRevision, lastBackupDate, lastAddedSpendingId, budget };
 }
 
 export interface AppContextType extends AppState {
@@ -232,6 +283,14 @@ export interface AppContextType extends AppState {
   recordScheduledPayment: (payment: ScheduledPayment) => void;
   recordUnscheduledDebtPayment: (payment: Omit<UnscheduledDebtPayment, 'today'>) => void;
   undoScheduledPayment: () => void;
+  lastAddedSpendingId?: string;
+  addSpending: (spending: SpendingInput) => string;
+  updateSpending: (id: string, changes: SpendingChanges) => void;
+  deleteSpending: (id: string) => void;
+  undoLastSpending: () => void;
+  saveEnvelope: (envelope: Omit<Envelope, 'id'> & { id?: string }) => void;
+  deleteEnvelope: (id: string) => void;
+  replaceExpenseWithEnvelope: (expenseId: string, envelope: Omit<Envelope, 'id'> & { id?: string }) => void;
   cancelExpenseOccurrence: (id: string, dueDate: string) => void;
 }
 
@@ -275,7 +334,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const { storageStatus, storageRevision, lastBackupDate, ...budget } = state;
+    const { storageStatus, storageRevision, lastBackupDate, budget } = splitRuntimeState(state);
     const previous = persistence.current;
     if (storageStatus !== 'ready' || !previous || storageRevision !== previous.saved.storageRevision
       || (state === previous.saved && !previous.needsMigration)) return;
@@ -289,7 +348,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state]);
 
-  const { storageStatus, storageRevision, lastBackupDate, ...budget } = state;
+  const { storageStatus, storageRevision, lastBackupDate, lastAddedSpendingId, budget } = splitRuntimeState(state);
   const canExportBudget = storageStatus === 'fresh' || storageStatus === 'ready' || storageStatus === 'unsaved';
 
   function exportBudget(): string {
@@ -382,6 +441,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     scheduledPaymentUndo.current = null;
   }
 
+  function undoLastSpending(): void {
+    if (!lastAddedSpendingId || storageStatus !== 'ready' || state !== persistence.current?.saved) {
+      throw new Error('Le budget a changé depuis cet ajout. L’annulation n’est plus disponible.');
+    }
+    saveBudget(removeSpending(budget, lastAddedSpendingId));
+  }
+
   const summary = calculateBudgetSummary(
     state.currentBalance,
     state.incomes,
@@ -433,6 +499,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     recordScheduledPayment,
     recordUnscheduledDebtPayment: saveUnscheduledDebtPayment,
     undoScheduledPayment,
+    lastAddedSpendingId,
+    addSpending: (spending) => {
+      const id = crypto.randomUUID();
+      dispatch({ type: 'ADD_SPENDING', spending: { ...spending, id }, today });
+      return id;
+    },
+    updateSpending: (id, changes) => dispatch({ type: 'UPDATE_SPENDING', id, changes, today }),
+    deleteSpending: (id) => dispatch({ type: 'DELETE_SPENDING', id }),
+    undoLastSpending,
+    saveEnvelope: (envelope) => dispatch({
+      type: 'UPSERT_ENVELOPE', envelope: { ...envelope, id: envelope.id ?? crypto.randomUUID() },
+    }),
+    deleteEnvelope: (id) => dispatch({ type: 'DELETE_ENVELOPE', id }),
+    replaceExpenseWithEnvelope: (expenseId, envelope) => dispatch({
+      type: 'REPLACE_EXPENSE_WITH_ENVELOPE', expenseId, envelope: { ...envelope, id: envelope.id ?? crypto.randomUUID() },
+    }),
     cancelExpenseOccurrence: (id, dueDate) => dispatch({ type: 'CANCEL_EXPENSE_OCCURRENCE', payload: { id, dueDate, today } }),
   };
 

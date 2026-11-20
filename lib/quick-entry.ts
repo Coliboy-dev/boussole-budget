@@ -2,9 +2,9 @@ import { isSpendingAmount } from './budget-schema.ts';
 import { parseAmountInput } from './money.ts';
 
 const amountPattern = new RegExp(
-  '(^|[^\\p{L}\\p{N}.,+\\-])(?:€\\s*)?([+\\-]?[0-9]+)'
+  '(^|[^\\p{L}\\p{N}.,+\\-])(?:€\\s*)?([+\\-]?(?:[0-9]{1,3}(?:[ \\u00a0\\u202f][0-9]{3})+|[0-9]{1,3}(?:\\.[0-9]{3})+|[0-9]+))'
   + '(?:[.,]([0-9]{1,2})|\\s*(?:€|euros?\\b|eur\\b)\\s*([0-9]{1,2}))?'
-  + '(?![\\p{L}\\p{N}]|[.,][0-9])',
+  + '(?![\\p{L}\\p{N}]|[.,][0-9])(?:\\.(?=\\s|$))?',
   'iu',
 );
 const fillerWords = new RegExp(
@@ -19,7 +19,8 @@ export function parseQuickEntry(text: string): { amount?: number; label?: string
   if (match) {
     const [full, separator, whole, decimal, currencyDecimal] = match;
     const fraction = decimal ?? currencyDecimal;
-    const parsed = parseAmountInput(fraction ? `${whole},${fraction}` : whole);
+    const digits = whole.replace(/[ .\u00a0\u202f]/g, '');
+    const parsed = parseAmountInput(fraction ? `${digits},${fraction}` : digits);
     if (isSpendingAmount(parsed)) amount = parsed;
     remainder = text.slice(0, match.index) + separator + ' ' + text.slice(match.index + full.length);
   }
