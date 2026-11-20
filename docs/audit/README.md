@@ -85,6 +85,16 @@ Dans **Sauvegarde**, le bouton de téléchargement crée un fichier JSON v2 qui 
 
 Le même schéma contrôle le fichier et le stockage du navigateur. Une version incompatible, une date invalide ou une dette avec un montant négatif est signalée. L'application charge les données avant de les écrire et ne remplace le budget actif qu'après l'enregistrement réussi de l'import. La migration automatique d'un ancien budget conserve la copie v1.
 
+## Synchronisation chiffrée entre appareils (P2-3)
+
+**Plus → Synchroniser mes appareils** est facultatif. La personne se connecte avec un code reçu par e-mail, puis choisit une phrase secrète d’au moins 12 caractères. Le budget est chiffré sur l’appareil (AES-GCM 256 bits, clé dérivée par PBKDF2-SHA-256, 600 000 itérations) avant tout envoi. La clé reste sur l’appareil, non exportable, dans IndexedDB. Le serveur Supabase (Irlande) ne stocke que l’e-mail, le bloc chiffré, un numéro de version et la date de mise à jour.
+
+Chaque modification est envoyée environ 1,5 seconde après la saisie. Chaque ouverture de l’application récupère la copie en ligne si l’appareil n’a rien changé de son côté. Si les deux côtés ont changé, Boussole demande quelle version garder et n’écrase rien en silence. Le serveur refuse une mise à jour basée sur une version dépassée.
+
+La base est décrite dans `supabase/migrations/`. Chaque compte ne peut lire, modifier ou supprimer que sa propre ligne ; le rôle anonyme n’a aucun droit. **Supprimer mon compte en ligne** efface le compte et sa copie chiffrée ; le budget du téléphone est conservé. Sans les variables `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, la page indique que la synchronisation n’est pas disponible et le reste de l’application fonctionne normalement.
+
+`tests/cloud-sync.test.mjs` vérifie le chiffrement (aller-retour, mauvaise phrase, bloc altéré, absence de montant lisible) et toutes les décisions de synchronisation. Un test de bout en bout à deux navigateurs sur le vrai projet a validé l’activation, la récupération sur un second appareil, le refus d’une mauvaise phrase, la propagation d’une modification, le conflit et la suppression du compte.
+
 ## Hygiène technique et formulaires
 
 Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.

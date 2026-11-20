@@ -4,6 +4,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 export function proxy(request: NextRequest) {
   const nonce = Buffer.from(randomUUID()).toString('base64');
   const development = process.env.NODE_ENV === 'development';
+  // La synchronisation chiffrée parle uniquement au projet Supabase configuré.
+  const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL ? ` ${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin}` : '';
   const policy = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ''}`,
@@ -11,7 +13,7 @@ export function proxy(request: NextRequest) {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     "worker-src 'self'",
-    `connect-src 'self'${development ? ' ws: wss:' : ''}`,
+    `connect-src 'self'${supabase}${development ? ' ws: wss:' : ''}`,
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",

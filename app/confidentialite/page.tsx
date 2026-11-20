@@ -12,7 +12,27 @@ export default function PrivacyPage() {
         <p>
           Le prénom, le solde, les revenus, les charges et les autres données que tu saisis sont enregistrés
           dans ton navigateur ou dans l’application installée. Le calcul et la restauration de sauvegarde se
-          font sur ton appareil. Boussole Budget ne transmet pas ton budget à un serveur.
+          font sur ton appareil. Sans synchronisation, Boussole Budget ne transmet pas ton budget à un serveur.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="font-semibold text-gray-900">Synchronisation entre appareils (facultative)</h2>
+        <p>
+          Si tu l’actives dans Plus → Synchroniser mes appareils, ton budget est chiffré sur ton appareil avec une
+          phrase secrète que toi seul connais (AES-256, clé dérivée par PBKDF2), puis envoyé à Supabase, notre
+          sous-traitant d’hébergement de base de données, sur des serveurs situés en Irlande, dans l’Union européenne.
+        </p>
+        <p>
+          Le serveur conserve uniquement : ton adresse e-mail (pour t’envoyer un code de connexion), le bloc chiffré
+          de ton budget, un numéro de version et la date de la dernière mise à jour. Ni Start’OnLab ni Supabase ne
+          peuvent lire le contenu de ton budget. La phrase secrète n’est jamais transmise : si tu l’oublies, la copie
+          en ligne ne peut pas être récupérée.
+        </p>
+        <p>
+          Base légale : l’exécution du service que tu demandes en activant la synchronisation. Ces données sont
+          conservées tant que ton compte existe. Tu peux supprimer à tout moment ton compte et sa copie chiffrée dans
+          Synchroniser mes appareils : la suppression est immédiate et définitive sur le serveur.
         </p>
       </section>
 
@@ -22,6 +42,11 @@ export default function PrivacyPage() {
           Tu peux consulter et modifier tes données dans l’application, télécharger une copie JSON dans
           Sauvegarde, ou les effacer dans Réglages. Les données restent dans le navigateur jusqu’à leur
           effacement. Les sauvegardes téléchargées restent dans le dossier où tu les as enregistrées.
+        </p>
+        <p>
+          Pour toute question sur tes données ou pour exercer tes droits (accès, rectification, effacement,
+          opposition), écris à contact@startonlab.be. Tu peux aussi introduire une réclamation auprès de
+          l’Autorité de protection des données (autoriteprotectiondonnees.be).
         </p>
         <p>
           La sauvegarde JSON contient tes données financières en clair. Garde-la dans un endroit auquel
