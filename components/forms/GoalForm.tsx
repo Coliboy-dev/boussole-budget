@@ -125,8 +125,8 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
           value={form.status}
           onChange={(e) => set('status', e.target.value as GoalStatus)}
         >
-          <option value="realistic">✅ Réalisable</option>
-          <option value="fragile">⚠️ Fragile</option>
+          <option value="realistic">Réalisable</option>
+          <option value="fragile">Fragile</option>
           <option value="to_postpone">⏸️ À reporter</option>
         </select>
       </FormField>

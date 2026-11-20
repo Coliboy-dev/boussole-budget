@@ -8,6 +8,7 @@ import { useApp } from '@/lib/context/AppContext';
 import { addDays } from '@/lib/local-date';
 import { expenseOccurrences, isOpenOccurrence } from '@/lib/occurrences';
 import OccurrencePayment from './OccurrencePayment';
+import { Icon, expenseCategoryIcons } from '@/components/ui/icons';
 
 interface ExpenseListProps {
   expenses: Expense[];
@@ -15,17 +16,17 @@ interface ExpenseListProps {
   onDelete?: (id: string) => void;
 }
 
-const categoryConfig: Record<ExpenseCategory, { label: string; icon: string; color: string }> = {
-  rent: { label: 'Logement', icon: '🏠', color: 'bg-blue-100' },
-  energy: { label: 'Énergie', icon: '⚡', color: 'bg-yellow-100' },
-  phone: { label: 'Téléphone', icon: '📱', color: 'bg-purple-100' },
-  insurance: { label: 'Assurance', icon: '🛡️', color: 'bg-teal-100' },
-  groceries: { label: 'Courses', icon: '🛒', color: 'bg-green-100' },
-  transport: { label: 'Transport', icon: '🚌', color: 'bg-orange-100' },
-  health: { label: 'Santé', icon: '💊', color: 'bg-pink-100' },
-  school: { label: 'Scolarité', icon: '📚', color: 'bg-indigo-100' },
-  subscriptions: { label: 'Abonnements', icon: '📺', color: 'bg-gray-100' },
-  other: { label: 'Autre', icon: '💸', color: 'bg-gray-100' },
+const categoryConfig: Record<ExpenseCategory, { label: string }> = {
+  rent: { label: 'Logement' },
+  energy: { label: 'Énergie' },
+  phone: { label: 'Téléphone' },
+  insurance: { label: 'Assurance' },
+  groceries: { label: 'Courses' },
+  transport: { label: 'Transport' },
+  health: { label: 'Santé' },
+  school: { label: 'Scolarité' },
+  subscriptions: { label: 'Abonnements' },
+  other: { label: 'Autre' },
 };
 
 function groupByCategory(expenses: Expense[]) {
@@ -43,7 +44,7 @@ export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListP
   if (expenses.length === 0) {
     return (
       <div className="text-center py-8 text-gray-600">
-        <p className="text-4xl mb-2">📋</p>
+        <Icon icon={expenseCategoryIcons.other} className="mx-auto mb-2 size-9 text-teal-700" />
         <p className="text-sm">Aucune charge enregistrée.</p>
       </div>
     );
@@ -61,7 +62,7 @@ export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListP
           <div key={category}>
             <div className="flex items-center justify-between mb-2 px-1">
               <div className="flex items-center gap-2">
-                <span className="text-base">{config.icon}</span>
+                <Icon icon={expenseCategoryIcons[category as ExpenseCategory] ?? expenseCategoryIcons.other} className="size-4 text-teal-700" />
                 <span className="text-sm font-semibold text-gray-600">{config.label}</span>
               </div>
               <span className="text-sm font-bold text-gray-700">{formatCurrency(groupTotal)}</span>
@@ -72,11 +73,11 @@ export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListP
                 const next = expenseOccurrences(expense, today, end).find(isOpenOccurrence);
                 const anchorStatus = expense.dueDate && expense.occurrenceStatuses?.[expense.dueDate];
                 return (
-                  <Card key={expense.id} className="flex items-center gap-3">
+                  <Card key={expense.id} className="flex items-start gap-3">
                     <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${config.color}`}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-teal-50 text-teal-800"
                     >
-                      {config.icon}
+                      <Icon icon={expenseCategoryIcons[category as ExpenseCategory] ?? expenseCategoryIcons.other} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">

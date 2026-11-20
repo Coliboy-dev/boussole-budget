@@ -20,8 +20,8 @@ const statusConfig: Record<
     progressColor: 'primary' | 'success' | 'warning' | 'danger' | 'accent';
   }
 > = {
-  realistic: { label: '✅ Réalisable', variant: 'success', progressColor: 'success' },
-  fragile: { label: '⚠️ Fragile', variant: 'warning', progressColor: 'warning' },
+  realistic: { label: 'Réalisable', variant: 'success', progressColor: 'success' },
+  fragile: { label: 'Fragile', variant: 'warning', progressColor: 'warning' },
   to_postpone: { label: '⏸️ À reporter', variant: 'neutral', progressColor: 'primary' },
 };
 
@@ -67,7 +67,7 @@ export default function GoalCard({ goal, onEdit, onDelete }: GoalCardProps) {
       </div>
 
       {goal.targetDate && (
-        <p className="text-xs text-gray-600 mt-1">🎯 Objectif : {formatShortDate(goal.targetDate)}</p>
+        <p className="text-xs text-gray-600 mt-1">Objectif : {formatShortDate(goal.targetDate)}</p>
       )}
 
       {(onEdit || onDelete) && (

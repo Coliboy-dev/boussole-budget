@@ -45,7 +45,7 @@ Les conseils utilisent les données du budget. Les pages de médiation et de doc
 
 ## Écran Aujourd’hui
 
-Le premier écran du budget affiche le vrai disponible, la date de fin de la projection et l’explication du point bas. Il présente ensuite les trois prochaines échéances et indique le nombre de retards. La courbe montre le solde prudent en fin de journée sur le même horizon. Le curseur permet de lire le solde à une date précise.
+Le premier écran du budget affiche le vrai disponible, la date de fin de la projection et l’explication du point bas. Le même bloc contient le solde bancaire, modifiable sur place, et la réserve de sécurité, qui ouvre son réglage. Il présente ensuite les trois prochaines échéances avec un bouton **Payé**, qui débite le solde et propose **Annuler**, et indique le nombre de retards. La courbe montre le solde prudent en fin de journée sur le même horizon. Le curseur permet de lire le solde à une date précise.
 
 ## Échéancier
 

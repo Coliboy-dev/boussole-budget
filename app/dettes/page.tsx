@@ -57,7 +57,7 @@ export default function DettesPage() {
       <div className="px-4 py-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">💳 Mes dettes</h1>
+            <h1 className="text-xl font-bold text-gray-800">Mes dettes</h1>
             <p className="text-sm text-gray-600 mt-0.5">Suivi de tes remboursements</p>
           </div>
           <button

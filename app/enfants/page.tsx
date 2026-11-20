@@ -8,6 +8,7 @@ import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
 import type { ChildExpense, ChildExpenseStatus, ChildExpenseCategory } from '@/lib/types';
+import { Icon, childCategoryIcons } from '@/components/ui/icons';
 
 const statusConfig: Record<
   ChildExpenseStatus,
@@ -19,13 +20,13 @@ const statusConfig: Record<
   receipt_sent: { label: 'Justificatif envoyé', variant: 'info' },
 };
 
-const categoryConfig: Record<ChildExpenseCategory, { label: string; icon: string }> = {
-  school: { label: 'Scolarité', icon: '📚' },
-  clothing: { label: 'Vêtements', icon: '👕' },
-  activities: { label: 'Activités', icon: '⚽' },
-  health: { label: 'Santé', icon: '💊' },
-  transport: { label: 'Transport', icon: '🚌' },
-  other: { label: 'Autre', icon: '📦' },
+const categoryConfig: Record<ChildExpenseCategory, { label: string }> = {
+  school: { label: 'Scolarité' },
+  clothing: { label: 'Vêtements' },
+  activities: { label: 'Activités' },
+  health: { label: 'Santé' },
+  transport: { label: 'Transport' },
+  other: { label: 'Autre' },
 };
 
 export default function EnfantsPage() {
@@ -83,7 +84,7 @@ export default function EnfantsPage() {
       <div className="px-4 py-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">👨‍👧‍👦 Frais enfants</h1>
+            <h1 className="text-xl font-bold text-gray-800">Frais enfants</h1>
             <p className="text-sm text-gray-600 mt-0.5">Dépenses pour tes enfants</p>
           </div>
           <button
@@ -106,7 +107,7 @@ export default function EnfantsPage() {
             </div>
           </div>
           <p className="text-xs text-gray-600 mt-3 pt-2 border-t border-purple-100">
-            💡 N&apos;oublie pas d&apos;envoyer les justificatifs pour te faire rembourser.
+            N&apos;oublie pas d&apos;envoyer les justificatifs pour te faire rembourser.
           </p>
         </Card>
 
@@ -115,7 +116,7 @@ export default function EnfantsPage() {
           return (
             <div key={childName}>
               <div className="flex items-center justify-between mb-2 px-1">
-                <h2 className="text-sm font-semibold text-gray-700">👤 {childName}</h2>
+                <h2 className="text-sm font-semibold text-gray-700">{childName}</h2>
                 <span className="text-sm font-bold text-gray-600">{formatCurrency(childTotal)}</span>
               </div>
               <div className="space-y-2">
@@ -125,8 +126,8 @@ export default function EnfantsPage() {
                   return (
                     <Card key={expense.id}>
                       <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-xl flex-shrink-0">
-                          {catConfig.icon}
+                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center flex-shrink-0">
+                          <Icon icon={childCategoryIcons[expense.category] ?? childCategoryIcons.other} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
@@ -148,11 +149,11 @@ export default function EnfantsPage() {
                             )}
                           </div>
                           {expense.receiptSent && (
-                            <p className="text-xs text-green-800 mt-1">✅ Justificatif envoyé</p>
+                            <p className="text-xs text-green-800 mt-1">Justificatif envoyé</p>
                           )}
                           {!expense.receiptSent && expense.status === 'pending' && (
                             <p className="text-xs text-amber-800 mt-1">
-                              📎 Justificatif non encore envoyé
+                              Justificatif non encore envoyé
                             </p>
                           )}
                           {expense.notes && (

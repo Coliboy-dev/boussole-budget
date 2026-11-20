@@ -1,14 +1,21 @@
 import Link from 'next/link';
+import { Check } from 'lucide-react';
 import Card from '@/components/ui/Card';
+import { Icon } from '@/components/ui/icons';
 import { formatShortDate, formatCurrency } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
 
 interface UpcomingDeadlinesProps {
   reminders: Reminder[];
   horizon: number;
+  /** Enregistre le paiement d’une charge ou d’une mensualité et débite le solde. */
+  onPay?: (reminder: Reminder) => void;
+  payDisabled?: boolean;
 }
 
-export default function UpcomingDeadlines({ reminders, horizon }: UpcomingDeadlinesProps) {
+const payable = (reminder: Reminder) => (reminder.type === 'expense' || reminder.type === 'debt') && Boolean(reminder.refId);
+
+export default function UpcomingDeadlines({ reminders, horizon, onPay, payDisabled = false }: UpcomingDeadlinesProps) {
   const upcoming = reminders.filter(({ isLate }) => !isLate).slice(0, 3);
   const lateCount = reminders.filter(({ isLate }) => isLate).length;
 
@@ -30,14 +37,32 @@ export default function UpcomingDeadlines({ reminders, horizon }: UpcomingDeadli
                   {formatShortDate(reminder.dueDate)}
                 </time>
               </div>
-              {reminder.amount !== undefined && (
-                <span className="shrink-0 text-sm font-semibold text-gray-800 tabular-nums">
-                  {formatCurrency(reminder.amount)}
-                </span>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                {reminder.amount !== undefined && (
+                  <span className="text-sm font-semibold text-gray-800 tabular-nums">
+                    {formatCurrency(reminder.amount)}
+                  </span>
+                )}
+                {onPay && payable(reminder) && (
+                  <button
+                    type="button"
+                    id={`pay-home-${reminder.id}`}
+                    disabled={payDisabled}
+                    onClick={() => onPay(reminder)}
+                    aria-label={`Marquer ${reminder.label} du ${formatShortDate(reminder.dueDate)} comme payé`}
+                    className="inline-flex items-center gap-1 rounded-xl border border-teal-700 px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-500"
+                  >
+                    <Icon icon={Check} className="size-4" />
+                    Payé
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
+      )}
+      {onPay && upcoming.some(payable) && (
+        <p className="mt-1 text-xs text-gray-600">« Payé » déduit le montant de ton solde.</p>
       )}
       {lateCount > 0 && (
         <Link href="/projection#en-retard" className="inline-flex min-h-11 items-center text-xs font-medium text-red-800 underline">
