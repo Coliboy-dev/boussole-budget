@@ -41,7 +41,7 @@ Le disponible correspond au plus bas des soldes projetés en fin de journée sur
 
 Depuis **Aujourd’hui** ou **Budget**, **Simuler un achat** teste une dépense à une date comprise dans la projection de 35 jours. Le montant est déduit à partir de cette date. Le résultat affiche le nouveau point bas et la marge après réserve et provisions. L’achat simulé ne change pas le budget enregistré.
 
-Une charge récurrente annuelle et datée réserve un douzième de son montant dans le vrai disponible lorsque sa prochaine échéance impayée se trouve après l’horizon. Une taxe de 300 € prévue en mars réserve ainsi 25 € sur une projection qui s’arrête en décembre. Si la facture tombe dans l’horizon, son montant complet figure dans la projection. La mensualisation de la charge reste comprise dans le total mensuel des charges.
+Une charge récurrente annuelle et datée réserve, dans le vrai disponible, ce qu’il faudrait déjà avoir mis de côté pour la payer à temps en épargnant un douzième par mois. Une taxe de 300 € prévue le 15 mars laisse trois versements de 25 € à partir du 20 novembre : 225 € sont réservés ce jour-là, puis la réserve grandit chaque mois. Juste après l’échéance précédente, il reste onze versements et un douzième suffit. Si la facture tombe dans l’horizon de 35 jours, son montant complet figure dans la projection. Le disponible baisse ainsi progressivement, sans chute brutale à l’approche de la facture. La mensualisation de la charge reste comprise dans le total mensuel des charges.
 
 ## Première ouverture et conseils
 
