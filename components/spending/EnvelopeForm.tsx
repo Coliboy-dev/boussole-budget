@@ -14,15 +14,21 @@ import Modal from '@/components/ui/Modal';
 const categories = Object.keys(spendingCategoryLabels) as SpendingCategory[];
 const inputClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
 
-export default function EnvelopeForm({ initial, onClose }: { initial?: Envelope; onClose: () => void }) {
+export default function EnvelopeForm({ initial, prefill, onClose }: {
+  initial?: Envelope;
+  prefill?: { category: SpendingCategory; monthlyAmount?: number };
+  onClose: () => void;
+}) {
   const state = useApp();
   const used = envelopesOf(state);
   const choices = initial ? [initial.category] : categories.filter(
     (category) => !used.some((envelope) => envelope.category === category),
   );
-  const [category, setCategory] = useState<SpendingCategory | ''>(initial?.category ?? '');
-  const [label, setLabel] = useState(initial?.label ?? '');
-  const [amount, setAmount] = useState(initial ? String(initial.monthlyAmount) : '');
+  const firstCategory = initial?.category ?? prefill?.category;
+  const firstAmount = initial?.monthlyAmount ?? prefill?.monthlyAmount;
+  const [category, setCategory] = useState<SpendingCategory | ''>(firstCategory ?? '');
+  const [label, setLabel] = useState(initial?.label ?? (firstCategory ? spendingCategoryLabels[firstCategory] : ''));
+  const [amount, setAmount] = useState(firstAmount?.toString() ?? '');
   const [replaceId, setReplaceId] = useState<string>();
   const formRef = useRef<HTMLFormElement>(null);
   const { errors, validate, clearFieldError } = useFormValidation();
@@ -80,7 +86,8 @@ export default function EnvelopeForm({ initial, onClose }: { initial?: Envelope;
             setReplaceId(undefined);
           }} />
         </FormField>
-        <FormField label="Montant mensuel (€)" required error={errors.amount}>
+        <FormField label="Montant mensuel (€)" required error={errors.amount}
+          hint={prefill && prefill.monthlyAmount === undefined ? 'Indique ce que tu veux réserver chaque mois.' : undefined}>
           <input name="amount" type="number" inputMode="decimal" min="0" step="0.01" className={inputClass}
             required value={amount} onChange={(event) => { setAmount(event.target.value); setReplaceId(undefined); }} />
         </FormField>

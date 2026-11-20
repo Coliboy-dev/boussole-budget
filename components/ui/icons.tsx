@@ -23,6 +23,19 @@ import {
 } from 'lucide-react';
 import type { ChildExpenseCategory, ExpenseCategory } from '@/lib/types';
 
+export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
+  rent: 'Logement',
+  energy: 'Énergie',
+  phone: 'Téléphone',
+  insurance: 'Assurance',
+  groceries: 'Courses',
+  transport: 'Transport',
+  health: 'Santé',
+  school: 'Scolarité',
+  subscriptions: 'Abonnements',
+  other: 'Autre',
+};
+
 export const expenseCategoryIcons: Record<ExpenseCategory, LucideIcon> = {
   rent: House,
   energy: Zap,

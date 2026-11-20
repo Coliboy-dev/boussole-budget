@@ -129,6 +129,12 @@ Dans **Aujourd’hui** ou **Budget → Dépenses du mois**, ajoute une dépense 
 
 Dans **Dépenses du mois**, choisis un mois pour consulter les dépenses par jour et la part utilisée de chaque enveloppe. Ouvre une ligne pour la modifier ou la supprimer. Si une charge récurrente correspond à la catégorie d’une enveloppe, le formulaire propose de la remplacer et affiche le vrai disponible avant et après avec le montant que tu as saisi. L’Échéancier affiche aussi les réservations des enveloppes.
 
+## Où part mon argent (P3, PR 3)
+
+Depuis **Budget** ou **Dépenses du mois**, ouvre **Où part mon argent** pour consulter le total du mois, sa répartition par catégorie et l’écart avec le mois précédent. Ouvre une ligne pour voir ses opérations. **Non encodé** représente le reste des sorties inexpliquées depuis tes relevés de solde. Pour réduire ce montant, ajoute une dépense oubliée et coche **Déjà comprise dans mon solde** si elle y figure.
+
+Dans une catégorie de dépenses du quotidien, tu peux tester un nouveau montant d’enveloppe et voir son effet sur ton vrai disponible avant d’appuyer sur **Appliquer**. Pour créer une enveloppe, Boussole propose une moyenne des mois précédents renseignés, arrondie aux 5 € supérieurs. Au premier mois renseigné, tu choisis le montant.
+
 ## Hygiène technique et formulaires
 
 Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.

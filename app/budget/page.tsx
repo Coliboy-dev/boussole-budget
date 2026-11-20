@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Baby, ChevronRight, Calculator, HandCoins, Receipt, ShoppingBasket, Target, Wallet, type LucideIcon } from 'lucide-react';
+import { Baby, ChevronRight, Calculator, ChartPie, HandCoins, Receipt, ShoppingBasket, Target, Wallet, type LucideIcon } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
 import { calculateTotalMonthlyIncome, formatCurrency } from '@/lib/budget-calculations';
 import { useApp } from '@/lib/context/AppContext';
@@ -108,6 +108,7 @@ export default function BudgetPage() {
       href: '/depenses', label: 'Dépenses du mois', icon: ShoppingBasket,
       detail: `${formatCurrency(fromCents(monthly.spentCents))} dépensés · ${formatCurrency(fromCents(monthly.remainingCents))} restants dans les enveloppes`,
     },
+    { href: '/analyse', label: 'Où part mon argent', icon: ChartPie },
     {
       href: '/dettes', label: 'Dettes', icon: HandCoins,
       detail: activeDebts.length > 0

@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChartPie, Plus } from 'lucide-react';
 import { CompactRows, DetailFact, DetailSheet, type CompactRow } from '@/components/budget/CompactRows';
 import EnvelopeForm from '@/components/spending/EnvelopeForm';
 import NewSpendingAction from '@/components/spending/NewSpendingAction';
 import QuickSpendingSheet from '@/components/spending/QuickSpendingSheet';
+import SpendingMonthSelector, { formatSpendingMonth } from '@/components/spending/SpendingMonthSelector';
 import { spendingCategoryIcons } from '@/components/spending/category-icons';
 import AlertBanner from '@/components/ui/AlertBanner';
 import Badge from '@/components/ui/Badge';
@@ -13,13 +15,9 @@ import { Icon } from '@/components/ui/icons';
 import { formatCurrency, formatDate } from '@/lib/budget-calculations';
 import { useApp } from '@/lib/context/AppContext';
 import { spentInMonth } from '@/lib/envelopes';
-import { addMonths, parseLocalDate } from '@/lib/local-date';
 import { fromCents, toCents } from '@/lib/money';
 import { envelopesOf, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
 import type { Envelope, Spending } from '@/lib/types';
-
-const monthFormatter = new Intl.DateTimeFormat('fr-BE', { month: 'long', year: 'numeric' });
-const monthButton = 'flex size-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 text-teal-800 hover:bg-teal-50 disabled:opacity-50';
 
 type Panel =
   | { type: 'spending' | 'edit-spending'; id: string }
@@ -61,8 +59,7 @@ export default function SpendingPage() {
   const [panel, setPanel] = useState<Panel>();
   const currentMonth = today.slice(0, 7);
   const month = selectedMonth && selectedMonth <= currentMonth ? selectedMonth : currentMonth;
-  const firstDay = `${month}-01`;
-  const monthTitle = monthFormatter.format(parseLocalDate(firstDay));
+  const monthTitle = formatSpendingMonth(month);
   const spendings = spendingsOf(state);
   const envelopes = envelopesOf(state);
   const envelopeRows = envelopes.map((item) => envelopeRow(item, spentInMonth(spendings, item.category, month)));
@@ -97,17 +94,7 @@ export default function SpendingPage() {
           Les données enregistrées ne peuvent pas être mises à jour dans ce navigateur.
         </AlertBanner>
       )}
-      <div className="flex items-center justify-between gap-2 rounded-2xl border border-line bg-white p-2">
-        <button type="button" aria-label="Mois précédent" className={monthButton}
-          onClick={() => setSelectedMonth(addMonths(firstDay, -1).slice(0, 7))}>
-          <Icon icon={ChevronLeft} />
-        </button>
-        <p role="status" className="text-center text-sm font-semibold text-slate-900">{monthTitle}</p>
-        <button type="button" aria-label="Mois suivant" className={monthButton} disabled={month >= currentMonth}
-          onClick={() => setSelectedMonth(addMonths(firstDay, 1).slice(0, 7))}>
-          <Icon icon={ChevronRight} />
-        </button>
-      </div>
+      <SpendingMonthSelector month={month} currentMonth={currentMonth} onChange={setSelectedMonth} />
       <section aria-labelledby="enveloppes" className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="enveloppes" className="font-semibold text-slate-900">Enveloppes</h2>
@@ -135,6 +122,11 @@ export default function SpendingPage() {
         <NewSpendingAction showTrigger={byDay.size === 0} />
       </section>
 
+      <Link href="/analyse"
+        className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50">
+        <Icon icon={ChartPie} /> Voir où part mon argent
+      </Link>
+
       {panel?.type === 'new-envelope' && <EnvelopeForm onClose={close} />}
       {panel?.type === 'edit-envelope' && envelope && <EnvelopeForm initial={envelope} onClose={close} />}
       {panel?.type === 'envelope' && envelope && (
@@ -145,7 +137,7 @@ export default function SpendingPage() {
           <dl className="space-y-2">
             <DetailFact label="Catégorie">{spendingCategoryLabels[envelope.category]}</DetailFact>
             <DetailFact label="Montant mensuel">{formatCurrency(envelope.monthlyAmount)}</DetailFact>
-            <DetailFact label="Dépensé en {monthTitle}">{formatCurrency(fromCents(spentInMonth(spendings, envelope.category, month)))}</DetailFact>
+            <DetailFact label={`Dépensé en ${monthTitle}`}>{formatCurrency(fromCents(spentInMonth(spendings, envelope.category, month)))}</DetailFact>
           </dl>
         </DetailSheet>
       )}
