@@ -53,6 +53,10 @@ Les conseils utilisent les données du budget. Les pages de médiation et de doc
 
 Le premier écran du budget affiche le vrai disponible, la date de fin de la projection et l’explication du point bas. Le même bloc contient le solde bancaire, modifiable sur place, et la réserve de sécurité, qui ouvre son réglage. Il présente ensuite les trois prochaines échéances avec un bouton **Payé**, qui débite le solde et propose **Annuler**, et indique le nombre de retards. La courbe montre le solde prudent en fin de journée sur le même horizon. Le curseur permet de lire le solde à une date précise.
 
+## Mise à jour du solde
+
+Quand le solde a été saisi il y a trois jours ou plus, ou qu’une échéance est passée depuis, **Aujourd’hui** le signale et propose **Mettre à jour**. Après la saisie du solde affiché par la banque, Boussole liste les échéances dont la date est atteinte et demande lesquelles ce solde contient déjà. Celles prévues après la dernière mise à jour du solde sont cochées par défaut. Les échéances cochées sont marquées comme payées sans débiter le solde une seconde fois ; les autres restent à payer. `tests/balance-update.test.mjs` vérifie que le vrai disponible obtenu ainsi est identique à celui d’un paiement saisi à la main, et qu’omettre la confirmation déduirait deux fois le loyer et la mensualité.
+
 ## Échéancier
 
 L’échéancier réunit les charges, les dettes et les rentrées prévues dans la page **Échéancier**. Les échéances en retard sont regroupées en haut. Un appui sur **Payé** enregistre l’échéance et débite le solde. Le vrai disponible est recalculé. **Annuler** rétablit le dernier paiement effectué sur cette page tant que le budget reste inchangé. Si le paiement est déjà déduit de ton solde, enregistre-le depuis **Charges** ou **Dettes** en cochant la case correspondante.

@@ -31,8 +31,8 @@ import {
   type UnscheduledDebtPayment,
 } from '@/lib/budget-state';
 import { todayInBrussels } from '@/lib/local-date';
-import { fromCents, toCents } from '@/lib/money';
 import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
+import { updateBalance, type SettledOccurrence } from '@/lib/balance-update';
 
 type RuntimeState = AppState & {
   lastBackupDate: string | null;
@@ -64,7 +64,7 @@ function serverDate(): string {
 type AppAction =
   | { type: 'HYDRATE'; payload: RuntimeState }
   | { type: 'SAVE_FAILED'; revision: number }
-  | { type: 'SET_BALANCE'; payload: { amount: number; today: string } }
+  | { type: 'SET_BALANCE'; payload: { amount: number; today: string; settled?: SettledOccurrence[] } }
   | { type: 'UPDATE_PROFILE'; payload: Partial<UserProfile> }
   | { type: 'ADD_INCOME'; payload: Omit<Income, 'id'> }
   | { type: 'UPDATE_INCOME'; payload: { id: string; data: Partial<Income> } }
@@ -100,11 +100,7 @@ function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
     case 'SAVE_FAILED':
       return action.revision === state.storageRevision ? { ...state, storageStatus: 'unsaved' } : state;
     case 'SET_BALANCE':
-      return {
-        ...state,
-        currentBalance: fromCents(toCents(action.payload.amount)),
-        balanceDate: action.payload.today,
-      };
+      return { ...state, ...updateBalance(state, action.payload) };
     case 'UPDATE_PROFILE':
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
     case 'ADD_INCOME':
@@ -212,7 +208,8 @@ export interface AppContextType extends AppState {
   finishOnboarding: (input?: FirstBudgetInput) => void;
   saveProfileSettings: (profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>) => void;
   clearBudget: () => void;
-  setBalance: (amount: number) => void;
+  /** Solde affiché par la banque ; `settled` liste les échéances qu’il contient déjà. */
+  setBalance: (amount: number, settled?: SettledOccurrence[]) => void;
   updateProfile: (data: Partial<UserProfile>) => void;
   addIncome: (income: Omit<Income, 'id'>) => void;
   updateIncome: (id: string, data: Partial<Income>) => void;
@@ -411,7 +408,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     finishOnboarding,
     saveProfileSettings,
     clearBudget,
-    setBalance: (amount) => dispatch({ type: 'SET_BALANCE', payload: { amount, today } }),
+    setBalance: (amount, settled) => dispatch({ type: 'SET_BALANCE', payload: { amount, today, settled } }),
     updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
     addIncome: (income) => dispatch({ type: 'ADD_INCOME', payload: income }),
     updateIncome: (id, data) => dispatch({ type: 'UPDATE_INCOME', payload: { id, data } }),
