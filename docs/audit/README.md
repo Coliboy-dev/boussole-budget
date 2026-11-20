@@ -65,7 +65,9 @@ La page **Dettes** affiche le restant dû et, quand le calendrier le permet, la 
 
 Utilise le build de production sur HTTPS, ou sur localhost pour un test. Ouvre l’application en ligne jusqu’à ce que **Plus** affiche **Mode hors ligne prêt**. Le cache garde les pages et les ressources de cette version. Le budget reste dans le stockage local. Le parcours hors ligne a été vérifié dans Chromium avec un profil mobile Android. L’installation sur les téléphones du pilote reste à vérifier.
 
-Les pages **Confidentialité** et **Mentions légales** sont accessibles dans **Plus**. Avant l’ouverture publique, renseigne l’identité et les coordonnées de l’éditeur, du responsable de publication et de l’hébergeur.
+Les pages **Confidentialité** et **Mentions légales** sont accessibles dans **Plus**. La confidentialité décrit le traitement des données techniques par Vercel. Les mentions légales prévoient les champs d’identification de l’éditeur selon l’article XII.6 du Code de droit économique belge. Les coordonnées de l’éditeur restent à renseigner.
+
+Les pages et les ressources HTTP portent la directive `noindex`. Le fichier `robots.txt` laisse les moteurs consulter les URL pour qu’ils puissent lire cette directive et retirer les URL déjà indexées. [Documentation Google sur la désindexation](https://developers.google.com/search/docs/crawling-indexing/block-indexing)
 
 ## Sauvegarde du budget
 

@@ -8,11 +8,33 @@ export default function LegalPage() {
       <h1 className="text-xl font-bold text-gray-900">Mentions légales</h1>
 
       <section className="space-y-2">
-        <h2 className="font-semibold text-gray-900">Éditeur et hébergement</h2>
+        <h2 className="font-semibold text-gray-900">Éditeur</h2>
         <p>
-          Les coordonnées de l’éditeur, du responsable de publication et de l’hébergeur
-          seront renseignées avant l’ouverture de Boussole Budget au public.
+          Le droit belge s’applique à Boussole Budget. Les renseignements sur l’éditeur relèvent de
+          l’article XII.6 du Code de droit économique.
         </p>
+        <dl className="space-y-2">
+          <div>
+            <dt className="font-medium text-gray-900">Dénomination</dt>
+            <dd>À renseigner</dd>
+          </div>
+          <div>
+            <dt className="font-medium text-gray-900">Adresse</dt>
+            <dd>À renseigner</dd>
+          </div>
+          <div>
+            <dt className="font-medium text-gray-900">E-mail de contact</dt>
+            <dd>À renseigner</dd>
+          </div>
+          <div>
+            <dt className="font-medium text-gray-900">Numéro d’entreprise (BCE)</dt>
+            <dd>À renseigner</dd>
+          </div>
+          <div>
+            <dt className="font-medium text-gray-900">Numéro de TVA</dt>
+            <dd>À renseigner</dd>
+          </div>
+        </dl>
       </section>
 
       <section className="space-y-2">

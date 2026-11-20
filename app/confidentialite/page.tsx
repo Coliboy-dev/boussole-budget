@@ -30,12 +30,20 @@ export default function PrivacyPage() {
       </section>
 
       <section className="space-y-2">
+        <h2 className="font-semibold text-gray-900">Hébergement</h2>
+        <p>
+          Vercel Inc. intervient comme sous-traitant pour l’hébergement du site. Lors des visites en ligne,
+          Vercel traite ton adresse IP et les données techniques nécessaires pour servir et sécuriser le site.
+          Ces données peuvent être transférées vers les États-Unis.
+        </p>
+      </section>
+
+      <section className="space-y-2">
         <h2 className="font-semibold text-gray-900">Fonctionnement hors ligne</h2>
         <p>
           Le navigateur garde une copie des pages et des ressources de l’application pour pouvoir les ouvrir
           sans réseau. Ce cache ne contient pas les données de ton budget. Boussole Budget n’utilise ni cookie
-          publicitaire ni outil de mesure d’audience. L’hébergement peut produire des journaux techniques lors
-          des visites en ligne.
+          publicitaire ni outil de mesure d’audience.
         </p>
       </section>
     </article>

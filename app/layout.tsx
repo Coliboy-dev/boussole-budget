@@ -9,6 +9,7 @@ import { RegisterOfflineSupport } from '@/components/layout/OfflineSupport';
 export const metadata: Metadata = {
   title: 'Boussole Budget',
   description: 'Reprends le contrôle de ton budget',
+  robots: { index: false },
   appleWebApp: { capable: true, title: 'Boussole' },
   icons: { apple: '/icons/boussole-180.png' },
 };

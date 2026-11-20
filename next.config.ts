@@ -18,7 +18,10 @@ const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_OFFLINE_BUILD: randomUUID() },
   async headers() {
     return [
-      { source: "/:path*", headers: securityHeaders },
+      {
+        source: "/:path*",
+        headers: [...securityHeaders, { key: "X-Robots-Tag", value: "noindex" }],
+      },
       {
         source: "/service-worker.js",
         headers: [
