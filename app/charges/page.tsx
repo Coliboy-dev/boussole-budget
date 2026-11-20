@@ -23,7 +23,7 @@ const categoryNames: Record<ExpenseCategory, string> = {
 };
 
 export default function ChargesPage() {
-  const { expenses, incomes, addExpense, updateExpense, deleteExpense } = useApp();
+  const { expenses, incomes, summary, addExpense, updateExpense, deleteExpense } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Expense | null>(null);
 
@@ -74,7 +74,7 @@ export default function ChargesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-800">Mes charges</h1>
-            <p className="text-sm text-gray-600 mt-0.5">Toutes tes dépenses mensuelles</p>
+            <p className="text-sm text-gray-600 mt-0.5">Charges et échéances du budget</p>
           </div>
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
@@ -118,6 +118,11 @@ export default function ChargesPage() {
                 {topCategory.name}
               </strong>{' '}
               ({formatCurrency(topCategory.amount)})
+            </p>
+          )}
+          {summary.availableForecast.annualProvision > 0 && (
+            <p className="mt-2 text-sm text-teal-950">
+              <strong>{formatCurrency(summary.availableForecast.annualProvision)}</strong> réservés pour les charges annuelles dans le vrai disponible.
             </p>
           )}
         </Card>

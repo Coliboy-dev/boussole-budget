@@ -10,7 +10,8 @@ import { formatShortDate } from '@/lib/budget-calculations';
 import { isBudgetAmount } from '@/lib/budget-schema';
 import { useApp } from '@/lib/context/AppContext';
 import { addDays, isLocalDate } from '@/lib/local-date';
-import { isPositiveOnboardingAmount, parseAmountInput, type FirstBudgetInput } from '@/lib/onboarding';
+import { parseAmountInput } from '@/lib/money';
+import { isPositiveOnboardingAmount, type FirstBudgetInput } from '@/lib/onboarding';
 import { AVAILABLE_HORIZON } from '@/lib/projection';
 
 type Step = 1 | 2 | 3;

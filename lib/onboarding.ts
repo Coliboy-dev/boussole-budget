@@ -9,14 +9,6 @@ export interface FirstBudgetInput {
   bills: { label: string; amount: number; date: string }[];
 }
 
-export function parseAmountInput(text: string): number {
-  const value = text.trim();
-  if (!/^[+-]?(?:(?:\d+|\d{1,3}(?:[ \u00a0\u202f]\d{3})+)(?:[.,]\d{1,2})?|[.,]\d{1,2})$/.test(value)) {
-    return NaN;
-  }
-  return Number(value.replace(/[ \u00a0\u202f]/g, '').replace(',', '.'));
-}
-
 export function isPositiveOnboardingAmount(amount: number): boolean {
   return isNonNegativeBudgetAmount(amount) && amount > 0;
 }

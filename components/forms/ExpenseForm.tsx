@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Expense, ExpenseCategory, Frequency } from '@/lib/types';
+import { formatCurrency, toMonthlyAmount } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { isLocalDate } from '@/lib/local-date';
 import FormField from './FormField';
@@ -31,10 +32,12 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+  const amount = parseFloat(form.amount);
+  const annualProvision = form.frequency === 'annual' && isNonNegativeBudgetAmount(amount)
+    ? toMonthlyAmount(amount, 'annual') : 0;
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const amount = parseFloat(form.amount);
     const isRecurring = form.frequency !== 'one_time';
     if (!validate(e.currentTarget, {
       label: form.label.trim() ? undefined : 'Renseigne l’intitulé de la charge.',
@@ -119,6 +122,10 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
           </select>
         </FormField>
       </div>
+
+      {annualProvision > 0 && (
+        <p className="mb-4 text-sm text-teal-900">À prévoir chaque mois pour cette charge <strong>{formatCurrency(annualProvision)}</strong>.</p>
+      )}
 
       <FormField label={form.frequency === 'one_time' ? 'Date d’échéance' : '1re échéance'} required error={errors.dueDate}>
         <input

@@ -9,9 +9,10 @@ interface DailyBalanceCurveProps {
   points: DailyBalance[];
   lowestDate: string;
   reserve: number;
+  includesAnnualProvision?: boolean;
 }
 
-export default function DailyBalanceCurve({ points, lowestDate, reserve }: DailyBalanceCurveProps) {
+export default function DailyBalanceCurve({ points, lowestDate, reserve, includesAnnualProvision }: DailyBalanceCurveProps) {
   const [selectedDay, setSelectedDay] = useState<number>();
   if (points.length === 0) return null;
 
@@ -30,6 +31,7 @@ export default function DailyBalanceCurve({ points, lowestDate, reserve }: Daily
   const reserveLineY = y(reserve);
   const selectedX = x(day);
   const selectedY = y(point.balance);
+  const reserveLabel = includesAnnualProvision ? 'Réserve et provisions' : 'Réserve de sécurité';
 
   return (
     <Card className="space-y-3">
@@ -42,7 +44,7 @@ export default function DailyBalanceCurve({ points, lowestDate, reserve }: Daily
           viewBox="0 0 360 128"
           className="block w-full"
           role="img"
-          aria-label="Évolution du solde prudent et repère de la réserve de sécurité"
+          aria-label={`Évolution du solde prudent, ${reserveLabel.toLowerCase()}`}
         >
           <line x1="10" x2="350" y1="116" y2="116" className="stroke-gray-200" />
           <line x1="10" x2="350" y1={reserveLineY} y2={reserveLineY} strokeDasharray="5 4" className="stroke-amber-800" />
@@ -57,7 +59,7 @@ export default function DailyBalanceCurve({ points, lowestDate, reserve }: Daily
           </div>
           <div className="flex items-center gap-2">
             <span aria-hidden="true" className="inline-block w-5 border-t border-dashed border-amber-800" />
-            Réserve de sécurité {formatCurrency(reserve)}
+            {reserveLabel} {formatCurrency(reserve)}
           </div>
         </figcaption>
       </figure>

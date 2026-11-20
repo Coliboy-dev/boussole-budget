@@ -44,7 +44,8 @@ export default function SummaryCard({ summary, hasUndatedPayments, hasRecordedBa
         ) : (
           <p className="text-sm leading-relaxed text-gray-700">
             Point bas prévu le <time dateTime={forecast.date}>{formatShortDate(forecast.date)}</time> à{' '}
-            {formatCurrency(forecast.balance)}{causes && ` après ${causes}`}, moins {formatCurrency(summary.safetyReserve)} de réserve.
+            {formatCurrency(forecast.balance)}{causes && ` après ${causes}`}, moins {formatCurrency(summary.safetyReserve)} de réserve
+            {forecast.annualProvision > 0 && ` et ${formatCurrency(forecast.annualProvision)} de provisions annuelles`}.
           </p>
         )}
         {hasUndatedPayments && (
