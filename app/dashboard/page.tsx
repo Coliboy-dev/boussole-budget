@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { Calculator } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import SummaryCard from '@/components/dashboard/SummaryCard';
@@ -11,9 +13,9 @@ import BackupStatus from '@/components/dashboard/BackupStatus';
 import BalanceRows from '@/components/dashboard/BalanceRows';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
 import AlertBanner from '@/components/ui/AlertBanner';
-import { getUpcomingReminders, formatDate } from '@/lib/budget-calculations';
+import { Icon } from '@/components/ui/icons';
+import { getUpcomingReminders, formatDate, hasUndatedPayments } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
-import { isLocalDate } from '@/lib/local-date';
 
 export default function DashboardPage() {
   const { isBudgetLoading, needsOnboarding } = useApp();
@@ -42,10 +44,7 @@ function SavedBudgetDashboard() {
   }, [paymentFeedback]);
 
   const reminders = getUpcomingReminders(expenses, debts, [], today, summary.availableForecast.horizon);
-  const hasUndatedPayments = expenses.some((expense) => !expense.isPaid && !isLocalDate(expense.dueDate))
-    || debts.some((debt) => debt.monthlyPayment > 0 && debt.remainingAmount > 0
-      && debt.status !== 'suspended' && debt.status !== 'completed' && debt.status !== 'late'
-      && !isLocalDate(debt.nextDueDate));
+  const hasAnnualProvision = summary.availableForecast.annualProvision > 0;
 
   function pay(reminder: Reminder) {
     if ((reminder.type !== 'expense' && reminder.type !== 'debt') || !reminder.refId) return;
@@ -82,9 +81,16 @@ function SavedBudgetDashboard() {
         </AlertBanner>
       )}
 
-      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments} hasRecordedBalance={Boolean(balanceDate)}>
+      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments(expenses, debts)} hasRecordedBalance={Boolean(balanceDate)}>
         <BalanceRows />
       </SummaryCard>
+
+      {(!summary.emptyBudget || balanceDate) && (
+        <Link href="/simulation" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50">
+          <Icon icon={Calculator} />
+          Simuler un achat
+        </Link>
+      )}
 
       {summary.riskLevel === 'danger' && (
         <AlertBanner variant="danger" title="Découvert prévu">
@@ -92,8 +98,8 @@ function SavedBudgetDashboard() {
         </AlertBanner>
       )}
       {summary.riskLevel === 'fragile' && (
-        <AlertBanner variant="warning" title="Sous la réserve de sécurité">
-          Ton solde prévu descend sous ta réserve. Évite les dépenses imprévues.
+        <AlertBanner variant="warning" title={hasAnnualProvision ? 'Sous le montant à garder' : 'Sous la réserve de sécurité'}>
+          Ton solde prévu descend sous ta réserve{hasAnnualProvision && ' et tes provisions'}. Évite les dépenses imprévues.
         </AlertBanner>
       )}
 
@@ -110,7 +116,8 @@ function SavedBudgetDashboard() {
         <DailyBalanceCurve
           points={summary.availableForecast.dailyBalances}
           lowestDate={summary.availableForecast.date}
-          reserve={summary.safetyReserve}
+          reserve={summary.availableForecast.reservedAmount}
+          includesAnnualProvision={hasAnnualProvision}
         />
       )}
 

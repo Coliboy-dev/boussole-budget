@@ -11,27 +11,9 @@ import type {
   MediationStep,
 } from './types.ts';
 import { addDays, daysBetween, isLocalDate, monthsBetween, parseLocalDate, todayInBrussels } from './local-date.ts';
-import { fromCents, toCents } from './money.ts';
+import { fromCents, monthlyCents, toCents } from './money.ts';
 import { forecastOccurrences } from './occurrences.ts';
 import { AVAILABLE_HORIZON, buildProjection } from './projection.ts';
-
-function monthlyCents(amount: number, frequency: Frequency): number {
-  const cents = toCents(amount);
-  switch (frequency) {
-    case 'weekly':
-      return Math.round(cents * 52 / 12);
-    case 'bi_monthly':
-      return Math.round(cents / 2);
-    case 'quarterly':
-      return Math.round(cents / 3);
-    case 'annual':
-      return Math.round(cents / 12);
-    case 'one_time':
-      return 0;
-    default:
-      return cents;
-  }
-}
 
 export function toMonthlyAmount(amount: number, frequency: Frequency): number {
   return fromCents(monthlyCents(amount, frequency));
@@ -65,6 +47,13 @@ export function calculateTotalMonthlyExpenses(expenses: Expense[]): number {
 
 export function calculateTotalMonthlyDebts(debts: Debt[]): number {
   return fromCents(monthlyDebtCents(debts));
+}
+
+export function hasUndatedPayments(expenses: Expense[], debts: Debt[]): boolean {
+  return expenses.some((expense) => !expense.isPaid && !isLocalDate(expense.dueDate))
+    || debts.some((debt) => debt.monthlyPayment > 0 && debt.remainingAmount > 0
+      && debt.status !== 'suspended' && debt.status !== 'completed' && debt.status !== 'late'
+      && !isLocalDate(debt.nextDueDate));
 }
 
 export function calculateSavingsCapacity(monthlyMargin: number, goals: Goal[]): number {
@@ -108,10 +97,8 @@ export function calculateBudgetSummary(
     today,
     horizon: AVAILABLE_HORIZON,
   });
-  const reserve = toCents(safetyReserve);
   const empty = currentBalance === 0 && incomes.length === 0 && expenses.length === 0
     && debts.length === 0 && childExpenses.length === 0;
-  const trueAvailable = empty ? 0 : fromCents(toCents(forecast.lowestBalance) - reserve);
 
   return {
     currentBalance,
@@ -120,7 +107,7 @@ export function calculateBudgetSummary(
     totalMonthlyDebts: fromCents(totalMonthlyDebts),
     totalMonthlyChildExpenses: 0,
     safetyReserve,
-    trueAvailable,
+    trueAvailable: empty ? 0 : forecast.available,
     savingsCapacity: calculateSavingsCapacity(fromCents(monthlyMargin), goals),
     emptyBudget: empty,
     riskLevel: empty ? 'safe' : forecast.lowestRisk,
@@ -130,7 +117,9 @@ export function calculateBudgetSummary(
       causes: forecast.lowestCauses,
       horizon: AVAILABLE_HORIZON,
       dailyBalances: forecast.dailyBalances,
-      optimisticAvailable: empty ? 0 : fromCents(toCents(forecast.optimisticLowestBalance) - reserve),
+      annualProvision: forecast.annualProvision,
+      reservedAmount: forecast.reservedAmount,
+      optimisticAvailable: empty ? 0 : forecast.optimisticAvailable,
     },
   };
 }

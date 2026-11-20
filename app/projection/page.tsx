@@ -149,7 +149,8 @@ export default function ProjectionPage() {
       {projection.safetyWarning && (
         <AlertBanner variant="warning" title="Attention — solde bas prévu">
           Ton solde pourrait descendre sous{' '}
-          <strong>{formatCurrency(userProfile.safetyReserve)}</strong> le{' '}
+          <strong>{formatCurrency(projection.reservedAmount)}</strong>
+          {projection.annualProvision > 0 && ' de réserve et provisions'} le{' '}
           <strong>{formatShortDate(projection.lowestDate)}</strong>.
         </AlertBanner>
       )}

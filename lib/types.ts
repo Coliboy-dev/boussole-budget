@@ -166,6 +166,8 @@ export interface BudgetSummary {
     causes: string[];
     horizon: number;
     dailyBalances: DailyBalance[];
+    annualProvision: number;
+    reservedAmount: number;
     optimisticAvailable: number;
   };
 }

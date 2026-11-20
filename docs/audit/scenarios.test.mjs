@@ -36,7 +36,9 @@ import {
 } from '../../lib/mock-data.ts';
 import { buildProjection } from '../../lib/projection.ts';
 import { estimateDebtEndDate, nextDebtOccurrence } from '../../lib/debt-payoff.ts';
-import { createFirstBudget, parseAmountInput } from '../../lib/onboarding.ts';
+import { createFirstBudget } from '../../lib/onboarding.ts';
+import { parseAmountInput } from '../../lib/money.ts';
+import { simulatePurchase } from '../../lib/purchase-simulation.ts';
 
 process.env.TZ = 'Europe/Brussels';
 
@@ -726,6 +728,80 @@ test('La date du dernier export reste locale et les anciens budgets v2 restent l
   assert.equal(deserializeStoredBudget(stored).lastBackupDate, '2026-11-20');
   assert.equal(serializeBudget(deserializeBudget(stored)), previous);
   assert.equal(deserializeStoredBudget(stored.replace('2026-11-20', '2026-02-31')).lastBackupDate, null);
+});
+
+test('P2-2 — une taxe annuelle de 300 € hors horizon réserve 25 € et ne modifie pas le solde', () => {
+  const today = '2026-11-20';
+  const tax = expense(300, { id: 'taxe', frequency: 'annual', dueDate: '2027-03-15' });
+  const salary = income(600, { expectedDate: '2027-01-01' });
+  const summary = calculateBudgetSummary(500, [salary], [tax], [], [], 50, [], today);
+  assert.equal(summary.trueAvailable, 425);
+  assert.equal(summary.availableForecast.balance, 500);
+  assert.equal(summary.availableForecast.annualProvision, 25);
+  assert.equal(summary.availableForecast.reservedAmount, 75);
+  assert.equal(summary.totalMonthlyExpenses, 25);
+  assert.equal(summary.savingsCapacity, 575);
+});
+
+test('P2-2 — la facture annuelle proche est comptée une fois, y compris après son paiement', () => {
+  const today = '2027-03-05';
+  const dueDate = '2027-03-15';
+  const tax = expense(300, { id: 'taxe', frequency: 'annual', dueDate });
+  const state = { ...emptyState, currentBalance: 500, expenses: [tax] };
+  const summaryFor = (budget) => calculateBudgetSummary(budget.currentBalance, [], budget.expenses, [], [], 50, [], today);
+  const before = summaryFor(state);
+  const paid = recordPayment(state, { type: 'expense', id: 'taxe', today, dueDate, balanceIncludesPayment: false });
+  const after = summaryFor(paid);
+  assert.equal(before.availableForecast.date, dueDate);
+  assert.equal(before.availableForecast.annualProvision, 0);
+  assert.equal(paid.currentBalance, 200);
+  assert.equal(after.availableForecast.annualProvision, 0);
+  assert.equal(before.trueAvailable, 150);
+  assert.equal(after.trueAvailable, 150);
+});
+
+test('P2-2 — une charge annuelle terminée ou sans date ne réserve aucun montant', () => {
+  const today = '2026-11-20';
+  const expenses = [
+    expense(120, { id: 'annulee', frequency: 'annual', dueDate: '2027-03-15', endDate: '2027-03-15',
+      occurrenceStatuses: { '2027-03-15': 'cancelled' } }),
+    expense(240, { id: 'sans-date', frequency: 'annual' }),
+  ];
+  const summary = calculateBudgetSummary(500, [], expenses, [], [], 50, [], today);
+  assert.equal(summary.availableForecast.annualProvision, 0);
+  assert.equal(summary.trueAvailable, 450);
+});
+
+test('P2-1 — déplacer un achat après une rentrée certaine change la réponse et préserve la projection', () => {
+  const today = '2026-11-20';
+  const incomeDate = '2026-12-01';
+  const incomes = [
+    income(200, { id: 'salaire', frequency: 'one_time', expectedDate: incomeDate }),
+    income(1000, { id: 'incertain', frequency: 'one_time', expectedDate: today, isConfirmed: false }),
+  ];
+  const tax = expense(300, { frequency: 'annual', dueDate: '2027-03-15' });
+  const { availableForecast } = calculateBudgetSummary(300, incomes, [tax], [], [], 50, [], today);
+  assert.deepEqual(simulatePurchase(availableForecast, 250, today), {
+    affordable: false, lowestDate: today, lowestBalance: 50, available: -25,
+  });
+  assert.deepEqual(simulatePurchase(availableForecast, 250, incomeDate), {
+    affordable: true, lowestDate: incomeDate, lowestBalance: 250, available: 175,
+  });
+  assert.equal(availableForecast.dailyBalances[0].balance, 300);
+  assert.equal(availableForecast.dailyBalances.at(-1).balance, 500);
+});
+
+test('P2-1 — le seuil exact, le dernier jour et les saisies invalides sont traités', () => {
+  const today = '2026-11-20';
+  const { availableForecast } = calculateBudgetSummary(500, [], [], [], [], 50, [], today);
+  assert.deepEqual(simulatePurchase(availableForecast, 450, '2026-12-25'), {
+    affordable: true, lowestDate: '2026-12-25', lowestBalance: 50, available: 0,
+  });
+  assert.equal(simulatePurchase(availableForecast, 450.01, '2026-12-25')?.affordable, false);
+  assert.equal(simulatePurchase(availableForecast, 1, '2026-12-26'), null);
+  assert.equal(simulatePurchase(availableForecast, 1, '2026-11-19'), null);
+  assert.equal(simulatePurchase(availableForecast, 1, '2026-11-31'), null);
+  assert.equal(simulatePurchase(availableForecast, 0, today), null);
 });
 
 test('Un fichier tronqué, incompatible ou incohérent est refusé', () => {

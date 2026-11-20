@@ -1,3 +1,4 @@
+import { annualProvisionsCents } from './annual-provisions.ts';
 import type { Income, Expense, Debt, ChildExpense, DailyBalance } from './types.ts';
 import { addDays, daysBetween, todayInBrussels } from './local-date.ts';
 import { fromCents, toCents } from './money.ts';
@@ -34,6 +35,10 @@ export interface ProjectionResult {
   lowestCauses: string[];
   lowestRisk: RiskLevel;
   optimisticLowestBalance: number;
+  annualProvision: number;
+  reservedAmount: number;
+  available: number;
+  optimisticAvailable: number;
   safetyWarning: boolean;
 }
 
@@ -75,7 +80,8 @@ export function buildProjection(
     return { id: `${type}-${sourceId}-${dueDate}`, sourceId, date, dueDate, label, amount: fromCents(amountCents), type, isEstimated, isLate };
   });
 
-  const reserve = toCents(safetyReserve);
+  const annualProvision = annualProvisionsCents(expenses, today, end);
+  const reserve = toCents(safetyReserve) + annualProvision;
   let balance = toCents(currentBalance);
   let optimisticBalance = balance;
   let lowest = Infinity;
@@ -126,6 +132,10 @@ export function buildProjection(
     lowestCauses,
     lowestRisk: riskFor(lowest, reserve),
     optimisticLowestBalance: fromCents(optimisticLowest),
+    annualProvision: fromCents(annualProvision),
+    reservedAmount: fromCents(reserve),
+    available: fromCents(lowest - reserve),
+    optimisticAvailable: fromCents(optimisticLowest - reserve),
     safetyWarning: lowest < reserve,
   };
 }

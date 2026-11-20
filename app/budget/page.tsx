@@ -6,6 +6,7 @@ const budgetLinks = [
   { href: '/dettes', label: 'Dettes' },
   { href: '/enfants', label: 'Frais des enfants' },
   { href: '/objectifs', label: 'Objectifs' },
+  { href: '/simulation', label: 'Simuler un achat' },
 ];
 
 export default function BudgetPage() {

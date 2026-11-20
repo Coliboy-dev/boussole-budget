@@ -37,6 +37,12 @@ Le budget v2 est enregistré en centimes entiers. La migration conserve la copie
 
 Le disponible correspond au plus bas des soldes projetés en fin de journée sur 35 jours, moins la réserve. Les revenus incertains alimentent une estimation distincte. Sur la démo du 29 mai, le solde prudent atteint 148,50 € le 1er juin après le loyer et le transport, soit 98,50 € après réserve.
 
+## Simulateur d’achat et charges annuelles
+
+Depuis **Aujourd’hui** ou **Budget**, **Simuler un achat** teste une dépense à une date comprise dans la projection de 35 jours. Le montant est déduit à partir de cette date. Le résultat affiche le nouveau point bas et la marge après réserve et provisions. L’achat simulé ne change pas le budget enregistré.
+
+Une charge récurrente annuelle et datée réserve un douzième de son montant dans le vrai disponible lorsque sa prochaine échéance impayée se trouve après l’horizon. Une taxe de 300 € prévue en mars réserve ainsi 25 € sur une projection qui s’arrête en décembre. Si la facture tombe dans l’horizon, son montant complet figure dans la projection. La mensualisation de la charge reste comprise dans le total mensuel des charges.
+
 ## Première ouverture et conseils
 
 Un nouveau navigateur propose trois questions sur le solde bancaire, la prochaine rentrée certaine et les factures à payer. Le solde et les échéances saisies sont enregistrés ensemble, puis le premier vrai disponible s’affiche avec le détail du calcul. Le revenu et les factures saisis sont ponctuels. Un budget déjà enregistré ou restauré ouvre directement le tableau de bord. La démo en lecture seule et la restauration sont accessibles dès le premier écran.
