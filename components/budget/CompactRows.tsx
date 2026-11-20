@@ -10,7 +10,7 @@ export interface CompactRow {
   title: string;
   icon: LucideIcon;
   /** Couleur de la pastille d’icône. */
-  tone?: 'teal' | 'green' | 'amber';
+  tone?: 'teal' | 'green' | 'amber' | 'neutral';
   badges?: ReactNode;
   meta?: ReactNode;
   amount: ReactNode;
@@ -23,6 +23,7 @@ const tones = {
   teal: 'bg-teal-50 text-teal-800',
   green: 'bg-green-50 text-green-800',
   amber: 'bg-amber-50 text-amber-800',
+  neutral: 'bg-slate-100 text-slate-700',
 };
 
 /** Liste compacte : une ligne par élément, un appui ouvre le détail. */
@@ -34,7 +35,8 @@ export function CompactRows({ rows, onOpen }: { rows: CompactRow[]; onOpen: (id:
           <button
             type="button"
             onClick={() => onOpen(row.id)}
-            className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 focus-visible:-outline-offset-2"
+            className={`flex w-full items-start gap-3 px-4 py-3 text-left focus-visible:-outline-offset-2
+              ${row.tone === 'neutral' ? 'bg-slate-50 hover:bg-slate-100' : 'hover:bg-slate-50'}`}
           >
             <span className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl ${tones[row.tone ?? 'teal']}`}>
               <Icon icon={row.icon} className="size-[18px]" />
@@ -64,12 +66,12 @@ interface DetailSheetProps {
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  deleteLabel: string;
+  deleteLabel?: string;
   children: ReactNode;
 }
 
 /** Détail d’un élément : informations, paiement, modification et suppression confirmée. */
-export function DetailSheet({ title, onClose, onEdit, onDelete, deleteLabel, children }: DetailSheetProps) {
+export function DetailSheet({ title, onClose, onEdit, onDelete, deleteLabel = 'Supprimer cet élément ?', children }: DetailSheetProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (

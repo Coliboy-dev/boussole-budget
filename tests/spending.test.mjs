@@ -18,7 +18,7 @@ import {
   spendingsOf,
   upsertEnvelope,
 } from '../lib/spending.ts';
-import { analyzeMonth } from '../lib/spending-analysis.ts';
+import { analyzeMonth, envelopeSuggestion } from '../lib/spending-analysis.ts';
 
 process.env.TZ = 'Europe/Brussels';
 
@@ -284,4 +284,18 @@ test('P3-1 — 15. le dictionnaire et la mémoire proposent les catégories pré
 test('P3-1 — le simulateur utilise le disponible après les réservations des enveloppes', () => {
   const result = simulatePurchase(summary(base).availableForecast, 300, today);
   assert.deepEqual(result, { affordable: true, lowestDate: '2027-01-01', lowestBalance: 50, available: 0 });
+});
+
+test('P3-3 — le logement, les dettes et le non encodé ne proposent pas d’enveloppe', () => {
+  for (const category of ['rent', 'debts', 'unrecorded']) {
+    assert.equal(envelopeSuggestion(category, 6300), null, category);
+  }
+});
+
+test('P3-3 — la suggestion Restaurants est sans montant en l’absence d’historique', () => {
+  assert.deepEqual(envelopeSuggestion('restaurants', null), { monthlyAmount: undefined });
+});
+
+test('P3-3 — la suggestion Restaurants arrondit 63 € à 65 €', () => {
+  assert.deepEqual(envelopeSuggestion('restaurants', 6300), { monthlyAmount: 65 });
 });

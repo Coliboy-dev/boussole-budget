@@ -9,26 +9,13 @@ import { addDays } from '@/lib/local-date';
 import { expenseOccurrences, isOpenOccurrence, type Occurrence } from '@/lib/occurrences';
 import OccurrencePayment from './OccurrencePayment';
 import { CompactRows, DetailFact, DetailSheet, type CompactRow } from './CompactRows';
-import { Icon, expenseCategoryIcons } from '@/components/ui/icons';
+import { Icon, expenseCategoryIcons, expenseCategoryLabels as categoryLabels } from '@/components/ui/icons';
 
 interface ExpenseListProps {
   expenses: Expense[];
   onEdit?: (expense: Expense) => void;
   onDelete?: (id: string) => void;
 }
-
-const categoryLabels: Record<ExpenseCategory, string> = {
-  rent: 'Logement',
-  energy: 'Énergie',
-  phone: 'Téléphone',
-  insurance: 'Assurance',
-  groceries: 'Courses',
-  transport: 'Transport',
-  health: 'Santé',
-  school: 'Scolarité',
-  subscriptions: 'Abonnements',
-  other: 'Autre',
-};
 
 export const frequencyLabels: Record<Frequency, string> = {
   monthly: 'Mensuel',
