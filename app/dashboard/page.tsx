@@ -12,6 +12,7 @@ import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import BackupStatus from '@/components/dashboard/BackupStatus';
 import BalanceRows from '@/components/dashboard/BalanceRows';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
+import NewSpendingAction from '@/components/spending/NewSpendingAction';
 import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
 import { getUpcomingReminders, formatDate, hasUndatedPayments } from '@/lib/budget-calculations';
@@ -33,7 +34,7 @@ export default function DashboardPage() {
 function SavedBudgetDashboard() {
   const {
     summary, advice, expenses, debts, balanceDate, storageBlocked, today, goals, lastBackupDate,
-    recordScheduledPayment, undoScheduledPayment,
+    recordScheduledPayment, undoScheduledPayment, lastAddedSpendingId,
   } = useApp();
   const [paymentFeedback, setPaymentFeedback] = useState<{ reminder: Reminder; paid: boolean }>();
   const [paymentError, setPaymentError] = useState('');
@@ -69,7 +70,7 @@ function SavedBudgetDashboard() {
   }
 
   return (
-    <div className={`space-y-4 px-4 py-4 ${paymentFeedback?.paid || paymentError ? 'pb-28' : ''}`}>
+    <div className={`space-y-4 px-4 py-4 ${paymentFeedback?.paid || paymentError || lastAddedSpendingId ? 'pb-28' : ''}`}>
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-xl font-bold text-gray-900">Aujourd’hui</h1>
         <time dateTime={today} className="text-sm text-gray-600">{formatDate(today)}</time>
@@ -85,12 +86,15 @@ function SavedBudgetDashboard() {
         <BalanceRows />
       </SummaryCard>
 
-      {(!summary.emptyBudget || balanceDate) && (
-        <Link href="/simulation" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50">
-          <Icon icon={Calculator} />
-          Simuler un achat
-        </Link>
-      )}
+      <div className="flex flex-wrap gap-2">
+        <NewSpendingAction onOpen={() => { setPaymentFeedback(undefined); setPaymentError(''); }} />
+        {(!summary.emptyBudget || balanceDate) && (
+          <Link href="/simulation" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50">
+            <Icon icon={Calculator} />
+            Simuler un achat
+          </Link>
+        )}
+      </div>
 
       {summary.riskLevel === 'danger' && (
         <AlertBanner variant="danger" title="Découvert prévu">

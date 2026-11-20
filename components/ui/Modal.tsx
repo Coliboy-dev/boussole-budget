@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
 
 interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  initialFocusRef?: RefObject<HTMLElement | null>;
 }
 
-export default function Modal({ title, onClose, children }: ModalProps) {
+export default function Modal({ title, onClose, children, initialFocusRef }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -19,13 +20,14 @@ export default function Modal({ title, onClose, children }: ModalProps) {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     dialog.showModal();
+    initialFocusRef?.current?.focus();
 
     return () => {
       dialog.close();
       document.body.style.overflow = previousOverflow;
       if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true });
     };
-  }, []);
+  }, [initialFocusRef]);
 
   return (
     <dialog

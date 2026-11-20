@@ -13,6 +13,20 @@ export function spentInMonth(spendings: Spending[], category: SpendingCategory, 
     .reduce((total, item) => total + toCents(item.amount), 0);
 }
 
+export function monthlySpendingTotals(spendings: Spending[], envelopes: Envelope[], month: string) {
+  const totals = new Map<SpendingCategory, number>();
+  for (const item of spendings) {
+    if (item.date.slice(0, 7) !== month) continue;
+    totals.set(item.category, (totals.get(item.category) ?? 0) + toCents(item.amount));
+  }
+
+  return {
+    spentCents: [...totals.values()].reduce((sum, cents) => sum + cents, 0),
+    remainingCents: envelopes.reduce((sum, envelope) =>
+      sum + Math.max(0, toCents(envelope.monthlyAmount) - (totals.get(envelope.category) ?? 0)), 0),
+  };
+}
+
 export function envelopeOccurrences(
   envelopes: Envelope[], spendings: Spending[], today: string, end: string,
 ): EnvelopeOccurrence[] {
