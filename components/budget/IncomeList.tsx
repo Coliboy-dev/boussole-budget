@@ -1,6 +1,6 @@
 'use client';
 
-import Card from '@/components/ui/Card';
+import { useState } from 'react';
 import Badge from '@/components/ui/Badge';
 import { formatCurrency, formatShortDate, toMonthlyAmount } from '@/lib/budget-calculations';
 import type { Income } from '@/lib/types';
@@ -8,6 +8,8 @@ import { useApp } from '@/lib/context/AppContext';
 import { addDays } from '@/lib/local-date';
 import { incomeOccurrences, isOpenOccurrence } from '@/lib/occurrences';
 import OccurrencePayment from './OccurrencePayment';
+import { CompactRows, DetailFact, DetailSheet, type CompactRow } from './CompactRows';
+import { frequencyLabels } from './ExpenseList';
 import { Wallet } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
 
@@ -35,9 +37,22 @@ const freqLabels: Record<string, string> = {
   one_time: 'unique',
 };
 
+function nextIncome(income: Income, today: string) {
+  const nextYear = addDays(today, 366);
+  const end = income.expectedDate && income.expectedDate > nextYear ? income.expectedDate : nextYear;
+  return incomeOccurrences(income, today, end).find(isOpenOccurrence);
+}
+
+function ConfirmationBadge({ income }: { income: Income }) {
+  return income.isConfirmed
+    ? <Badge variant="success">Confirmé</Badge>
+    : <Badge variant="warning">Incertain</Badge>;
+}
+
 export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProps) {
   const { today } = useApp();
-  const nextYear = addDays(today, 366);
+  const [openId, setOpenId] = useState<string | null>(null);
+
   if (incomes.length === 0) {
     return (
       <div className="text-center py-8 text-gray-600">
@@ -47,78 +62,58 @@ export default function IncomeList({ incomes, onEdit, onDelete }: IncomeListProp
     );
   }
 
+  const rows: CompactRow[] = incomes.map((income) => {
+    const next = nextIncome(income, today);
+    const type = typeLabels[income.type] || income.type;
+    return {
+      id: income.id,
+      title: income.label,
+      icon: Wallet,
+      tone: 'green',
+      badges: (
+        <>
+          <ConfirmationBadge income={income} />
+          {!income.expectedDate && <Badge variant="warning">Date à renseigner</Badge>}
+        </>
+      ),
+      meta: next ? <>{type} · Versement le {formatShortDate(next.dueDate)}</> : type,
+      amount: <span className="text-green-800">+{formatCurrency(income.amount)}</span>,
+      amountNote: freqLabels[income.frequency],
+    };
+  });
+  const opened = incomes.find((income) => income.id === openId);
+  const openedNext = opened && nextIncome(opened, today);
+
   return (
-    <div className="space-y-3">
-      {incomes.map((income) => {
-        const monthlyEquiv = toMonthlyAmount(income.amount, income.frequency);
-        const end = income.expectedDate && income.expectedDate > nextYear ? income.expectedDate : nextYear;
-        const next = incomeOccurrences(income, today, end).find(isOpenOccurrence);
-        return (
-          <Card key={income.id} className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-green-50 text-green-800 flex items-center justify-center flex-shrink-0">
-              <Icon icon={Wallet} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold text-gray-800">{income.label}</p>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <p className="text-base font-bold text-green-800">
-                    {formatCurrency(income.amount)}
-                    <span className="text-xs font-normal text-gray-600 ml-1">
-                      {freqLabels[income.frequency] || ''}
-                    </span>
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge variant="neutral">{typeLabels[income.type] || income.type}</Badge>
-                {income.isConfirmed ? (
-                  <Badge variant="success">Confirmé</Badge>
-                ) : (
-                  <Badge variant="warning">Incertain</Badge>
-                )}
-                {income.frequency !== 'monthly' && (
-                  <span className="text-xs text-gray-600">
-                    ≈ {formatCurrency(monthlyEquiv)}/mois
-                  </span>
-                )}
-              </div>
-              {next && (
-                <p className="text-xs text-gray-600 mt-1">
-                  Prochain versement : {formatShortDate(next.dueDate)}
-                </p>
-              )}
-              {!income.expectedDate && <p className="text-xs text-amber-800 mt-1">Date à renseigner</p>}
-              {next && <OccurrencePayment key={next.dueDate} occurrence={next} />}
-              {income.notes && (
-                <p className="text-xs text-gray-600 mt-1 italic">{income.notes}</p>
-              )}
-              {(onEdit || onDelete) && (
-                <div className="flex gap-2 mt-2 pt-2 border-t border-gray-50">
-                  {onEdit && (
-                    <button
-                      onClick={() => onEdit(income)}
-                      className="text-xs text-teal-800 font-semibold hover:underline"
-                    >
-                      Modifier
-                    </button>
-                  )}
-                  {onDelete && (
-                    <button
-                      onClick={() => {
-                        if (confirm('Supprimer ce revenu ?')) onDelete(income.id);
-                      }}
-                      className="text-xs text-red-800 font-semibold hover:underline"
-                    >
-                      Supprimer
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </Card>
-        );
-      })}
-    </div>
+    <>
+      <CompactRows rows={rows} onOpen={setOpenId} />
+      {opened && (
+        <DetailSheet
+          title={opened.label}
+          onClose={() => setOpenId(null)}
+          onEdit={onEdit && (() => { setOpenId(null); onEdit(opened); })}
+          onDelete={onDelete && (() => { setOpenId(null); onDelete(opened.id); })}
+          deleteLabel="Supprimer ce revenu et tous ses versements prévus ?"
+        >
+          <dl className="space-y-2">
+            <DetailFact label="Montant">{formatCurrency(opened.amount)}</DetailFact>
+            <DetailFact label="Fréquence">{frequencyLabels[opened.frequency]}</DetailFact>
+            {opened.frequency !== 'monthly' && opened.frequency !== 'one_time' && (
+              <DetailFact label="Équivalent mensuel">
+                ≈ {formatCurrency(toMonthlyAmount(opened.amount, opened.frequency))}
+              </DetailFact>
+            )}
+            <DetailFact label="Type">{typeLabels[opened.type] || opened.type}</DetailFact>
+            {openedNext && <DetailFact label="Prochain versement">{formatShortDate(openedNext.dueDate)}</DetailFact>}
+          </dl>
+          <div className="flex flex-wrap gap-2">
+            <ConfirmationBadge income={opened} />
+            {!opened.expectedDate && <Badge variant="warning">Date à renseigner</Badge>}
+          </div>
+          {openedNext && <OccurrencePayment key={openedNext.dueDate} occurrence={openedNext} />}
+          {opened.notes && <p className="text-sm italic text-slate-600">{opened.notes}</p>}
+        </DetailSheet>
+      )}
+    </>
   );
 }
