@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { NextConfig } from "next";
 
 const securityHeaders = [
@@ -13,8 +14,19 @@ if (process.env.NODE_ENV === "production") {
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // A new production build installs a matching set of offline pages and assets.
+  env: { NEXT_PUBLIC_OFFLINE_BUILD: randomUUID() },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      {
+        source: "/service-worker.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'; connect-src 'self'" },
+        ],
+      },
+    ];
   },
 };
 

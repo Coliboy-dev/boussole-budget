@@ -8,7 +8,7 @@ const items = [
   { href: '/dashboard', label: 'Aujourd’hui', icon: '🏠', routes: ['/'] },
   { href: '/projection', label: 'Échéances', icon: '📅', routes: [] },
   { href: '/budget', label: 'Budget', icon: '📋', routes: ['/revenus', '/charges', '/dettes', '/enfants', '/objectifs'] },
-  { href: '/plus', label: 'Plus', icon: '⋯', routes: ['/reglages', '/demo', '/conseils', '/sauvegarde'] },
+  { href: '/plus', label: 'Plus', icon: '⋯', routes: ['/reglages', '/demo', '/conseils', '/sauvegarde', '/confidentialite', '/mentions-legales'] },
 ];
 
 export default function BottomNav() {

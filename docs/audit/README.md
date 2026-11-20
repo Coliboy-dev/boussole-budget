@@ -55,11 +55,17 @@ Les quatre onglets sont **Aujourd’hui**, **Échéances**, **Budget** et **Plus
 
 ## Accessibilité
 
-Le premier lien au clavier donne accès au contenu. Les fenêtres de saisie gardent le focus dans la modale, se ferment avec Échap et rendent le focus à leur bouton d’ouverture. Les actions principales ont une cible d’au moins 44 pixels. Les contrôles axe-core WCAG 2.0 à 2.2 A/AA ont été exécutés dans Chromium à 390 × 667 sur les pages du budget, les formulaires en modale et les trois étapes du premier budget.
+Le premier lien au clavier donne accès au contenu. Les fenêtres de saisie gardent le focus dans la modale, se ferment avec Échap et rendent le focus à leur bouton d’ouverture. Les actions principales ont une cible d’au moins 44 pixels. Les contrôles axe-core WCAG 2.0 à 2.2 A/AA ont signalé zéro violation dans Chromium à 390 × 667 sur les pages du budget, les formulaires en modale et les trois étapes du premier budget.
 
 ## Remboursement des dettes
 
 La page **Dettes** affiche le restant dû et, quand le calendrier le permet, la date de fin estimée au rythme des paiements prévus. La dernière mensualité est limitée au restant dû. Pour une dette sans échéance ouverte, tu peux saisir directement le montant payé. Le paiement diminue le restant dû et le solde, sauf quand tu indiques que le paiement est déjà déduit du solde.
+
+## Application installable
+
+Utilise le build de production sur HTTPS, ou sur localhost pour un test. Ouvre l’application en ligne jusqu’à ce que **Plus** affiche **Mode hors ligne prêt**. Le cache garde les pages et les ressources de cette version. Le budget reste dans le stockage local. Le parcours hors ligne a été vérifié dans Chromium avec un profil mobile Android. L’installation sur les téléphones du pilote reste à vérifier.
+
+Les pages **Confidentialité** et **Mentions légales** sont accessibles dans **Plus**. Avant l’ouverture publique, renseigne l’identité et les coordonnées de l’éditeur, du responsable de publication et de l’hébergeur.
 
 ## Sauvegarde du budget
 
