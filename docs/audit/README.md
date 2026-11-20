@@ -67,6 +67,12 @@ Le premier lien au clavier donne accès au contenu. Les fenêtres de saisie gard
 
 La page **Dettes** affiche le restant dû et, quand le calendrier le permet, la date de fin estimée au rythme des paiements prévus. La dernière mensualité est limitée au restant dû. Pour une dette sans échéance ouverte, tu peux saisir directement le montant payé. Le paiement diminue le restant dû et le solde, sauf quand tu indiques que le paiement est déjà déduit du solde.
 
+## Conseils et objectifs (P2-7)
+
+Les objectifs affichent un statut calculé à partir de ta capacité d’épargne mensuelle et de la date cible. Une carte fragile ou à reporter indique le chiffre ou l’échéance qui explique le résultat.
+
+Chaque conseil affiche le montant ou le nombre qui le déclenche. Le conseil sur les revenus incertains indique le nombre et le total des versements encore ouverts sur la période de projection. Le conseil d’épargne indique la capacité mensuelle et le vrai disponible qui limitent le montant proposé.
+
 ## Application installable
 
 Utilise le build de production sur HTTPS, ou sur localhost pour un test. Ouvre l’application en ligne jusqu’à ce que **Plus** affiche **Mode hors ligne prêt**. Le cache garde les pages et les ressources de cette version. Le budget reste dans le stockage local. Le parcours hors ligne a été vérifié dans Chromium avec un profil mobile Android. L’installation sur les téléphones du pilote reste à vérifier.

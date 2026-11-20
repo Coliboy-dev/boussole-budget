@@ -176,6 +176,16 @@ export function calculateBudgetSummary(
   };
 }
 
+export function calculateUncertainIncome(incomes: Income[], today: string, horizon: number) {
+  const uncertainIncomes = incomes.filter(({ isConfirmed }) => !isConfirmed);
+  const occurrences = forecastOccurrences(uncertainIncomes, [], [], [], today, addDays(today, horizon));
+
+  return {
+    count: occurrences.length,
+    total: fromCents(occurrences.reduce((sum, { amountCents }) => sum + amountCents, 0)),
+  };
+}
+
 export function getUpcomingReminders(
   expenses: Expense[],
   debts: Debt[],
