@@ -24,14 +24,15 @@ test('C0 — seul le compte propriétaire avec sa propre clé ouvre le budget as
   assert.equal(access(null, null, { type: 'unreadable' }), false);
 });
 
-test('C0 — la provenance existante est lue indépendamment de la session et de l’empreinte', () => {
+test('C0 — seule la clé de propriétaire établit le rattachement du budget', () => {
   const previous = JSON.stringify({ userId: 'a', version: 2, fingerprint: 'une ancienne empreinte' });
   const linked = JSON.stringify(ownerA);
-  assert.deepEqual(readBudgetOwner(storage({ [SYNC_MEMORY_KEY]: previous })), ownerA);
+  // La production est vide avant C0. Une ancienne mémoire peut désigner un compte de test disparu.
+  assert.deepEqual(readBudgetOwner(storage({ [SYNC_MEMORY_KEY]: previous })), guest);
   assert.deepEqual(readBudgetOwner(storage()), guest);
-  assert.deepEqual(readBudgetOwner(storage({ [ACCOUNT_OWNER_KEY]: linked })), ownerA);
+  assert.deepEqual(readBudgetOwner(storage({ [ACCOUNT_OWNER_KEY]: linked, [SYNC_MEMORY_KEY]: '!' })), ownerA);
   assert.deepEqual(readBudgetOwner(storage({ [ACCOUNT_OWNER_KEY]: '!', [SYNC_MEMORY_KEY]: previous })), { type: 'unreadable' });
-  assert.deepEqual(readBudgetOwner(storage({ [SYNC_MEMORY_KEY]: '!' })), { type: 'unreadable' });
+  assert.deepEqual(readBudgetOwner(storage({ [SYNC_MEMORY_KEY]: '!' })), guest);
   assert.ok(LOCAL_STORAGE_KEYS.includes(ACCOUNT_OWNER_KEY));
 });
 

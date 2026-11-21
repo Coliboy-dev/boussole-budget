@@ -1,5 +1,4 @@
 import { emptyBudgetState, serializeBudget } from './budget-state.ts';
-import { SYNC_MEMORY_KEY } from './cloud-sync.ts';
 
 export const ACCOUNT_OWNER_KEY = 'boussole-budget-owner-v1';
 export const ACCOUNT_TRANSITION_LOCK = 'boussole-account-transition';
@@ -23,22 +22,13 @@ function nonEmptyId(value: unknown): value is string {
 export function readBudgetOwner(storage: Pick<Storage, 'getItem'>): OwnerStatus {
   try {
     const raw = storage.getItem(ACCOUNT_OWNER_KEY);
-    if (raw !== null) {
-      const record = JSON.parse(raw);
-      if (record?.type === 'guest') return guest;
-      if ((record?.type === 'account' || record?.type === 'transition') && nonEmptyId(record.userId)) {
-        return { type: record.type, userId: record.userId };
-      }
-      return unreadable;
+    if (raw === null) return guest;
+    const record = JSON.parse(raw);
+    if (record?.type === 'guest') return guest;
+    if ((record?.type === 'account' || record?.type === 'transition') && nonEmptyId(record.userId)) {
+      return { type: record.type, userId: record.userId };
     }
-
-    // Avant C0, la mémoire identifie le propriétaire, quel que soit le compte nouvellement connecté.
-    const rawMemory = storage.getItem(SYNC_MEMORY_KEY);
-    if (rawMemory === null) return guest;
-    const memory = JSON.parse(rawMemory);
-    return nonEmptyId(memory?.userId) && Number.isInteger(memory.version) && typeof memory.fingerprint === 'string'
-      ? { type: 'account', userId: memory.userId }
-      : unreadable;
+    return unreadable;
   } catch {
     return unreadable;
   }

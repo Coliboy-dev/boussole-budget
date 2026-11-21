@@ -97,16 +97,13 @@ async function withAccountTransition<T>(action: () => T | Promise<T>): Promise<T
 }
 
 async function initializeOwner() {
-  const owner = readBudgetOwner(localStorage);
-  if (localStorage.getItem(ACCOUNT_OWNER_KEY) !== null || owner.type === 'unreadable') return owner;
-  // L’accès local reste possible lorsque les transitions ne sont pas disponibles.
-  if (!navigator.locks && owner.type === 'guest') return owner;
-  return withAccountTransition(() => {
-    const current = readBudgetOwner(localStorage);
-    if (localStorage.getItem(ACCOUNT_OWNER_KEY) === null && current.type !== 'unreadable') {
-      localStorage.setItem(ACCOUNT_OWNER_KEY, JSON.stringify(current));
-    }
-    return current;
+  if (localStorage.getItem(ACCOUNT_OWNER_KEY) !== null || !navigator.locks) return;
+  await withAccountTransition(() => {
+    if (localStorage.getItem(ACCOUNT_OWNER_KEY) !== null) return;
+    // La production ne compte aucun compte avant C0. Les restes d’une connexion de test sont locaux.
+    clearSyncMemory(localStorage);
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.setItem(ACCOUNT_OWNER_KEY, JSON.stringify({ type: 'guest' }));
   });
 }
 
@@ -175,6 +172,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [association, setAssociation] = useState<Association>();
   const [remoteExists, setRemoteExists] = useState<boolean | null>(null);
+  const [ownerInitialized, setOwnerInitialized] = useState(false);
   const [otpEmail, setOtpEmail] = useState('');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [conflictRemoteDate, setConflictRemoteDate] = useState<string | null>(null);
@@ -306,7 +304,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     const stillCurrent = () => accountRef.current === next && readStoredSessionUserId(localStorage) === userId && !authBusy.current;
 
     try {
-      const owner = await initializeOwner();
+      const owner = readBudgetOwner(localStorage);
       if (!stillCurrent()) return;
       knownOwner.current = owner;
       if (owner.type === 'unreadable') throw new Error('Le rattachement du budget est illisible. Les données restent sur cet appareil.');
@@ -343,6 +341,9 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   const refreshAccount = useCallback(async (force = true) => {
     if (authBusy.current) return;
     try {
+      await initializeOwner();
+      if (authBusy.current) return;
+      setOwnerInitialized(true);
       if (!cloudConfigured) {
         if (readStoredSessionUserId(localStorage) !== null) throw new Error('La connexion au compte de ce budget est indisponible.');
         await adopt(null, force);
@@ -363,7 +364,12 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let disposed = false;
     void Promise.resolve().then(() => { if (!disposed) void refreshAccount(false); });
-    if (!cloudConfigured) return () => { disposed = true; };
+    return () => { disposed = true; };
+  }, [refreshAccount]);
+
+  useEffect(() => {
+    if (!ownerInitialized || !cloudConfigured) return;
+    let disposed = false;
     const { data } = cloudClient().auth.onAuthStateChange((_event, session) => {
       if (authBusy.current) return;
       const current = accountRef.current === undefined ? undefined : accountRef.current?.userId ?? null;
@@ -377,7 +383,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
       }, 0);
     });
     return () => { disposed = true; data.subscription.unsubscribe(); };
-  }, [adopt, refreshAccount]);
+  }, [adopt, ownerInitialized]);
 
   useEffect(() => {
     if (app.canExportBudget && !app.isBudgetLoading) void Promise.resolve().then(runSync);

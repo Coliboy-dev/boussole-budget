@@ -4,7 +4,6 @@ import { useSyncExternalStore } from 'react';
 import {
   ACCOUNT_OWNER_KEY, AUTH_STORAGE_KEY, accountGuard, readBudgetOwner, readStoredSessionUserId, type SessionUserId,
 } from './account-guard';
-import { SYNC_MEMORY_KEY } from './cloud-sync';
 
 let sessionUserId: SessionUserId;
 let keyUserId: string | null = null;
@@ -28,8 +27,7 @@ export function canAccessBudget(): boolean {
 
 function subscribe(listener: () => void) {
   const onStorage = (event: StorageEvent) => {
-    if (event.key === null || event.key === AUTH_STORAGE_KEY || event.key === ACCOUNT_OWNER_KEY
-      || event.key === SYNC_MEMORY_KEY) listener();
+    if (event.key === null || event.key === AUTH_STORAGE_KEY || event.key === ACCOUNT_OWNER_KEY) listener();
   };
   listeners.add(listener);
   window.addEventListener('storage', onStorage);

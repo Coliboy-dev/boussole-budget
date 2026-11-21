@@ -2,9 +2,10 @@
 // et NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=cle-fictive-c0. Toute requête est interceptée.
 // BOUSSOLE_TEST_URL=http://localhost:3000 node --experimental-strip-types --test tests/browser/account-guard.mjs
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
-import { emptyBudgetState, serializeBudget } from '../../lib/budget-state.ts';
+import { deserializeBudget, emptyBudgetState, serializeBudget } from '../../lib/budget-state.ts';
 import { decryptText, deriveKey, encryptText, newSalt } from '../../lib/cloud-crypto.ts';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -86,10 +87,11 @@ async function assertProtected(page) {
   assert.doesNotMatch(await page.locator('body').innerText(), /1[\s\u202f]*234,56|Budget local privé/);
 }
 
-test('C0 — un budget hérité de A reste masqué avec une session B', async (t) => {
+test('C0 — un budget déjà rattaché à A reste masqué avec une session B', async (t) => {
+  const previous = JSON.stringify({ userId: A, fingerprint: 'ancienne-empreinte', version: 1 });
   const { page, writes } = await fixture(t, {
     [auth]: JSON.stringify(session(B)), [budget]: localBudget,
-    [memory]: JSON.stringify({ userId: A, fingerprint: 'ancienne-empreinte', version: 1 }),
+    [owner]: JSON.stringify({ type: 'account', userId: A }), [memory]: previous,
   });
   for (const path of ['/dashboard', '/analyse', '/sauvegarde']) {
     await page.goto(path);
@@ -97,7 +99,45 @@ test('C0 — un budget hérité de A reste masqué avec une session B', async (t
   }
   assert.deepEqual(JSON.parse(await stored(page, owner)), { type: 'account', userId: A });
   assert.equal(await stored(page, budget), localBudget);
+  assert.equal(await stored(page, memory), previous);
   assert.deepEqual(writes, []);
+});
+
+test('C0 — un ancien budget reste visible et exportable hors ligne malgré une ancienne session', { timeout: 25000 }, async (t) => {
+  const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  page.setDefaultTimeout(9000);
+  await page.goto('/dashboard');
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  await page.waitForFunction((key) => Boolean(localStorage.getItem(key)), owner);
+  await page.goto('/robots.txt');
+  await page.evaluate(({ entries, ownerKey }) => {
+    localStorage.removeItem(ownerKey);
+    for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, value);
+  }, {
+    ownerKey: owner,
+    entries: {
+      [budget]: localBudget,
+      [memory]: JSON.stringify({ userId: A, fingerprint: 'ancienne-empreinte', version: 1 }),
+      [auth]: JSON.stringify(session(A)),
+    },
+  });
+
+  await context.setOffline(true);
+  await page.goto('/dashboard');
+  await heading(page, 'Aujourd’hui').waitFor();
+  assert.match(await page.locator('body').innerText(), /1[\s\u202f]*234,56/);
+  assert.deepEqual(JSON.parse(await stored(page, owner)), { type: 'guest' });
+  assert.equal(await stored(page, memory), null);
+  assert.equal(await stored(page, auth), null);
+  assert.equal(await stored(page, budget), localBudget);
+
+  await page.goto('/sauvegarde');
+  const downloading = page.waitForEvent('download');
+  await button(page, 'Télécharger le budget').click();
+  const exported = await readFile(await (await downloading).path(), 'utf8');
+  assert.deepEqual(deserializeBudget(exported), deserializeBudget(localBudget));
 });
 
 test('C0 — changer de compte dans un autre onglet interrompt un envoi préparé', { timeout: 18000 }, async (t) => {
@@ -182,7 +222,9 @@ test('C0 — récupérer le coffre existant exige une confirmation distincte', a
   const salt = newSalt();
   const key = await deriveKey(passphrase, salt);
   const remoteBudget = serializeBudget({ ...emptyBudgetState, currentBalance: 42, balanceDate: '2026-11-21' });
-  const { page, writes } = await fixture(t, { [auth]: JSON.stringify(session(B)), [budget]: localBudget }, {
+  const { page, writes } = await fixture(t, {
+    [auth]: JSON.stringify(session(B)), [budget]: localBudget, [owner]: JSON.stringify({ type: 'guest' }),
+  }, {
     remote: { ...(await encryptText(key, remoteBudget)), salt, version: 1, kdf_iterations: 600000 },
   });
   await page.goto('/analyse');

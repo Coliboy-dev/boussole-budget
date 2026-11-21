@@ -131,7 +131,9 @@ La base est décrite dans `supabase/migrations/`. Chaque compte ne peut lire, mo
 
 La connexion par e-mail est réservée aux comptes existants. Si ton budget est associé à un compte, Boussole le garde sur cet appareil après la déconnexion et le masque jusqu’à ta reconnexion au même compte. Un autre compte ne peut pas l’envoyer ni le remplacer. Pour un budget invité, confirme d’abord le compte auquel tu veux l’associer ou la récupération de sa copie en ligne. Le format des fichiers de sauvegarde reste identique.
 
-Les parcours dans `tests/browser/account-guard.mjs` utilisent Chromium et un service Supabase simulé avec des budgets fictifs. La vérification sur un projet Supabase isolé et la confirmation de la règle de migration avant production restent requises (§9.5 du plan P5).
+Au premier lancement de C0, un budget sans propriétaire enregistré devient invité. Boussole retire les anciennes traces de synchronisation et de connexion locales pour que tu puisses consulter et exporter ton budget hors ligne.
+
+Les parcours Chromium dans `tests/browser/account-guard.mjs` couvrent le changement de compte sur deux onglets, l’association et l’export hors ligne après migration. Une recette sur une instance Supabase locale a vérifié la migration SQL et les règles d’accès avec deux comptes fictifs (§9.5 du plan P5).
 
 ## Dépenses et enveloppes : modèle et calcul
 
