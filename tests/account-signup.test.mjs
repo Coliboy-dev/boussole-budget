@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { generatePassphrase } from '../lib/passphrase.ts';
-import { readPendingVault, PENDING_VAULT_KEY, matchesInitialVault } from '../lib/vault-pending.ts';
+import { readPendingVault, PENDING_VAULT_KEY, matchesInitialVault, rememberVaultFingerprint } from '../lib/vault-pending.ts';
 import { readExpiredSession } from '../lib/account-guard.ts';
 import { eraseLocalData } from '../lib/account-lifecycle.ts';
 import { BUDGET_STORAGE_KEY } from '../lib/budget-state.ts';
@@ -17,14 +17,28 @@ test('C1 — la phrase utilise quatre groupes et rejette les octets à partir de
 });
 
 test('C1 — un marqueur de création illisible reste distinct d’une création terminée', () => {
-  const marker = { userId: 'a', fingerprint: 'empreinte-initiale' };
+  const marker = { userId: 'a', fingerprints: ['empreinte-initiale'] };
   const storage = (value) => ({ getItem: (key) => key === PENDING_VAULT_KEY ? value : null });
   assert.equal(readPendingVault(storage(null)), null);
   assert.equal(readPendingVault(storage('!')), 'unreadable');
   assert.deepEqual(readPendingVault(storage(JSON.stringify(marker))), marker);
+  // Le nouveau format conserve la preuve déjà écrite par les aperçus de C1.
+  assert.deepEqual(readPendingVault(storage(JSON.stringify({ userId: 'a', fingerprint: 'empreinte-initiale' }))), marker);
+  assert.deepEqual(readPendingVault(storage(JSON.stringify({ userId: 'a', fingerprints: [] }))), { userId: 'a', fingerprints: [] });
   assert.equal(matchesInitialVault('empreinte-initiale', 'nouvelle-empreinte', marker), true);
   assert.equal(matchesInitialVault('nouvelle-empreinte', 'nouvelle-empreinte', marker), true);
   assert.equal(matchesInitialVault('copie-concurrente', 'nouvelle-empreinte', marker), false);
+});
+
+test('C1 — le marqueur reconnaît un envoi précédent et conserve les dix empreintes distinctes les plus récentes', () => {
+  const first = { userId: 'a', fingerprints: ['F0'] };
+  const second = rememberVaultFingerprint(first, 'F1');
+  assert.deepEqual(second.fingerprints, ['F0', 'F1']);
+  assert.equal(matchesInitialVault('F0', 'F1', second), true);
+  const full = Array.from({ length: 11 }, (_, index) => 'F' + index)
+    .reduce(rememberVaultFingerprint, { userId: 'a', fingerprints: [] });
+  assert.deepEqual(full.fingerprints, Array.from({ length: 10 }, (_, index) => 'F' + (index + 1)));
+  assert.deepEqual(rememberVaultFingerprint(full, 'F1').fingerprints, [...full.fingerprints.slice(1), 'F1']);
 });
 
 test('C1 — seule une session locale complète et expirée peut servir au démarrage hors ligne', () => {

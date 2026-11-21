@@ -23,7 +23,7 @@ import {
 import { useApp } from '@/lib/context/AppContext';
 import { todayInBrussels } from '@/lib/local-date';
 import type { FirstBudgetInput } from '@/lib/onboarding';
-import { matchesInitialVault, PENDING_VAULT_KEY, readPendingVault } from '@/lib/vault-pending';
+import { matchesInitialVault, PENDING_VAULT_KEY, readPendingVault, rememberVaultFingerprint } from '@/lib/vault-pending';
 
 export const accountSignupEnabled = cloudConfigured && process.env.NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED === 'true';
 
@@ -92,6 +92,7 @@ const Context = createContext<CloudSyncContext | null>(null);
 const PUSH_DELAY_MS = 1500;
 const changedAccount = 'Le compte actif a changé. Vérifie ta connexion et réessaie.';
 const changedBudget = 'Le budget a changé depuis l’affichage de ce choix. Vérifie de nouveau avant de continuer.';
+const vaultFromAnotherDevice = 'Ton compte a déjà une copie en ligne créée sur un autre appareil. Saisis ta phrase secrète pour la comparer.';
 
 function message(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -114,9 +115,23 @@ async function withAccountTransition<T>(action: () => T | Promise<T>): Promise<T
   return navigator.locks.request(ACCOUNT_TRANSITION_LOCK, action);
 }
 
+function hasStalePendingVault() {
+  const pending = readPendingVault(localStorage);
+  if (pending === null) return false;
+  const owner = readBudgetOwner(localStorage);
+  return (owner.type !== 'account' && owner.type !== 'transition')
+    || (pending !== 'unreadable' && pending.userId !== owner.userId);
+}
+
+function discardStalePendingVault() {
+  if (hasStalePendingVault()) localStorage.removeItem(PENDING_VAULT_KEY);
+}
+
 async function initializeOwner() {
-  if (localStorage.getItem(ACCOUNT_OWNER_KEY) !== null || !navigator.locks) return;
+  const ownerExists = localStorage.getItem(ACCOUNT_OWNER_KEY) !== null;
+  if (!navigator.locks || (ownerExists && !hasStalePendingVault())) return;
   await withAccountTransition(() => {
+    discardStalePendingVault();
     if (localStorage.getItem(ACCOUNT_OWNER_KEY) !== null) return;
     // La production ne compte aucun compte avant C0. Les restes d’une connexion de test sont locaux.
     clearSyncMemory(localStorage);
@@ -150,6 +165,7 @@ async function applyAssociation(choice: Association, action: AssociationAction) 
 
   await withAccountTransition(async () => {
     assertAssociation(choice);
+    discardStalePendingVault();
     if (readPendingVault(localStorage) !== null) throw new Error('Une création de coffre est déjà en attente.');
     const remote = await fetchVault(userId);
     if ((remote?.version ?? null) !== choice.version) throw new Error('La copie en ligne a changé. Relance le choix d’association.');
@@ -175,7 +191,7 @@ async function applyAssociation(choice: Association, action: AssociationAction) 
       clearSyncMemory(localStorage);
     }
     if (initialHash !== null) {
-      localStorage.setItem(PENDING_VAULT_KEY, JSON.stringify({ userId, fingerprint: initialHash }));
+      localStorage.setItem(PENDING_VAULT_KEY, JSON.stringify({ userId, fingerprints: [initialHash] }));
     }
     localStorage.setItem(ACCOUNT_OWNER_KEY, JSON.stringify(owner));
     window.location.reload();
@@ -322,9 +338,10 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     const key = keyRef.current;
     if (!key || !remoteAllowed(key) || busy.current || !appRef.current.canExportBudget
       || appRef.current.isBudgetLoading || !appRef.current.isCurrentBudget()) return;
+    const initialMarker = localStorage.getItem(PENDING_VAULT_KEY);
     const pending = readPendingVault(localStorage);
     if (pending === null) return;
-    if (pending === 'unreadable' || pending.userId !== key.userId) {
+    if (pending !== 'unreadable' && pending.userId !== key.userId) {
       setError('La création du coffre est bloquée. Vérifie le compte de ce budget.');
       return;
     }
@@ -334,25 +351,31 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     let confirmed = false;
     try {
       await withAccountTransition(async () => {
-        let expected = pending;
+        let expected = pending === 'unreadable' ? { userId: key.userId, fingerprints: [] } : pending;
+        let expectedMarker = initialMarker;
         const checkPending = () => {
-          const current = readPendingVault(localStorage);
-          if (!remoteAllowed(key) || !current || current === 'unreadable'
-            || current.userId !== key.userId || current.fingerprint !== expected.fingerprint) throw new Error(changedAccount);
+          if (!remoteAllowed(key) || expectedMarker === null || localStorage.getItem(PENDING_VAULT_KEY) !== expectedMarker) {
+            throw new Error(changedAccount);
+          }
+        };
+        const writePending = () => {
+          expectedMarker = JSON.stringify(expected);
+          localStorage.setItem(PENDING_VAULT_KEY, expectedMarker);
         };
         checkPending();
+        if (pending === 'unreadable') writePending();
         let remote = await fetchVault(key.userId);
         checkPending();
         let version: number | null = null;
-        let confirmedHash: string;
+        let confirmedHash: string | undefined;
         if (!remote) {
           const local = appRef.current.exportBudget();
           const encrypted = await encryptText(key.key, local);
           confirmedHash = await fingerprint(local);
           checkPending();
           if (appRef.current.exportBudget() !== local) throw new Error(changedBudget);
-          expected = { userId: key.userId, fingerprint: confirmedHash };
-          localStorage.setItem(PENDING_VAULT_KEY, JSON.stringify(expected));
+          expected = rememberVaultFingerprint(expected, confirmedHash);
+          writePending();
           version = await createVault(key.userId, encrypted, key.salt, key.kdfIterations);
           checkPending();
           if (version === null) {
@@ -362,6 +385,14 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
           }
         }
         if (remote) {
+          if (remote.salt !== key.salt || remote.kdfIterations !== key.kdfIterations) {
+            keyRef.current = null;
+            publishBudgetAccess(key.userId, null);
+            setRemoteExists(true);
+            setError(vaultFromAnotherDevice);
+            setPhase('needs-passphrase');
+            return;
+          }
           const { budget } = deserializeStoredBudget(await decryptText(key.key, remote));
           confirmedHash = await fingerprint(serializeBudget(budget));
           const localHash = await fingerprint(appRef.current.exportBudget());
@@ -373,10 +404,8 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           version = remote.version;
-        } else {
-          confirmedHash = expected.fingerprint;
         }
-        if (version === null) throw new Error('Impossible de confirmer la création du coffre. Réessaie.');
+        if (version === null || confirmedHash === undefined) throw new Error('Impossible de confirmer la création du coffre. Réessaie.');
         checkPending();
         writeSyncMemory(localStorage, { userId: key.userId, version, fingerprint: confirmedHash });
         localStorage.removeItem(PENDING_VAULT_KEY);
@@ -436,16 +465,15 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
       const stored = await loadStoredKey(userId);
       if (!stillCurrent() || !sameOwner(readBudgetOwner(localStorage), owner)) return;
       if (owner.type === 'transition' && verified && stored) {
+        const marker = localStorage.getItem(PENDING_VAULT_KEY);
         const pending = readPendingVault(localStorage);
         if (pending && pending !== 'unreadable' && pending.userId === userId) {
           const recovered = await withAccountTransition(async () => {
             const snapshot = readBudgetSnapshot(localStorage);
-            if (snapshot.current === null || await fingerprint(snapshot.current) !== pending.fingerprint) return false;
-            const current = readPendingVault(localStorage);
+            if (snapshot.current === null || !pending.fingerprints.includes(await fingerprint(snapshot.current))) return false;
             if (!stillCurrent() || !sameOwner(readBudgetOwner(localStorage), owner)
               || readBudgetSnapshot(localStorage).current !== snapshot.current
-              || !current || current === 'unreadable' || current.userId !== userId
-              || current.fingerprint !== pending.fingerprint) return false;
+              || marker === null || localStorage.getItem(PENDING_VAULT_KEY) !== marker) return false;
             localStorage.setItem(ACCOUNT_OWNER_KEY, JSON.stringify({ type: 'account', userId }));
             return true;
           });
@@ -720,7 +748,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
       if (!sameOwner(readBudgetOwner(localStorage), transition) || readBudgetSnapshot(localStorage).current !== saved) {
         throw new Error(changedBudget);
       }
-      localStorage.setItem(PENDING_VAULT_KEY, JSON.stringify({ userId: key.userId, fingerprint: hash }));
+      localStorage.setItem(PENDING_VAULT_KEY, JSON.stringify({ userId: key.userId, fingerprints: [hash] }));
       clearSyncMemory(localStorage);
       const linked = { type: 'account', userId: key.userId } as const;
       localStorage.setItem(ACCOUNT_OWNER_KEY, JSON.stringify(linked));
@@ -736,13 +764,12 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   async function resolveConflict(keep: 'device' | 'cloud') {
     const key = keyRef.current;
     if (!key || !remoteAllowed(key) || busy.current || phase !== 'conflict') return;
+    const marker = localStorage.getItem(PENDING_VAULT_KEY);
     const pending = readPendingVault(localStorage);
     if (pending === 'unreadable' || (pending && pending.userId !== key.userId)) return;
     const check = () => {
       if (!pending) { assertSync(key); return; }
-      const current = readPendingVault(localStorage);
-      if (!remoteAllowed(key) || !current || current === 'unreadable'
-        || current.userId !== key.userId || current.fingerprint !== pending.fingerprint) throw new Error(changedAccount);
+      if (!remoteAllowed(key) || marker === null || localStorage.getItem(PENDING_VAULT_KEY) !== marker) throw new Error(changedAccount);
     };
     busy.current = true;
     setPhase('syncing');

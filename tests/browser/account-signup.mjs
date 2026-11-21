@@ -120,7 +120,8 @@ test('C1 — inscription explicite puis réponse du premier coffre perdue, dépe
   const first = await stored(page, budgetKey);
   const key = await deriveKey(phrase, vault.salt, vault.kdf_iterations);
   assert.equal(await decryptText(key, vault), first);
-  assert.deepEqual(JSON.parse(await stored(page, pendingKey)), { userId, fingerprint: await fingerprint(first) });
+  // La liste conserve l’empreinte du premier envoi, y compris quand sa réponse se perd.
+  assert.deepEqual(JSON.parse(await stored(page, pendingKey)), { userId, fingerprints: [await fingerprint(first)] });
   assert.equal(await page.getByText('Copie en ligne créée.', { exact: true }).count(), 0);
 
   await button(page, 'Ajouter une dépense').click();
@@ -246,16 +247,17 @@ for (const [kind, auth] of [['active', JSON.stringify(session())], ['illisible',
 
 test('C1 — une transition interrompue reprend et demande un choix si un second appareil a créé un autre coffre', async (t) => {
   const passphrase = 'ma phrase de test isolé';
+  const localSalt = newSalt();
   const salt = newSalt();
   const otherBudget = serializeBudget({ ...emptyBudgetState, currentBalance: 501, balanceDate: '2026-11-21' });
   const encrypted = await encryptText(await deriveKey(passphrase, salt), otherBudget);
   const vault = { ...encrypted, salt, version: 1, kdf_iterations: 600000, updated_at: '2026-11-21T10:00:00Z' };
-  const pending = JSON.stringify({ userId, fingerprint: await fingerprint(local) });
+  const pending = JSON.stringify({ userId, fingerprints: [await fingerprint(local)] });
   const { context, page } = await fixture(t, {
     [authKey]: JSON.stringify(session()), [ownerKey]: JSON.stringify({ type: 'transition', userId }),
     [budgetKey]: local, [pendingKey]: pending,
   });
-  await installKey(page, passphrase, salt);
+  await installKey(page, passphrase, localSalt);
   const requests = [];
   let exists = false;
   await context.route(origin + '/rest/v1/budget_vaults**', async (route) => {
@@ -269,9 +271,16 @@ test('C1 — une transition interrompue reprend et demande un choix si un second
     return route.fulfill({ status: 400 });
   });
   await page.goto('/synchronisation', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Ton compte a déjà une copie en ligne créée sur un autre appareil. Saisis ta phrase secrète pour la comparer.', { exact: true }).waitFor();
+  assert.equal(await stored(page, pendingKey), pending);
+  assert.deepEqual(requests, ['GET', 'POST', 'GET']);
+  await page.locator('input[name=passphrase]').fill(passphrase);
+  await button(page, 'Déverrouiller').click();
   await page.getByText('Deux versions différentes de ton budget', { exact: true }).waitFor();
   assert.deepEqual(JSON.parse(await stored(page, ownerKey)), { type: 'account', userId });
-  assert.deepEqual(requests, ['GET', 'POST', 'GET']);
+  // Deux sels différents exigent une nouvelle lecture puis une comparaison avec la clé du coffre distant.
+  assert.equal(requests.filter((method) => method === 'POST').length, 1);
+  assert.ok(requests.every((method) => method === 'GET' || method === 'POST'));
   assert.equal(await stored(page, pendingKey), pending);
   assert.equal(await stored(page, budgetKey), local);
   assert.equal(await stored(page, memoryKey), null);
@@ -318,3 +327,138 @@ test('C1 — l’inscription depuis un budget existant attend une confirmation d
   const storedKey = await deriveKey(phrase, writes[0].salt, writes[0].kdf_iterations);
   assert.equal(await decryptText(storedKey, writes[0]), local);
 });
+
+test('C1 — une insertion retardée reconnue après un doublon laisse partir la dépense ajoutée', async (t) => {
+  const passphrase = 'ma phrase de test isolé';
+  const salt = newSalt();
+  const { context, page } = await fixture(t, {
+    [authKey]: JSON.stringify(session()), [ownerKey]: JSON.stringify({ type: 'account', userId }),
+    [budgetKey]: local, [pendingKey]: JSON.stringify({ userId, fingerprints: [await fingerprint(local)] }),
+  });
+  await installKey(page, passphrase, salt);
+  let first;
+  let vault;
+  const writes = [];
+  await context.route(origin + '/rest/v1/budget_vaults**', async (route) => {
+    const request = route.request();
+    const method = request.method();
+    if (method === 'GET') return route.fulfill({ json: vault ? [vault] : [] });
+    writes.push(method);
+    if (method === 'POST' && !first) {
+      first = { ...request.postDataJSON(), updated_at: '2026-11-21T10:00:00Z' };
+      return route.abort('failed');
+    }
+    if (method === 'POST') {
+      vault = first;
+      return route.fulfill({ status: 409, json: { code: '23505', message: 'Coffre déjà présent' } });
+    }
+    if (method === 'PATCH') {
+      assert.match(request.url(), /version=eq\.1/);
+      vault = { ...vault, ...request.postDataJSON() };
+      return route.fulfill({ json: [{ version: vault.version }] });
+    }
+    return route.fulfill({ status: 400 });
+  });
+  await page.goto('/dashboard');
+  await page.getByRole('alert').filter({ hasText: 'La copie en ligne n’a pas pu être créée.' }).waitFor();
+  await button(page, 'Ajouter une dépense').click();
+  await page.locator('input[name=amount]').fill('27.50');
+  await page.getByRole('radio', { name: 'Courses', exact: true }).check();
+  await button(page, 'Ajouter la dépense').click();
+  await page.waitForFunction(([keyName, previous]) => localStorage.getItem(keyName) !== previous, [budgetKey, local]);
+  const updated = await stored(page, budgetKey);
+  await page.goto('/synchronisation');
+  await page.getByRole('status').filter({ hasText: 'Synchronisé' }).waitFor();
+  assert.deepEqual(writes, ['POST', 'POST', 'PATCH']);
+  assert.equal(await stored(page, pendingKey), null);
+  assert.equal(await decryptText(await deriveKey(passphrase, salt), vault), updated);
+});
+
+test('C1 — une association interrompue avant le rattachement peut être confirmée après rechargement', async (t) => {
+  const passphrase = 'ma phrase de test isolé';
+  const { context, page } = await fixture(t, {
+    [authKey]: JSON.stringify(session()), [ownerKey]: JSON.stringify({ type: 'guest' }), [budgetKey]: local,
+  });
+  await page.addInitScript(({ ownerKey, pendingKey }) => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (name, value) {
+      if (this === localStorage && name === ownerKey && JSON.parse(value).type === 'account'
+        && localStorage.getItem(pendingKey) && sessionStorage.getItem('interruption-test') === null) {
+        sessionStorage.setItem('interruption-test', 'faite');
+        throw new Error('Interruption simulée avant le rattachement');
+      }
+      setItem.call(this, name, value);
+    };
+  }, { ownerKey, pendingKey });
+  let vault;
+  await context.route(origin + '/rest/v1/budget_vaults**', (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: vault ? [vault] : [] });
+    assert.equal(request.method(), 'POST');
+    assert.equal(vault, undefined);
+    vault = { ...request.postDataJSON(), updated_at: '2026-11-21T10:00:00Z' };
+    return route.fulfill({ status: 201 });
+  });
+  const confirm = async () => {
+    await page.locator('input[name=passphrase]').fill(passphrase);
+    await page.locator('input[name=confirmation]').fill(passphrase);
+    await button(page, 'Activer la synchronisation').click();
+    await heading(page, 'Choisir le budget de ce compte').waitFor();
+    await button(page, 'Associer ce budget à mon compte').click();
+  };
+  await page.goto('/synchronisation');
+  await confirm();
+  await page.getByRole('alert').filter({ hasText: 'Interruption simulée avant le rattachement' }).waitFor();
+  assert.deepEqual(JSON.parse(await stored(page, ownerKey)), { type: 'guest' });
+  assert.ok(await stored(page, pendingKey));
+  assert.equal(vault, undefined);
+  await page.reload();
+  await page.locator('input[name=passphrase]').waitFor();
+  assert.equal(await stored(page, pendingKey), null);
+  await confirm();
+  await page.getByRole('status').filter({ hasText: 'Synchronisé' }).waitFor();
+  assert.deepEqual(JSON.parse(await stored(page, ownerKey)), { type: 'account', userId });
+  assert.equal(await stored(page, budgetKey), local);
+  assert.equal(await stored(page, pendingKey), null);
+  assert.equal(await decryptText(await deriveKey(passphrase, vault.salt), vault), local);
+});
+
+for (const scenario of ['absent', 'identique', 'différent']) {
+  test('C1 — un marqueur illisible est récupéré avec un coffre ' + scenario, async (t) => {
+    const passphrase = 'ma phrase de test isolé';
+    const salt = newSalt();
+    const key = await deriveKey(passphrase, salt);
+    const other = serializeBudget({ ...emptyBudgetState, currentBalance: 501, balanceDate: '2026-11-21' });
+    const initial = scenario === 'différent' ? other : local;
+    let vault = scenario === 'absent' ? undefined : { ...(await encryptText(key, initial)), salt, version: 1,
+      kdf_iterations: 600000, updated_at: '2026-11-21T10:00:00Z' };
+    const { context, page } = await fixture(t, {
+      [authKey]: JSON.stringify(session()), [ownerKey]: JSON.stringify({ type: 'account', userId }),
+      [budgetKey]: local, [pendingKey]: '!',
+    });
+    await installKey(page, passphrase, salt);
+    const writes = [];
+    await context.route(origin + '/rest/v1/budget_vaults**', (route) => {
+      const request = route.request();
+      if (request.method() === 'GET') return route.fulfill({ json: vault ? [vault] : [] });
+      writes.push(request.method());
+      assert.equal(request.method(), 'POST');
+      assert.equal(vault, undefined);
+      vault = { ...request.postDataJSON(), updated_at: '2026-11-21T10:00:00Z' };
+      return route.fulfill({ status: 201 });
+    });
+    await page.goto('/synchronisation');
+    if (scenario === 'différent') {
+      await page.getByText('Deux versions différentes de ton budget', { exact: true }).waitFor();
+      assert.deepEqual(JSON.parse(await stored(page, pendingKey)), { userId, fingerprints: [] });
+      assert.equal(await stored(page, memoryKey), null);
+    } else {
+      await page.getByRole('status').filter({ hasText: 'Synchronisé' }).waitFor();
+      assert.equal(await stored(page, pendingKey), null);
+      assert.deepEqual(JSON.parse(await stored(page, memoryKey)), { userId, version: 1, fingerprint: await fingerprint(local) });
+    }
+    assert.deepEqual(writes, scenario === 'absent' ? ['POST'] : []);
+    assert.equal(await stored(page, budgetKey), local);
+    assert.equal(await decryptText(key, vault), initial);
+  });
+}
