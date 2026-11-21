@@ -7,6 +7,7 @@ export const LOCAL_STORAGE_KEYS = [
   'boussole-budget-v1',
   'boussole-sync-v1',
   'boussole-lock-v1',
+  'boussole-lock-device-v1',
   'boussole-lock-epoch',
   'boussole-payment-reminders',
   'boussole-security-event',
