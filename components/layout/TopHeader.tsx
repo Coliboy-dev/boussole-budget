@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { Compass, Settings } from 'lucide-react';
+import { Compass, LockKeyhole, Settings } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
 import { useApp } from '@/lib/context/AppContext';
+import { useLock } from '@/components/security/LockProvider';
 
 export default function TopHeader() {
   const { userProfile } = useApp();
+  const lock = useLock();
   const initial = Array.from(userProfile.firstName?.trim() ?? '')[0]?.toLocaleUpperCase('fr-BE');
 
   return (
@@ -18,6 +20,17 @@ export default function TopHeader() {
           </span>
           <span className="font-display text-lg font-bold tracking-tight text-teal-800">Boussole Budget</span>
         </div>
+        <div className="flex items-center gap-1">
+        {lock.enabled && (
+          <button
+            type="button"
+            onClick={lock.lockNow}
+            aria-label="Verrouiller Boussole"
+            className="flex size-11 items-center justify-center rounded-full text-teal-800 hover:bg-teal-50"
+          >
+            <Icon icon={LockKeyhole} className="size-5" />
+          </button>
+        )}
         <Link
           href="/reglages"
           aria-label="Réglages"
@@ -29,6 +42,7 @@ export default function TopHeader() {
             <Icon icon={Settings} className="size-5 text-slate-600" />
           )}
         </Link>
+        </div>
       </div>
     </header>
   );

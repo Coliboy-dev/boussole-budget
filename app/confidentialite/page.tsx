@@ -37,6 +37,14 @@ export default function PrivacyPage() {
       </section>
 
       <section className="space-y-2">
+        <h2 className="font-semibold text-gray-900">Verrouillage de l’application (facultatif)</h2>
+        <p>Le verrou empêche une personne qui a ton téléphone en main de voir tes finances dans Boussole. Le code n’est jamais enregistré en clair : seule une empreinte calculée sur le téléphone est gardée.</p>
+        <p>Il ne chiffre pas les données enregistrées sur ce téléphone et ne remplace pas le code du téléphone. Une personne capable de lire les données du navigateur, une extension malveillante ou une version modifiée de l’application ne sont pas arrêtées par ce verrou.</p>
+        <p>Boussole masque son interface quand elle passe en arrière-plan, dans les environnements compatibles. Cette protection ne garantit pas de masquer toutes les captures du système.</p>
+        <p>Sans le code, la seule issue est d’effacer Boussole sur ce téléphone. Une copie en ligne ou un fichier de sauvegarde permettent ensuite de récupérer le budget.</p>
+      </section>
+
+      <section className="space-y-2">
         <h2 className="font-semibold text-gray-900">Accès et effacement</h2>
         <p>
           Tu peux consulter et modifier tes données dans l’application, télécharger une copie JSON dans

@@ -105,6 +105,14 @@ Le même schéma contrôle le fichier et le stockage du navigateur. Une version 
 
 Dans **Aujourd’hui**, la mention **À payer demain** s’affiche pour chaque facture ou mensualité encore à payer le lendemain, à la date de Bruxelles. Les rappels sont visibles en ouvrant l’application, y compris hors ligne. Tu peux les désactiver dans **Plus → Réglages → Rappels d’échéance**. Le réglage est enregistré sur cet appareil.
 
+## Verrouillage de l’application (P5-A)
+
+**Plus → Compte et sécurité → Verrouillage** active un code à 6 chiffres. Le code n’est pas enregistré : seule une empreinte PBKDF2-SHA-256 (200 000 itérations, sel aléatoire) est gardée sur l’appareil. Au lancement, Boussole est toujours verrouillé ; en quittant l’application, il se verrouille immédiatement, ou après 1 ou 5 minutes selon le réglage. Après 5 codes faux, une attente de 30 secondes s’impose, puis double à chaque échec (15 minutes au plus).
+
+Pendant le verrouillage, ni le budget, ni l’en-tête, ni la navigation ne sont rendus. En arrière-plan, un voile masque l’interface ; au retour, il n’est retiré qu’une fois l’écran de verrouillage affiché. Verrouiller un onglet verrouille les autres ; un onglet qui a manqué le message se verrouille à son retour. « Code oublié ? » efface Boussole sur le téléphone après la saisie du mot EFFACER : budget, réglages, verrou, session et trousseau de chiffrement, chaque suppression étant vérifiée.
+
+Le verrou est une barrière d’affichage : il ne chiffre pas les données locales. `tests/app-lock.test.mjs` couvre l’empreinte du code, les attentes, le délai de verrouillage et l’effacement local.
+
 ## Synchronisation chiffrée entre appareils (P2-3)
 
 **Plus → Synchroniser mes appareils** est facultatif. La personne se connecte avec un code reçu par e-mail, puis choisit une phrase secrète d’au moins 12 caractères. Le budget est chiffré sur l’appareil (AES-GCM 256 bits, clé dérivée par PBKDF2-SHA-256, 600 000 itérations) avant tout envoi. La clé reste sur l’appareil, non exportable, dans IndexedDB. Le serveur Supabase (Irlande) ne stocke que l’e-mail, le bloc chiffré, un numéro de version et la date de mise à jour.

@@ -1,0 +1,171 @@
+'use client';
+
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { Compass, LockKeyhole } from 'lucide-react';
+import { Icon } from '@/components/ui/icons';
+import { PIN_LENGTH, VEIL_CLASS } from '@/lib/app-lock';
+import { useLock } from './LockProvider';
+
+const fieldClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-center text-2xl tracking-[0.5em] tabular-nums';
+const primaryButton = 'min-h-11 w-full rounded-xl bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-gray-400';
+const CONFIRM_WORD = 'EFFACER';
+
+function hasAccount(): boolean {
+  try {
+    return localStorage.getItem('boussole-sync-v1') !== null || localStorage.getItem('boussole-auth') !== null;
+  } catch {
+    return false;
+  }
+}
+
+function formatWait(ms: number): string {
+  const seconds = Math.ceil(ms / 1000);
+  return seconds >= 60 ? `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, '0')} s` : `${seconds} s`;
+}
+
+export default function LockScreen() {
+  const { unlock, retryAt } = useLock();
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const [forgot, setForgot] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const inputRef = useRef<HTMLInputElement>(null);
+  const errorId = useId();
+  const waiting = retryAt > now;
+
+  // L’écran est rendu : le voile peut être retiré sans dévoiler le budget.
+  useLayoutEffect(() => {
+    document.documentElement.classList.remove(VEIL_CLASS);
+  }, []);
+
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [waiting]);
+
+  useEffect(() => {
+    if (!forgot) inputRef.current?.focus();
+  }, [forgot]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (waiting || pending) return;
+    setPending(true);
+    setError('');
+    const ok = await unlock(pin);
+    setPending(false);
+    if (!ok) {
+      setPin('');
+      setNow(Date.now());
+      setError('Code incorrect.');
+      inputRef.current?.focus();
+    }
+  }
+
+  return (
+    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4 py-8">
+      <div className="flex items-center justify-center gap-2.5">
+        <span className="flex size-10 items-center justify-center rounded-xl border border-teal-200 bg-teal-50 text-teal-700">
+          <Icon icon={Compass} />
+        </span>
+        <span className="font-display text-xl font-bold tracking-tight text-teal-800">Boussole Budget</span>
+      </div>
+      {forgot ? <ForgotPin onCancel={() => setForgot(false)} /> : (
+        <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl border border-line bg-white p-5">
+          <h1 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <Icon icon={LockKeyhole} className="size-5 text-teal-700" />
+            Boussole est verrouillé
+          </h1>
+          <div>
+            <label htmlFor="lock-pin" className="mb-1.5 block text-sm font-semibold text-slate-700">Ton code à {PIN_LENGTH} chiffres</label>
+            <input
+              id="lock-pin" ref={inputRef} name="pin" type="password" inputMode="numeric" autoComplete="off"
+              maxLength={PIN_LENGTH} value={pin} disabled={waiting}
+              onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+              aria-invalid={error ? true : undefined} aria-describedby={error || waiting ? errorId : undefined}
+              className={fieldClass}
+            />
+            {(error || waiting) && (
+              <p id={errorId} role="alert" className="mt-2 text-sm text-red-700">
+                {waiting ? `Trop d’essais. Réessaie dans ${formatWait(retryAt - now)}.` : error}
+              </p>
+            )}
+          </div>
+          <button type="submit" disabled={waiting || pending || pin.length !== PIN_LENGTH} className={primaryButton}>
+            {pending ? 'Vérification…' : 'Déverrouiller'}
+          </button>
+          <button type="button" onClick={() => setForgot(true)} className="min-h-11 w-full text-sm font-semibold text-teal-800 underline">
+            Code oublié ?
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function ForgotPin({ onCancel }: { onCancel: () => void }) {
+  const { eraseEverything } = useLock();
+  const [word, setWord] = useState('');
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState('');
+  const heading = useRef<HTMLHeadingElement>(null);
+  const account = hasAccount();
+
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
+
+  async function erase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (word.trim().toUpperCase() !== CONFIRM_WORD) return;
+    setPending(true);
+    setFailure('');
+    const result = await eraseEverything();
+    if (result.ok) {
+      window.location.replace('/');
+      return;
+    }
+    setPending(false);
+    setFailure('L’effacement n’est pas complet. Ferme les autres onglets de Boussole puis réessaie.');
+  }
+
+  return (
+    <form onSubmit={erase} noValidate className="space-y-4 rounded-2xl border border-red-200 bg-white p-5 text-sm text-slate-700">
+      <h1 ref={heading} tabIndex={-1} className="text-lg font-bold text-slate-900 focus:outline-none">Code oublié</h1>
+      <p>Sans le code, la seule issue est d’effacer Boussole sur ce téléphone : budget, réglages et verrou.</p>
+      {account ? (
+        <p>
+          Tu as un compte : après l’effacement, reconnecte-toi avec ton e-mail et ta phrase secrète pour récupérer ta copie en ligne.
+          Les modifications faites sur ce téléphone et pas encore synchronisées seront perdues.
+        </p>
+      ) : (
+        <p>
+          Ton budget sera supprimé de ce téléphone. Si tu as un fichier de sauvegarde, tu pourras le restaurer ensuite.
+        </p>
+      )}
+      <p className="text-xs text-slate-600">
+        Une personne qui tient ton téléphone peut aussi supprimer Boussole depuis les réglages du téléphone. Le verrou protège tes informations, pas leur conservation.
+      </p>
+      <div>
+        <label htmlFor="erase-confirm" className="mb-1.5 block font-semibold text-slate-800">
+          Pour confirmer, écris {CONFIRM_WORD}
+        </label>
+        <input id="erase-confirm" name="confirm" autoComplete="off" autoCapitalize="characters" value={word}
+          onChange={(event) => setWord(event.target.value)}
+          className="w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base" />
+      </div>
+      {failure && <p role="alert" className="text-red-700">{failure}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={pending || word.trim().toUpperCase() !== CONFIRM_WORD}
+          className="min-h-11 rounded-xl bg-red-700 px-4 font-semibold text-white hover:bg-red-800 disabled:bg-gray-400">
+          {pending ? 'Effacement…' : 'Effacer Boussole sur ce téléphone'}
+        </button>
+        <button type="button" onClick={onCancel} className="min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-slate-800">
+          Annuler
+        </button>
+      </div>
+    </form>
+  );
+}

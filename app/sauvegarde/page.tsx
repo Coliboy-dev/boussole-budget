@@ -96,6 +96,7 @@ export default function SauvegardePage() {
       <Card className="space-y-3">
         <h2 className="text-sm font-semibold text-gray-800">Exporter</h2>
         <p className="text-sm text-gray-600">Télécharge une copie JSON de tes données financières.</p>
+        <p className="text-sm text-gray-600">Ce fichier n’est pas chiffré : toute personne qui l’obtient peut lire ton budget. Range-le dans un endroit sûr.</p>
         <button
           type="button"
           disabled={!canExportBudget}
