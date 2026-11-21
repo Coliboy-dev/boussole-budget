@@ -9,6 +9,8 @@ import { eraseLocalData, type EraseResult } from '@/lib/account-lifecycle';
 import { deleteKeyStore } from '@/lib/cloud-remote';
 import { SECURITY_EVENT_KEY, postSecurityEvent, subscribeSecurityEvents } from '@/lib/security-channel';
 import LockScreen from './LockScreen';
+import { readDeviceLock, saveDeviceLock, removeDeviceLock, type DeviceLockState } from '@/lib/device-lock-storage';
+import { startDeviceAssertion, startDeviceRegistration, verifyAssertion, verifyRegistration } from '@/lib/webauthn-lock';
 
 type Phase = 'unknown' | 'unlocked' | 'locked';
 
@@ -17,13 +19,33 @@ interface LockSnapshot {
   config: LockConfig | null;
   /** Réglage présent mais illisible : verrouillé, sans possibilité de vérifier un code. */
   unreadable: boolean;
+  device: DeviceLockState;
+  devicePending: boolean;
 }
 
 // État du verrou de cet onglet, hors de React : lu sans effet ni second rendu.
-const SERVER_SNAPSHOT: LockSnapshot = { phase: 'unknown', config: null, unreadable: false };
+const SERVER_SNAPSHOT: LockSnapshot = {
+  phase: 'unknown', config: null, unreadable: false, device: { status: 'absent' }, devicePending: false,
+};
 let snapshot: LockSnapshot | null = null;
 let hiddenAt: number | null = null;
 let unlockedAt = 0;
+let deviceAttemptGeneration = 0;
+let enrollmentAllowedUntil = 0;
+
+function invalidateDeviceAttempt() {
+  deviceAttemptGeneration++;
+  enrollmentAllowedUntil = 0;
+  if (snapshot?.devicePending) update({ devicePending: false });
+}
+
+function readDevice(): DeviceLockState {
+  try {
+    return readDeviceLock(localStorage, location.hostname);
+  } catch {
+    return { status: 'invalid' };
+  }
+}
 const listeners = new Set<() => void>();
 
 function readState(): LockState {
@@ -43,7 +65,10 @@ function getSnapshot(): LockSnapshot {
   if (!snapshot) {
     const state = readState();
     // Au lancement, un verrou existant (valide ou illisible) verrouille toujours, quel que soit le délai.
-    snapshot = { phase: state.status === 'absent' ? 'unlocked' : 'locked', ...settingsFrom(state) };
+    snapshot = {
+      phase: state.status === 'absent' ? 'unlocked' : 'locked',
+      ...settingsFrom(state), device: readDevice(), devicePending: false,
+    };
   }
   return snapshot;
 }
@@ -98,6 +123,7 @@ function storeConfig(next: LockConfig | null) {
 }
 
 function lockEverywhere() {
+  invalidateDeviceAttempt();
   if (!hasLock(getSnapshot())) return;
   try {
     localStorage.setItem(LOCK_EPOCH_KEY, String(Date.now()));
@@ -122,6 +148,7 @@ async function checkPin(pin: string): Promise<boolean> {
 /** Retour au premier plan, ou message d’un autre onglet : relit le réglage et applique la règle. */
 function onReturn() {
   const state = readState();
+  update({ device: readDevice() });
   const current = getSnapshot();
   update(settingsFrom(state));
 
@@ -146,6 +173,12 @@ interface LockContextValue {
   delay: LockDelay;
   /** Heure jusqu’à laquelle les essais sont refusés (0 si aucune attente). */
   retryAt: number;
+  deviceStatus: DeviceLockState['status'];
+  devicePending: boolean;
+  authorizeDeviceEnrollment: (pin: string) => Promise<boolean>;
+  enrollDevice: () => Promise<boolean>;
+  removeDevice: (pin: string) => Promise<boolean>;
+  unlockWithDevice: () => Promise<boolean>;
   enable: (pin: string, delay: LockDelay) => Promise<void>;
   changePin: (current: string, next: string) => Promise<boolean>;
   disable: (current: string) => Promise<boolean>;
@@ -155,7 +188,82 @@ interface LockContextValue {
   eraseEverything: () => Promise<EraseResult>;
 }
 
-const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retryAt'> = {
+const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retryAt' | 'deviceStatus' | 'devicePending'> = {
+  authorizeDeviceEnrollment: async (pin) => {
+    if (getSnapshot().phase !== 'unlocked' || !getSnapshot().config) return false;
+    const valid = await checkPin(pin);
+    enrollmentAllowedUntil = valid ? Date.now() + 120_000 : 0;
+    return valid;
+  },
+  enrollDevice: async () => {
+    const before = getSnapshot();
+    if (before.phase !== 'unlocked' || !before.config || before.unreadable
+      || enrollmentAllowedUntil < Date.now()) return false;
+    enrollmentAllowedUntil = 0;
+    const generation = ++deviceAttemptGeneration;
+    const previous = before.device;
+    try {
+      // Important pour WebKit : navigator.credentials.create est appelé avant le premier await.
+      const { request, challenge } = startDeviceRegistration(
+        location.hostname, previous.status === 'valid' ? previous.credential.credentialId : undefined,
+      );
+      const credential = await request;
+      if (!credential || generation !== deviceAttemptGeneration || getSnapshot().phase !== 'unlocked'
+        || document.visibilityState !== 'visible') return false;
+      const verified = await verifyRegistration(credential, challenge, location.origin, location.hostname);
+      if (generation !== deviceAttemptGeneration || getSnapshot().phase !== 'unlocked'
+        || document.visibilityState !== 'visible') return false;
+      saveDeviceLock(localStorage, verified);
+      update({ device: { status: 'valid', credential: verified } });
+      postSecurityEvent('lock-settings-changed');
+      return true;
+    } catch {
+      // La création peut être annulée, interdite ou indisponible : le PIN reste intact.
+      return false;
+    }
+  },
+  removeDevice: async (pin) => {
+    if (getSnapshot().phase !== 'unlocked' || !getSnapshot().config) return false;
+    if (!(await checkPin(pin))) return false;
+    invalidateDeviceAttempt();
+    try {
+      removeDeviceLock(localStorage);
+    } catch {
+      return false;
+    }
+    update({ device: { status: 'absent' } });
+    postSecurityEvent('lock-settings-changed');
+    return true;
+  },
+  unlockWithDevice: async () => {
+    const before = getSnapshot();
+    if (before.phase !== 'locked' || before.unreadable
+      || before.device.status !== 'valid' || before.devicePending) return false;
+    const generation = ++deviceAttemptGeneration;
+    const firstEpoch = readEpoch();
+    const previousHidden = hiddenAt;
+    update({ devicePending: true });
+    try {
+      // Important pour WebKit : navigator.credentials.get est lancé par le geste utilisateur.
+      const { request, challenge } = startDeviceAssertion(before.device.credential);
+      const credential = await request;
+      if (!credential || generation !== deviceAttemptGeneration) return false;
+      if (!(await verifyAssertion(credential, before.device.credential, challenge, location.origin))) return false;
+      const latest = getSnapshot();
+      if (generation !== deviceAttemptGeneration || latest.phase !== 'locked' || latest.unreadable
+        || latest.device.status !== 'valid'
+        || latest.device.credential.credentialId !== before.device.credential.credentialId
+        || document.visibilityState !== 'visible' || !document.hasFocus()
+        || hiddenAt !== null || previousHidden !== null || readEpoch() > firstEpoch) return false;
+      unlockedAt = Date.now();
+      update({ phase: 'unlocked' });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (generation === deviceAttemptGeneration) update({ devicePending: false });
+    }
+  },
   enable: async (pin, delay) => {
     storeConfig(await createLockConfig(pin, delay));
     unlockedAt = Date.now();
@@ -164,12 +272,20 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
   },
   changePin: async (current, next) => {
     if (!(await checkPin(current))) return false;
+    invalidateDeviceAttempt();
     storeConfig(await createLockConfig(next, getSnapshot().config?.delay ?? 0));
     postSecurityEvent('lock-settings-changed');
     return true;
   },
   disable: async (current) => {
     if (!(await checkPin(current))) return false;
+    invalidateDeviceAttempt();
+    try {
+      removeDeviceLock(localStorage);
+    } catch {
+      return false;
+    }
+    update({ device: { status: 'absent' } });
     storeConfig(null);
     postSecurityEvent('lock-settings-changed');
     return true;
@@ -183,11 +299,13 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
   lockNow: lockEverywhere,
   unlock: async (pin) => {
     if (!(await checkPin(pin))) return false;
+    invalidateDeviceAttempt();
     unlockedAt = Date.now();
     update({ phase: 'unlocked' });
     return true;
   },
   eraseEverything: async () => {
+    invalidateDeviceAttempt();
     const result = await eraseLocalData({ storage: localStorage, deleteKeyStore });
     if (result.ok) {
       postSecurityEvent('local-erased');
@@ -210,6 +328,7 @@ export function LockProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Départ de l’app : plusieurs signaux, car iOS n’en garantit aucun en particulier.
     const onLeave = () => {
+      invalidateDeviceAttempt();
       if (!hasLock(getSnapshot())) return;
       hiddenAt ??= Date.now();
       setVeil(true);
@@ -235,11 +354,13 @@ export function LockProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (type === 'locked' || type === 'lock-enabled') {
-        update(settingsFrom(readState()));
+        invalidateDeviceAttempt();
+        update({ ...settingsFrom(readState()), device: readDevice() });
         if (hasLock(getSnapshot())) showLockScreen();
         return;
       }
-      onReturn();
+      if (document.visibilityState === 'visible') onReturn();
+      else update({ device: readDevice() });
     });
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', onLeave);
@@ -272,6 +393,8 @@ export function LockProvider({ children }: { children: ReactNode }) {
     unreadable,
     delay: config?.delay ?? 0,
     retryAt: config?.retryAt ?? 0,
+    deviceStatus: unreadable ? 'absent' : getSnapshot().device.status,
+    devicePending: getSnapshot().devicePending,
   };
 
   return (
