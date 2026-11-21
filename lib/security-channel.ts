@@ -4,7 +4,7 @@
 export const SECURITY_EVENT_KEY = 'boussole-security-event';
 const CHANNEL = 'boussole-security';
 
-export type SecurityEventType = 'locked' | 'local-erased' | 'lock-settings-changed';
+export type SecurityEventType = 'locked' | 'lock-enabled' | 'local-erased' | 'lock-settings-changed';
 
 interface SecurityMessage {
   type: SecurityEventType;

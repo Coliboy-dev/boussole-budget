@@ -24,7 +24,7 @@ function formatWait(ms: number): string {
 }
 
 export default function LockScreen() {
-  const { unlock, retryAt } = useLock();
+  const { unlock, retryAt, unreadable } = useLock();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
@@ -72,7 +72,13 @@ export default function LockScreen() {
         </span>
         <span className="font-display text-xl font-bold tracking-tight text-teal-800">Boussole Budget</span>
       </div>
-      {forgot ? <ForgotPin onCancel={() => setForgot(false)} /> : (
+      {unreadable && (
+        <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+          Le réglage du verrou est illisible sur ce téléphone. Pour protéger ton budget, Boussole reste verrouillé :
+          la seule issue est d’effacer Boussole sur ce téléphone, puis de récupérer ton budget depuis ta copie en ligne ou une sauvegarde.
+        </div>
+      )}
+      {forgot || unreadable ? <ForgotPin onCancel={unreadable ? undefined : () => setForgot(false)} /> : (
         <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl border border-line bg-white p-5">
           <h1 className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <Icon icon={LockKeyhole} className="size-5 text-teal-700" />
@@ -105,7 +111,7 @@ export default function LockScreen() {
   );
 }
 
-function ForgotPin({ onCancel }: { onCancel: () => void }) {
+function ForgotPin({ onCancel }: { onCancel?: () => void }) {
   const { eraseEverything } = useLock();
   const [word, setWord] = useState('');
   const [pending, setPending] = useState(false);
@@ -133,7 +139,9 @@ function ForgotPin({ onCancel }: { onCancel: () => void }) {
 
   return (
     <form onSubmit={erase} noValidate className="space-y-4 rounded-2xl border border-red-200 bg-white p-5 text-sm text-slate-700">
-      <h1 ref={heading} tabIndex={-1} className="text-lg font-bold text-slate-900 focus:outline-none">Code oublié</h1>
+      <h1 ref={heading} tabIndex={-1} className="text-lg font-bold text-slate-900 focus:outline-none">
+        {onCancel ? 'Code oublié' : 'Effacer Boussole sur ce téléphone'}
+      </h1>
       <p>Sans le code, la seule issue est d’effacer Boussole sur ce téléphone : budget, réglages et verrou.</p>
       {account ? (
         <p>
@@ -162,9 +170,11 @@ function ForgotPin({ onCancel }: { onCancel: () => void }) {
           className="min-h-11 rounded-xl bg-red-700 px-4 font-semibold text-white hover:bg-red-800 disabled:bg-gray-400">
           {pending ? 'Effacement…' : 'Effacer Boussole sur ce téléphone'}
         </button>
-        <button type="button" onClick={onCancel} className="min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-slate-800">
-          Annuler
-        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-slate-800">
+            Annuler
+          </button>
+        )}
       </div>
     </form>
   );

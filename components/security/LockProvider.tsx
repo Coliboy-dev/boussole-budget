@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import {
-  LOCK_EPOCH_KEY, LOCK_STORAGE_KEY, VEIL_CLASS, createLockConfig, pinMatches, readLockConfig, registerFailure,
-  registerSuccess, shouldLock, writeLockConfig, type LockConfig, type LockDelay,
+  LOCK_EPOCH_KEY, LOCK_STORAGE_KEY, VEIL_CLASS, createLockConfig, pinMatches, readLockState, registerFailure,
+  registerSuccess, shouldLock, writeLockConfig, type LockConfig, type LockDelay, type LockState,
 } from '@/lib/app-lock';
 import { eraseLocalData, type EraseResult } from '@/lib/account-lifecycle';
 import { deleteKeyStore } from '@/lib/cloud-remote';
@@ -15,28 +15,35 @@ type Phase = 'unknown' | 'unlocked' | 'locked';
 interface LockSnapshot {
   phase: Phase;
   config: LockConfig | null;
+  /** Réglage présent mais illisible : verrouillé, sans possibilité de vérifier un code. */
+  unreadable: boolean;
 }
 
 // État du verrou de cet onglet, hors de React : lu sans effet ni second rendu.
-const SERVER_SNAPSHOT: LockSnapshot = { phase: 'unknown', config: null };
+const SERVER_SNAPSHOT: LockSnapshot = { phase: 'unknown', config: null, unreadable: false };
 let snapshot: LockSnapshot | null = null;
 let hiddenAt: number | null = null;
 let unlockedAt = 0;
 const listeners = new Set<() => void>();
 
-function readConfig(): LockConfig | null {
+function readState(): LockState {
   try {
-    return readLockConfig(localStorage);
+    return readLockState(localStorage);
   } catch {
-    return null;
+    return { status: 'unreadable' };
   }
+}
+
+/** Champs du snapshot qui décrivent le réglage lu dans le stockage. */
+function settingsFrom(state: LockState): Pick<LockSnapshot, 'config' | 'unreadable'> {
+  return { config: state.status === 'valid' ? state.config : null, unreadable: state.status === 'unreadable' };
 }
 
 function getSnapshot(): LockSnapshot {
   if (!snapshot) {
-    const config = readConfig();
-    // Au lancement, un code existant verrouille toujours, quel que soit le délai.
-    snapshot = { phase: config ? 'locked' : 'unlocked', config };
+    const state = readState();
+    // Au lancement, un verrou existant (valide ou illisible) verrouille toujours, quel que soit le délai.
+    snapshot = { phase: state.status === 'absent' ? 'unlocked' : 'locked', ...settingsFrom(state) };
   }
   return snapshot;
 }
@@ -65,6 +72,24 @@ function readEpoch(): number {
   }
 }
 
+function hasLock(current: LockSnapshot): boolean {
+  return Boolean(current.config) || current.unreadable;
+}
+
+/**
+ * Passe à l’écran de verrouillage sans jamais dévoiler le budget.
+ * Si l’écran de verrouillage est déjà affiché, il ne contient aucun montant : le voile est retiré tout de suite.
+ * Sinon le voile reste, et c’est l’écran de verrouillage qui le retire après son rendu.
+ */
+function showLockScreen() {
+  if (getSnapshot().phase === 'locked') {
+    setVeil(false);
+    return;
+  }
+  setVeil(true);
+  update({ phase: 'locked' });
+}
+
 function storeConfig(next: LockConfig | null) {
   try {
     if (next) writeLockConfig(localStorage, next);
@@ -72,20 +97,18 @@ function storeConfig(next: LockConfig | null) {
   } catch {
     // Stockage indisponible : le réglage vaut pour cette session.
   }
-  update({ config: next });
+  update({ config: next, unreadable: false });
 }
 
-function engage(broadcast: boolean) {
-  if (!getSnapshot().config) return;
-  if (broadcast) {
-    try {
-      localStorage.setItem(LOCK_EPOCH_KEY, String(Date.now()));
-    } catch {
-      // Stockage indisponible.
-    }
-    postSecurityEvent('locked');
+function lockEverywhere() {
+  if (!hasLock(getSnapshot())) return;
+  try {
+    localStorage.setItem(LOCK_EPOCH_KEY, String(Date.now()));
+  } catch {
+    // Stockage indisponible.
   }
-  update({ phase: 'locked' });
+  postSecurityEvent('locked');
+  showLockScreen();
 }
 
 async function checkPin(pin: string): Promise<boolean> {
@@ -99,8 +122,36 @@ async function checkPin(pin: string): Promise<boolean> {
   return false;
 }
 
+/** Retour au premier plan, ou message d’un autre onglet : relit le réglage et applique la règle. */
+function onReturn() {
+  const state = readState();
+  const current = getSnapshot();
+  update(settingsFrom(state));
+
+  if (state.status === 'absent') {
+    // Verrou désactivé ailleurs : plus rien à protéger dans cet onglet.
+    hiddenAt = null;
+    setVeil(false);
+    if (current.phase === 'locked') update({ phase: 'unlocked' });
+    return;
+  }
+  if (state.status === 'unreadable') {
+    hiddenAt = null;
+    showLockScreen();
+    return;
+  }
+  const lockNeeded = current.phase === 'locked'
+    || shouldLock({ hiddenAt, now: Date.now(), delay: state.config.delay })
+    || readEpoch() > unlockedAt;
+  hiddenAt = null;
+  if (lockNeeded) showLockScreen();
+  else setVeil(false);
+}
+
 interface LockContextValue {
   enabled: boolean;
+  /** Réglage du verrou illisible : seul l’effacement est possible. */
+  unreadable: boolean;
   delay: LockDelay;
   /** Heure jusqu’à laquelle les essais sont refusés (0 si aucune attente). */
   retryAt: number;
@@ -113,11 +164,12 @@ interface LockContextValue {
   eraseEverything: () => Promise<EraseResult>;
 }
 
-const actions: Omit<LockContextValue, 'enabled' | 'delay' | 'retryAt'> = {
+const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retryAt'> = {
   enable: async (pin, delay) => {
     storeConfig(await createLockConfig(pin, delay));
     unlockedAt = Date.now();
-    postSecurityEvent('lock-settings-changed');
+    // Les autres onglets déjà ouverts se verrouillent : le verrou vient d’être activé.
+    postSecurityEvent('lock-enabled');
   },
   changePin: async (current, next) => {
     if (!(await checkPin(current))) return false;
@@ -137,7 +189,7 @@ const actions: Omit<LockContextValue, 'enabled' | 'delay' | 'retryAt'> = {
     storeConfig({ ...current, delay });
     postSecurityEvent('lock-settings-changed');
   },
-  lockNow: () => engage(true),
+  lockNow: lockEverywhere,
   unlock: async (pin) => {
     if (!(await checkPin(pin))) return false;
     unlockedAt = Date.now();
@@ -162,40 +214,29 @@ const actions: Omit<LockContextValue, 'enabled' | 'delay' | 'retryAt'> = {
 const LockContext = createContext<LockContextValue | null>(null);
 
 export function LockProvider({ children }: { children: ReactNode }) {
-  const { phase, config } = useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT);
+  const { phase, config, unreadable } = useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT);
 
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
-        if (!getSnapshot().config) return;
+        if (!hasLock(getSnapshot())) return;
         hiddenAt = Date.now();
         setVeil(true);
         return;
       }
-      // Un autre onglet a pu activer, modifier ou désactiver le verrou.
-      const latest = readConfig();
-      update({ config: latest });
-      if (!latest) {
-        setVeil(false);
-        return;
-      }
-      const lockNeeded = shouldLock({ hiddenAt, now: Date.now(), delay: latest.delay }) || readEpoch() > unlockedAt;
-      hiddenAt = null;
-      // Si le verrou s’engage, le voile reste : l’écran de verrouillage le retire après son rendu.
-      if (lockNeeded) engage(false);
-      else setVeil(false);
+      onReturn();
     };
     const unsubscribe = subscribeSecurityEvents((type) => {
       if (type === 'local-erased') {
         window.location.replace('/');
         return;
       }
-      const latest = readConfig();
-      update({ config: latest });
-      if (type === 'locked' && latest) {
-        setVeil(true);
-        update({ phase: 'locked' });
+      if (type === 'locked' || type === 'lock-enabled') {
+        update(settingsFrom(readState()));
+        if (hasLock(getSnapshot())) showLockScreen();
+        return;
       }
+      onReturn();
     });
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
@@ -211,7 +252,8 @@ export function LockProvider({ children }: { children: ReactNode }) {
 
   const value: LockContextValue = {
     ...actions,
-    enabled: Boolean(config),
+    enabled: Boolean(config) || unreadable,
+    unreadable,
     delay: config?.delay ?? 0,
     retryAt: config?.retryAt ?? 0,
   };

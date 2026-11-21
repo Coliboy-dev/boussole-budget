@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  FIRST_RETRY_MS, LOCK_STORAGE_KEY, MAX_RETRY_MS, createLockConfig, isValidPin, pinMatches, readLockConfig,
+  FIRST_RETRY_MS, LOCK_STORAGE_KEY, MAX_RETRY_MS, createLockConfig, isValidPin, pinMatches, readLockState,
   registerFailure, registerSuccess, retryDelayMs, sameBytes, shouldLock, writeLockConfig,
 } from '../lib/app-lock.ts';
 import { LOCAL_STORAGE_KEYS, eraseLocalData } from '../lib/account-lifecycle.ts';
@@ -35,7 +35,7 @@ test('P5-A — le code n’apparaît jamais dans l’enregistrement et deux sels
   const storage = memoryStorage();
   writeLockConfig(storage, first);
   assert.equal(storage.getItem(LOCK_STORAGE_KEY).includes('123456'), false);
-  assert.deepEqual(readLockConfig(storage), first);
+  assert.deepEqual(readLockState(storage), { status: 'valid', config: first });
 });
 
 test('P5-A — seuls six chiffres forment un code', async () => {
@@ -72,7 +72,7 @@ test('P5-A — les échecs s’accumulent, survivent à une relecture et un succ
 
   const storage = memoryStorage();
   writeLockConfig(storage, config);
-  const reread = readLockConfig(storage);
+  const reread = readLockState(storage).config;
   assert.equal(reread.failedAttempts, 6);
   assert.equal(reread.retryAt, now + 60_000);
 
@@ -89,10 +89,18 @@ test('P5-A — verrouillage au retour selon le délai', () => {
   assert.equal(shouldLock({ hiddenAt: null, now: hiddenAt, delay: 0 }), false);
 });
 
-test('P5-A — une configuration abîmée est ignorée', () => {
-  assert.equal(readLockConfig(memoryStorage({ [LOCK_STORAGE_KEY]: '{oops' })), null);
-  assert.equal(readLockConfig(memoryStorage({ [LOCK_STORAGE_KEY]: JSON.stringify({ version: 1, delay: 42 }) })), null);
-  assert.equal(readLockConfig(memoryStorage()), null);
+test('P5-A — un réglage abîmé est « illisible », jamais « pas de verrou »', async () => {
+  const valid = await createLockConfig('123456', 0, FAST);
+  const unreadable = { status: 'unreadable' };
+  assert.deepEqual(readLockState(memoryStorage()), { status: 'absent' });
+  assert.deepEqual(readLockState(memoryStorage({ [LOCK_STORAGE_KEY]: '{oops' })), unreadable);
+  assert.deepEqual(readLockState(memoryStorage({ [LOCK_STORAGE_KEY]: 'null' })), unreadable);
+  assert.deepEqual(readLockState(memoryStorage({ [LOCK_STORAGE_KEY]: '' })), unreadable);
+  for (const broken of [{ version: 1, delay: 42 }, { ...valid, hash: '' }, { ...valid, iterations: 0 }, { ...valid, delay: 1 }, { ...valid, version: 2 }]) {
+    assert.deepEqual(readLockState(memoryStorage({ [LOCK_STORAGE_KEY]: JSON.stringify(broken) })), unreadable);
+  }
+  const throwing = { getItem: () => { throw new Error('stockage bloqué'); } };
+  assert.deepEqual(readLockState(throwing), unreadable);
 });
 
 test('P5-A — l’effacement local supprime toutes les clés et le trousseau', async () => {

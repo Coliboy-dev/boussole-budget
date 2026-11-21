@@ -97,15 +97,39 @@ export function shouldLock({ hiddenAt, now, delay }: { hiddenAt: number | null; 
   return hiddenAt !== null && now - hiddenAt >= delay;
 }
 
-export function readLockConfig(storage: Pick<Storage, 'getItem'>): LockConfig | null {
+/**
+ * Trois états distincts : aucun verrou, verrou valide, réglage illisible.
+ * Un réglage illisible ne vaut jamais « pas de verrou » : Boussole reste verrouillé.
+ */
+export type LockState =
+  | { status: 'absent' }
+  | { status: 'valid'; config: LockConfig }
+  | { status: 'unreadable' };
+
+function isLockConfig(value: unknown): value is LockConfig {
+  const candidate = value as Partial<LockConfig> | null;
+  return Boolean(candidate) && typeof candidate === 'object' && candidate!.version === 1
+    && typeof candidate!.salt === 'string' && candidate!.salt.length > 0
+    && typeof candidate!.hash === 'string' && candidate!.hash.length > 0
+    && Number.isSafeInteger(candidate!.iterations) && candidate!.iterations! > 0
+    && Number.isSafeInteger(candidate!.failedAttempts) && candidate!.failedAttempts! >= 0
+    && typeof candidate!.retryAt === 'number' && Number.isFinite(candidate!.retryAt)
+    && LOCK_DELAYS.includes(candidate!.delay as LockDelay);
+}
+
+export function readLockState(storage: Pick<Storage, 'getItem'>): LockState {
+  let raw: string | null;
   try {
-    const value = JSON.parse(storage.getItem(LOCK_STORAGE_KEY) ?? 'null') as Partial<LockConfig> | null;
-    if (!value || value.version !== 1 || typeof value.salt !== 'string' || typeof value.hash !== 'string'
-      || !Number.isSafeInteger(value.iterations) || !Number.isSafeInteger(value.failedAttempts)
-      || typeof value.retryAt !== 'number' || !LOCK_DELAYS.includes(value.delay as LockDelay)) return null;
-    return value as LockConfig;
+    raw = storage.getItem(LOCK_STORAGE_KEY);
   } catch {
-    return null;
+    return { status: 'unreadable' };
+  }
+  if (raw === null) return { status: 'absent' };
+  try {
+    const value: unknown = JSON.parse(raw);
+    return isLockConfig(value) ? { status: 'valid', config: value } : { status: 'unreadable' };
+  } catch {
+    return { status: 'unreadable' };
   }
 }
 
