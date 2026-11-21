@@ -10,7 +10,7 @@ import { deleteKeyStore } from '@/lib/cloud-remote';
 import { SECURITY_EVENT_KEY, postSecurityEvent, subscribeSecurityEvents } from '@/lib/security-channel';
 import LockScreen from './LockScreen';
 import { readDeviceLock, saveDeviceLock, removeDeviceLock, type DeviceLockState } from '@/lib/device-lock-storage';
-import { startDeviceAssertion, startDeviceRegistration, verifyAssertion, verifyRegistration } from '@/lib/webauthn-lock';
+import { canCompleteDeviceUnlock, startDeviceAssertion, startDeviceRegistration, verifyAssertion, verifyRegistration } from '@/lib/webauthn-lock';
 
 type Phase = 'unknown' | 'unlocked' | 'locked';
 
@@ -250,18 +250,19 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
       if (!credential || generation !== deviceAttemptGeneration) return false;
       if (!(await verifyAssertion(credential, before.device.credential, challenge, location.origin))) return false;
       const latest = getSnapshot();
-      // La diffusion entre onglets peut être retardée : toujours relire les deux clés
-      // directement avant de rendre le budget, et pas seulement le snapshot React.
+      // Même si les messages entre onglets sont retardés, relire le stockage
+      // directement avant d'ouvrir le budget et vérifier la génération.
       const persistedPin = readState();
       const persistedDevice = readDevice();
-      if (generation !== deviceAttemptGeneration || latest.phase !== 'locked' || latest.unreadable
-        || persistedPin.status !== 'valid' || persistedDevice.status !== 'valid'
-        || latest.device.status !== 'valid'
-        || persistedDevice.credential.credentialId !== before.device.credential.credentialId
-        || persistedDevice.credential.publicKeySpki !== before.device.credential.publicKeySpki
-        || latest.device.credential.credentialId !== before.device.credential.credentialId
-        || document.visibilityState !== 'visible' || !document.hasFocus()
-        || hiddenAt !== null || previousHidden !== null || readEpoch() > firstEpoch) return false;
+      if (!canCompleteDeviceUnlock({
+        generation, currentGeneration: deviceAttemptGeneration, phase: latest.phase,
+        pinValid: persistedPin.status === 'valid' && !latest.unreadable,
+        currentCredential: latest.device.status === 'valid' ? latest.device.credential : null,
+        storedCredential: persistedDevice.status === 'valid' ? persistedDevice.credential : null,
+        expectedCredential: before.device.credential,
+        visible: document.visibilityState === 'visible', focused: document.hasFocus(),
+        hiddenAt, hiddenBefore: previousHidden, epochBefore: firstEpoch, epochAfter: readEpoch(),
+      })) return false;
       unlockedAt = Date.now();
       update({ phase: 'unlocked' });
       return true;
