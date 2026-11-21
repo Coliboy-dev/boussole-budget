@@ -112,6 +112,9 @@ export default function LockSettings() {
         Le verrou empêche une personne qui a ton téléphone en main de voir tes finances dans Boussole.
         Il ne chiffre pas les données enregistrées sur ce téléphone et ne remplace pas le code de ton téléphone.
       </p>
+      <p className="text-sm text-slate-700">
+        Sur iPhone, l’aperçu du sélecteur d’applications peut encore montrer tes montants. Pour l’éviter, appuie sur le cadenas avant de quitter Boussole.
+      </p>
       {notice && <p role="status" className="text-sm font-medium text-green-800">{notice}</p>}
 
       {mode === 'idle' && !lock.enabled && (

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  FIRST_RETRY_MS, LOCK_STORAGE_KEY, MAX_RETRY_MS, createLockConfig, isValidPin, pinMatches, readLockState,
+  FIRST_RETRY_MS, LOCK_STORAGE_KEY, MAX_RETRY_MS, createLockConfig, isValidPin, keepVeil, pinMatches, readLockState, returnDecision,
   registerFailure, registerSuccess, retryDelayMs, sameBytes, shouldLock, writeLockConfig,
 } from '../lib/app-lock.ts';
 import { LOCAL_STORAGE_KEYS, eraseLocalData } from '../lib/account-lifecycle.ts';
@@ -101,6 +101,34 @@ test('P5-A — un réglage abîmé est « illisible », jamais « pas de verrou 
   }
   const throwing = { getItem: () => { throw new Error('stockage bloqué'); } };
   assert.deepEqual(readLockState(throwing), unreadable);
+});
+
+test('P5-A — retour dans l’app : déjà verrouillé → écran du code, jamais un voile bloqué', async () => {
+  const config = await createLockConfig('123456', 60_000, FAST);
+  const valid = { status: 'valid', config };
+  const base = { state: valid, hiddenAt: 1_000, now: 2_000, lockEpoch: 0, unlockedAt: 0 };
+  // Régression iPhone : app déjà verrouillée, aller-retour hors de l’app.
+  assert.equal(returnDecision({ ...base, phase: 'locked' }), 'show-lock');
+  assert.equal(returnDecision({ ...base, phase: 'locked', hiddenAt: null }), 'show-lock');
+  // Délai d’une minute : 59 s → déverrouillé ; 61 s → verrouillé.
+  assert.equal(returnDecision({ ...base, phase: 'unlocked', now: 1_000 + 59_000 }), 'unveil');
+  assert.equal(returnDecision({ ...base, phase: 'unlocked', now: 1_000 + 61_000 }), 'show-lock');
+  // Perte du focus sans arrière-plan : pas d’absence comptée.
+  assert.equal(returnDecision({ ...base, phase: 'unlocked', hiddenAt: null }), 'unveil');
+  // Verrouillé par un autre onglet pendant l’absence.
+  assert.equal(returnDecision({ ...base, phase: 'unlocked', hiddenAt: null, lockEpoch: 5, unlockedAt: 4 }), 'show-lock');
+  // Réglage illisible : toujours verrouillé.
+  assert.equal(returnDecision({ ...base, phase: 'unlocked', state: { status: 'unreadable' } }), 'show-lock');
+  // Verrou désactivé ailleurs.
+  assert.equal(returnDecision({ ...base, phase: 'locked', state: { status: 'absent' } }), 'unlock');
+  assert.equal(returnDecision({ ...base, phase: 'unlocked', state: { status: 'absent' } }), 'unveil');
+});
+
+test('P5-A — voile : retiré tout de suite si l’écran du code est déjà affiché (écran vert de l’iPhone)', () => {
+  assert.equal(keepVeil('show-lock', 'locked'), false);
+  assert.equal(keepVeil('show-lock', 'unlocked'), true);
+  assert.equal(keepVeil('unveil', 'unlocked'), false);
+  assert.equal(keepVeil('unlock', 'locked'), false);
 });
 
 test('P5-A — l’effacement local supprime toutes les clés et le trousseau', async () => {

@@ -40,7 +40,8 @@ export default function PrivacyPage() {
         <h2 className="font-semibold text-gray-900">Verrouillage de l’application (facultatif)</h2>
         <p>Le verrou empêche une personne qui a ton téléphone en main de voir tes finances dans Boussole. Le code n’est jamais enregistré en clair : seule une empreinte calculée sur le téléphone est gardée.</p>
         <p>Il ne chiffre pas les données enregistrées sur ce téléphone et ne remplace pas le code du téléphone. Une personne capable de lire les données du navigateur, une extension malveillante ou une version modifiée de l’application ne sont pas arrêtées par ce verrou.</p>
-        <p>Boussole masque son interface quand elle passe en arrière-plan, dans les environnements compatibles. Cette protection ne garantit pas de masquer toutes les captures du système.</p>
+        <p>Boussole masque son interface dès qu’elle perd le focus ou passe en arrière-plan. Sur iPhone, l’aperçu du sélecteur d’applications est capturé par le système, que tu utilises Safari, Chrome ou Boussole installée sur l’écran d’accueil : Boussole ne peut pas garantir que son masquage arrive avant cette capture. Un essai sur iPhone dans Chrome a montré des montants dans l’aperçu.</p>
+        <p>Pour un aperçu sans aucun montant, appuie sur le cadenas en haut de l’écran avant de quitter Boussole : l’aperçu montre alors l’écran du code.</p>
         <p>Sans le code, la seule issue est d’effacer Boussole sur ce téléphone. Une copie en ligne ou un fichier de sauvegarde permettent ensuite de récupérer le budget.</p>
       </section>
 

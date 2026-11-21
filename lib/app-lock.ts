@@ -133,6 +133,35 @@ export function readLockState(storage: Pick<Storage, 'getItem'>): LockState {
   }
 }
 
+/**
+ * Que faire au retour dans l’app (ou à un message d’un autre onglet).
+ * - `unlock` : plus aucun verrou, afficher le budget ;
+ * - `show-lock` : afficher l’écran du code ; si on y est déjà, il ne contient aucun montant et le voile se retire ;
+ * - `unveil` : rester déverrouillé et retirer le voile.
+ */
+export function returnDecision({ phase, state, hiddenAt, now, lockEpoch, unlockedAt }: {
+  phase: 'locked' | 'unlocked';
+  state: LockState;
+  hiddenAt: number | null;
+  now: number;
+  lockEpoch: number;
+  unlockedAt: number;
+}): 'unlock' | 'show-lock' | 'unveil' {
+  if (state.status === 'absent') return phase === 'locked' ? 'unlock' : 'unveil';
+  if (state.status === 'unreadable' || phase === 'locked') return 'show-lock';
+  if (shouldLock({ hiddenAt, now, delay: state.config.delay }) || lockEpoch > unlockedAt) return 'show-lock';
+  return 'unveil';
+}
+
+/**
+ * Faut-il garder le voile après la décision de retour ?
+ * Seulement si l’écran du code n’est pas encore affiché : c’est lui qui le retirera après son rendu.
+ * S’il est déjà affiché (app déjà verrouillée), le voile doit partir tout de suite, sinon l’écran reste vert.
+ */
+export function keepVeil(decision: 'unlock' | 'show-lock' | 'unveil', phaseBefore: 'locked' | 'unlocked'): boolean {
+  return decision === 'show-lock' && phaseBefore === 'unlocked';
+}
+
 export function writeLockConfig(storage: Pick<Storage, 'setItem'>, config: LockConfig): void {
   storage.setItem(LOCK_STORAGE_KEY, JSON.stringify(config));
 }

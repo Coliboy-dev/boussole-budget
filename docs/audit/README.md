@@ -111,6 +111,8 @@ Dans **Aujourd’hui**, la mention **À payer demain** s’affiche pour chaque f
 
 Pendant le verrouillage, ni le budget, ni l’en-tête, ni la navigation ne sont rendus. En arrière-plan, un voile masque l’interface ; au retour, il n’est retiré qu’une fois l’écran de verrouillage affiché. Verrouiller un onglet verrouille les autres ; un onglet qui a manqué le message se verrouille à son retour. « Code oublié ? » efface Boussole sur le téléphone après la saisie du mot EFFACER : budget, réglages, verrou, session et trousseau de chiffrement, chaque suppression étant vérifiée.
 
+Le voile est posé à la perte du focus, au passage en arrière-plan et à la fermeture de la page ; il est levé au retour (visibilité, `pageshow`, focus) et, en dernier recours, au premier toucher, toujours après la décision de verrouillage. Sur iPhone, l’aperçu du sélecteur d’applications est capturé par le système : son masquage n’est pas garanti (essai sur Chrome iOS : montants visibles). Le cadenas de l’en-tête, utilisé avant de quitter l’app, donne un aperçu sans montant.
+
 Un réglage de verrou illisible n’est jamais traité comme « pas de verrou » : Boussole reste verrouillé et seul l’effacement est proposé. Activer le verrou dans un onglet verrouille les autres onglets déjà ouverts.
 
 Le verrou est une barrière d’affichage : il ne chiffre pas les données locales. `tests/app-lock.test.mjs` couvre l’empreinte du code, les attentes, le délai de verrouillage et l’effacement local.

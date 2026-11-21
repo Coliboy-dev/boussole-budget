@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import {
   LOCK_EPOCH_KEY, LOCK_STORAGE_KEY, VEIL_CLASS, createLockConfig, pinMatches, readLockState, registerFailure,
-  registerSuccess, shouldLock, writeLockConfig, type LockConfig, type LockDelay, type LockState,
+  keepVeil, registerSuccess, returnDecision, writeLockConfig, type LockConfig, type LockDelay, type LockState,
 } from '@/lib/app-lock';
 import { eraseLocalData, type EraseResult } from '@/lib/account-lifecycle';
 import { deleteKeyStore } from '@/lib/cloud-remote';
@@ -82,12 +82,9 @@ function hasLock(current: LockSnapshot): boolean {
  * Sinon le voile reste, et c’est l’écran de verrouillage qui le retire après son rendu.
  */
 function showLockScreen() {
-  if (getSnapshot().phase === 'locked') {
-    setVeil(false);
-    return;
-  }
-  setVeil(true);
-  update({ phase: 'locked' });
+  const phaseBefore = getSnapshot().phase === 'locked' ? 'locked' : 'unlocked';
+  setVeil(keepVeil('show-lock', phaseBefore));
+  if (phaseBefore === 'unlocked') update({ phase: 'locked' });
 }
 
 function storeConfig(next: LockConfig | null) {
@@ -128,24 +125,18 @@ function onReturn() {
   const current = getSnapshot();
   update(settingsFrom(state));
 
-  if (state.status === 'absent') {
-    // Verrou désactivé ailleurs : plus rien à protéger dans cet onglet.
-    hiddenAt = null;
-    setVeil(false);
-    if (current.phase === 'locked') update({ phase: 'unlocked' });
-    return;
-  }
-  if (state.status === 'unreadable') {
-    hiddenAt = null;
+  const decision = returnDecision({
+    phase: current.phase === 'locked' ? 'locked' : 'unlocked',
+    state, hiddenAt, now: Date.now(), lockEpoch: readEpoch(), unlockedAt,
+  });
+  hiddenAt = null;
+  if (decision === 'show-lock') {
     showLockScreen();
     return;
   }
-  const lockNeeded = current.phase === 'locked'
-    || shouldLock({ hiddenAt, now: Date.now(), delay: state.config.delay })
-    || readEpoch() > unlockedAt;
-  hiddenAt = null;
-  if (lockNeeded) showLockScreen();
-  else setVeil(false);
+  // Verrou absent (désactivé ailleurs) ou délai non écoulé : budget affiché, sans voile.
+  setVeil(false);
+  if (decision === 'unlock') update({ phase: 'unlocked' });
 }
 
 interface LockContextValue {
@@ -217,14 +208,26 @@ export function LockProvider({ children }: { children: ReactNode }) {
   const { phase, config, unreadable } = useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT);
 
   useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        if (!hasLock(getSnapshot())) return;
-        hiddenAt = Date.now();
-        setVeil(true);
-        return;
-      }
+    // Départ de l’app : plusieurs signaux, car iOS n’en garantit aucun en particulier.
+    const onLeave = () => {
+      if (!hasLock(getSnapshot())) return;
+      hiddenAt ??= Date.now();
+      setVeil(true);
+    };
+    // Perte du focus (sélecteur d’apps, centre de notifications…) : voile seul, sans compter une absence.
+    const onBlur = () => {
+      if (hasLock(getSnapshot())) setVeil(true);
+    };
+    // Retour : n’importe lequel de ces signaux suffit. Si le voile est posé ou une absence en cours,
+    // `onReturn` décide du verrouillage avant de retirer le voile.
+    const onShown = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (hiddenAt === null && !document.documentElement.classList.contains(VEIL_CLASS)) return;
       onReturn();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') onLeave();
+      else onShown();
     };
     const unsubscribe = subscribeSecurityEvents((type) => {
       if (type === 'local-erased') {
@@ -239,8 +242,21 @@ export function LockProvider({ children }: { children: ReactNode }) {
       onReturn();
     });
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onLeave);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('pageshow', onShown);
+    window.addEventListener('focus', onShown);
+    // Filet de sécurité : un toucher sur un écran resté voilé le rétablit toujours.
+    document.addEventListener('pointerdown', onShown, true);
+    document.addEventListener('touchstart', onShown, true);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onLeave);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('pageshow', onShown);
+      window.removeEventListener('focus', onShown);
+      document.removeEventListener('pointerdown', onShown, true);
+      document.removeEventListener('touchstart', onShown, true);
       unsubscribe();
     };
   }, []);
