@@ -230,6 +230,10 @@ export function OnboardingResult({ onContinue }: { onContinue: () => void }) {
         Ce premier calcul utilise les échéances que tu as saisies. Tu peux compléter ton budget ensuite.
       </p>
       <button type="button" className={primaryClass} onClick={onContinue}>Voir mon tableau de bord</button>
+      <p className="text-sm text-gray-700">
+        Tu veux empêcher une autre personne de voir ton budget sur ce téléphone ?{' '}
+        <Link href="/synchronisation#verrouillage" className="font-semibold text-teal-800 underline">Verrouiller Boussole avec un code</Link>
+      </p>
     </div>
   );
 }

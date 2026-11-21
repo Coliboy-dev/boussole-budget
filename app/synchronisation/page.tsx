@@ -7,6 +7,7 @@ import AlertBanner from '@/components/ui/AlertBanner';
 import FormField from '@/components/forms/FormField';
 import { Icon } from '@/components/ui/icons';
 import { useCloudSync } from '@/components/sync/CloudSyncProvider';
+import LockSettings from '@/components/security/LockSettings';
 import { MIN_PASSPHRASE_LENGTH } from '@/lib/cloud-crypto';
 
 const fieldClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
@@ -41,7 +42,7 @@ function Explanation() {
         <Icon icon={ShieldCheck} className="size-5 text-teal-700" />
         Comment tes données sont protégées
       </h2>
-      <p>Ton budget est chiffré sur ton appareil avec une phrase secrète que toi seul connais, avant d’être envoyé.</p>
+      <p>La copie de ton budget envoyée en ligne est chiffrée sur ton appareil, avec une phrase secrète que toi seul connais, avant d’être envoyée.</p>
       <p>Le serveur, hébergé dans l’Union européenne, ne reçoit qu’un bloc illisible : ni montant, ni créancier, ni date. Personne chez Start’OnLab ne peut le lire.</p>
       <p>Si tu oublies ta phrase secrète, la copie en ligne est perdue. Le budget de ton téléphone, lui, reste intact.</p>
     </Card>
@@ -251,7 +252,9 @@ export default function SynchronisationPage() {
 
   return (
     <div className="space-y-4 px-4 py-4">
-      <h1 className="text-xl font-bold text-slate-900">Synchroniser mes appareils</h1>
+      <h1 className="text-xl font-bold text-slate-900">Compte et sécurité</h1>
+      <LockSettings />
+      <h2 className="pt-2 text-lg font-bold text-slate-900">Synchroniser mes appareils</h2>
       {phase === 'off' && (
         <Card className="flex items-start gap-3 text-sm text-slate-700">
           <Icon icon={CloudOff} className="size-5 shrink-0 text-slate-500" />

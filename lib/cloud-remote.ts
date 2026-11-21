@@ -133,6 +133,30 @@ export async function saveStoredKey(stored: StoredKey): Promise<void> {
   await withStore('readwrite', (store) => store.put(stored, KEY_ID));
 }
 
+/** Supprime tout le trousseau ; rejette si la suppression échoue ou reste bloquée. */
+export function deleteKeyStore(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      resolve();
+      return;
+    }
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    request.onsuccess = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    request.onerror = () => {
+      clearTimeout(timer);
+      reject(request.error ?? new Error('Suppression du trousseau impossible.'));
+    };
+    // Une connexion ouverte ailleurs retarde la suppression : elle aboutit quand elle se ferme.
+    request.onblocked = () => {
+      timer = setTimeout(() => reject(new Error('Le trousseau est encore ouvert dans un autre onglet.')), 3000);
+    };
+  });
+}
+
 export async function clearStoredKey(): Promise<void> {
   try {
     await withStore('readwrite', (store) => store.delete(KEY_ID));
