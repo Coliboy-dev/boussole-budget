@@ -32,13 +32,18 @@ function billName(id: number, field: BillField): string {
   return `bill-${id}-${field}`;
 }
 
-export default function BudgetOnboarding({ onComplete }: { onComplete: () => void }) {
+export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
+  onComplete?: () => void;
+  onFinish?: (input: FirstBudgetInput) => Promise<void>;
+  onCancel?: () => Promise<void>;
+}) {
   const { today, finishOnboarding } = useApp();
   const [step, setStep] = useState<Step>(1);
   const [balance, setBalance] = useState('');
   const [income, setIncome] = useState({ date: '', amount: '' });
   const [bills, setBills] = useState<BillDraft[]>([]);
   const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
   const nextBill = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const { errors, validate, clearFieldError, reset } = useFormValidation();
@@ -62,12 +67,18 @@ export default function BudgetOnboarding({ onComplete }: { onComplete: () => voi
     setBills((current) => current.map((bill) => bill.id === id ? { ...bill, [field]: value } : bill));
   }
 
-  function finish(input?: FirstBudgetInput) {
+  async function finish(input?: FirstBudgetInput) {
+    if (saving) return;
+    setSaving(true);
+    setSaveError('');
     try {
-      finishOnboarding(input);
-      if (input) onComplete();
+      if (onFinish && input) await onFinish(input);
+      else finishOnboarding(input);
+      if (input) onComplete?.();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Impossible d’enregistrer ton budget.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -101,7 +112,7 @@ export default function BudgetOnboarding({ onComplete }: { onComplete: () => voi
     });
     if (!validate(form, rules)) return;
 
-    finish({
+    void finish({
       balance: parseAmountInput(balance),
       income: income.date ? { date: income.date, amount: parseAmountInput(income.amount) } : undefined,
       bills: entries,
@@ -183,7 +194,7 @@ export default function BudgetOnboarding({ onComplete }: { onComplete: () => voi
           {saveError && <p role="alert" className="mb-3 text-sm text-red-700">{saveError}</p>}
 
           <div className="space-y-2">
-            <button type="submit" className={primaryClass}>{action}</button>
+            <button type="submit" disabled={saving} className={primaryClass}>{saving ? 'Enregistrement…' : action}</button>
             {step > 1 && (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button type="button" className={secondaryClass} onClick={() => changeStep(step === 3 ? 2 : 1)}>Retour</button>
@@ -201,18 +212,20 @@ export default function BudgetOnboarding({ onComplete }: { onComplete: () => voi
         </form>
       </Card>
 
-      {step === 1 && (
+      {onCancel ? (
+        <button type="button" disabled={saving} className={secondaryClass} onClick={() => void onCancel()}>Annuler et me déconnecter</button>
+      ) : step === 1 && (
         <div className="flex flex-wrap gap-x-5 gap-y-3 text-sm font-medium text-teal-800">
           <Link href="/sauvegarde" className="inline-flex min-h-11 items-center underline">Restaurer une sauvegarde</Link>
           <Link href="/demo" prefetch={false} className="inline-flex min-h-11 items-center underline">Voir la démo</Link>
-          <button type="button" className="underline" onClick={() => finish()}>Passer pour l’instant</button>
+          <button type="button" className="underline" onClick={() => void finish()}>Passer pour l’instant</button>
         </div>
       )}
     </div>
   );
 }
 
-export function OnboardingResult({ onContinue }: { onContinue: () => void }) {
+export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinue: () => void; onlineCopy?: boolean }) {
   const { summary, balanceDate } = useApp();
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -225,6 +238,7 @@ export function OnboardingResult({ onContinue }: { onContinue: () => void }) {
       <h1 ref={heading} tabIndex={-1} className="text-xl font-bold text-gray-900 focus:outline-none">
         Ton premier budget
       </h1>
+      {onlineCopy && <p role="status" className="text-sm font-semibold text-teal-800">Copie en ligne créée.</p>}
       <SummaryCard summary={summary} hasUndatedPayments={false} hasRecordedBalance={Boolean(balanceDate)} />
       <p className="text-sm text-gray-600">
         Ce premier calcul utilise les échéances que tu as saisies. Tu peux compléter ton budget ensuite.

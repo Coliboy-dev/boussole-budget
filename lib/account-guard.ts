@@ -45,6 +45,19 @@ export function readStoredSessionUserId(storage: Pick<Storage, 'getItem'>): Sess
   }
 }
 
+export function readExpiredSession(storage: Pick<Storage, 'getItem'>, now = Date.now() / 1000) {
+  try {
+    const session = JSON.parse(storage.getItem(AUTH_STORAGE_KEY) ?? 'null');
+    if (nonEmptyId(session?.access_token) && nonEmptyId(session.refresh_token) && nonEmptyId(session.user?.id)
+      && Number.isFinite(session.expires_at) && session.expires_at <= now) {
+      return { userId: session.user.id, email: typeof session.user.email === 'string' ? session.user.email : '' };
+    }
+  } catch {
+    // Une session illisible ne peut pas autoriser l’accès hors ligne.
+  }
+  return null;
+}
+
 export function accountGuard({ sessionUserId, keyUserId, owner }: {
   sessionUserId: SessionUserId;
   keyUserId: string | null;

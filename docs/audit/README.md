@@ -135,6 +135,14 @@ Au premier lancement de C0, un budget sans propriétaire enregistré devient inv
 
 Les parcours Chromium dans `tests/browser/account-guard.mjs` couvrent le changement de compte sur deux onglets, l’association et l’export hors ligne après migration. Une recette sur une instance Supabase locale a vérifié la migration SQL et les règles d’accès avec deux comptes fictifs (§9.5 du plan P5).
 
+## Compte facultatif et premier coffre (P5-C1)
+
+L’inscription dans Boussole est activable pour la recette avec `NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED=true`. L’ouverture aux utilisateurs dépend de la validation de l’expéditeur Boussole et de la réception des codes sur le domaine définitif (§5.6 du plan P5). Le parcours de connexion existant conserve `shouldCreateUser: false`. La démo, la restauration et la création d’un budget invité restent accessibles depuis l’écran de choix.
+
+Après le code e-mail, Boussole propose une phrase secrète générée. La personne confirme l’avoir enregistrée avant de créer sa copie en ligne. Le marqueur local `boussole-vault-pending-v1` bloque les envois ordinaires jusqu’à la confirmation du premier coffre. Une reprise compare le coffre déchiffré à l’empreinte initiale et à celle du budget actuel. Quand le coffre initial correspond, les modifications locales restent disponibles et partent après la confirmation.
+
+Une session propriétaire expirée peut ouvrir le budget local pendant le renouvellement si le compte, la clé et le rattachement concordent. Le coffre reste en pause jusqu’à la validation en ligne. Avec une absence de session confirmée, un rattachement illisible peut repasser en mode invité sous le verrou de transition. `tests/browser/account-signup.mjs` couvre ces parcours avec Chromium et une API Supabase simulée.
+
 ## Dépenses et enveloppes : modèle et calcul
 
 Le format de sauvegarde reste en version 2. Les anciennes sauvegardes gardent leur structure. Le moteur traite les champs absents comme des listes vides, une mémoire de commerces vide et une révision de solde à zéro.

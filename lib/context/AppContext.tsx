@@ -36,7 +36,7 @@ import { todayInBrussels } from '@/lib/local-date';
 import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
 import { updateBalance, type SettledOccurrence } from '@/lib/balance-update';
 import { canAccessBudget, useBudgetAccess } from '@/lib/budget-access';
-import { readBudgetOwner } from '@/lib/account-guard';
+import { readBudgetOwner, readStoredSessionUserId } from '@/lib/account-guard';
 import {
   addSpending as insertSpending,
   deleteEnvelope as removeEnvelope,
@@ -261,7 +261,7 @@ export interface AppContextType extends AppState {
   exportBudget: () => string;
   recordBackupExport: (date: string) => void;
   restoreBudget: (budget: AppState) => void;
-  finishOnboarding: (input?: FirstBudgetInput) => void;
+  finishOnboarding: (input?: FirstBudgetInput, accountId?: string) => AppState;
   saveProfileSettings: (profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>) => void;
   clearBudget: () => void;
   /** Solde affiché par la banque ; `settled` liste les échéances qu’il contient déjà. */
@@ -384,6 +384,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   function saveBudget(imported: AppState, backupDate = lastBackupDate): RuntimeState {
     if (!canAccessBudget() || !isCurrentBudget()) throw new Error('Ce budget est temporairement protégé.');
+    return persistBudget(imported, backupDate);
+  }
+
+  function persistBudget(imported: AppState, backupDate: string | null, owner?: string): RuntimeState {
     const previous = persistence.current;
     if (!previous || storageStatus === 'loading') throw new Error('Le stockage du navigateur est indisponible.');
     if (storageRevision !== previous.saved.storageRevision) throw new Error('Une restauration est déjà en cours.');
@@ -397,7 +401,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       storageRevision: storageRevision + 1,
     };
     // A save queued before restoration must not overwrite the newly imported version.
-    persistence.current = { snapshot: { current: contents, legacy: null }, owner: previous.owner, saved: restored, needsMigration: false };
+    persistence.current = { snapshot: { current: contents, legacy: null }, owner: owner ?? previous.owner, saved: restored, needsMigration: false };
     dispatchInternal({ type: 'HYDRATE', payload: restored });
     return restored;
   }
@@ -414,9 +418,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveBudget(imported, null);
   }
 
-  function finishOnboarding(input?: FirstBudgetInput): void {
+  function finishOnboarding(input?: FirstBudgetInput, accountId?: string): AppState {
     if (storageStatus !== 'fresh') throw new Error('Un budget existe déjà sur cet appareil.');
-    saveBudget(input ? createFirstBudget(budget, input, today) : budget);
+    const firstBudget = input ? createFirstBudget(budget, input, today) : budget;
+    if (!accountId) return splitRuntimeState(saveBudget(firstBudget)).budget;
+
+    const owner = readBudgetOwner(localStorage);
+    const previous = persistence.current;
+    if (!input || owner.type !== 'transition' || owner.userId !== accountId
+      || readStoredSessionUserId(localStorage) !== accountId || !previous
+      || previous.snapshot.current !== null || previous.snapshot.legacy !== null) {
+      throw new Error('Le compte ou le budget a changé. Recommence depuis ton compte.');
+    }
+    return splitRuntimeState(persistBudget(firstBudget, null, JSON.stringify({ type: 'account', userId: accountId }))).budget;
   }
 
   function saveProfileSettings(profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>): void {

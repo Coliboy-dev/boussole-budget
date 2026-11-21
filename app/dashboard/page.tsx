@@ -6,6 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import SummaryCard from '@/components/dashboard/SummaryCard';
 import BudgetOnboarding, { OnboardingResult } from '@/components/onboarding/BudgetOnboarding';
+import AccountChoice from '@/components/onboarding/AccountChoice';
+import { accountSignupEnabled, useCloudSync } from '@/components/sync/CloudSyncProvider';
+import { VaultProgress } from '@/components/sync/CloudAccountSection';
 import DailyBalanceCurve from '@/components/dashboard/DailyBalanceCurve';
 import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
@@ -20,15 +23,19 @@ import type { Reminder } from '@/lib/types';
 
 export default function DashboardPage() {
   const { isBudgetLoading, needsOnboarding } = useApp();
+  const { firstBudgetResult, initialVaultConfirmed, dismissFirstBudgetResult } = useCloudSync();
+  const [guestChosen, setGuestChosen] = useState(false);
   const [showFirstResult, setShowFirstResult] = useState(false);
 
   if (isBudgetLoading) {
     return <p role="status" className="px-4 py-6 text-sm text-gray-600">Chargement du budget…</p>;
   }
   if (showFirstResult) return <OnboardingResult onContinue={() => setShowFirstResult(false)} />;
+  if (firstBudgetResult && initialVaultConfirmed) return <OnboardingResult onContinue={dismissFirstBudgetResult} onlineCopy />;
+  if (needsOnboarding && accountSignupEnabled && !guestChosen) return <AccountChoice onGuest={() => setGuestChosen(true)} />;
   if (needsOnboarding) return <BudgetOnboarding onComplete={() => setShowFirstResult(true)} />;
 
-  return <SavedBudgetDashboard />;
+  return <><VaultProgress /><SavedBudgetDashboard /></>;
 }
 
 function SavedBudgetDashboard() {
