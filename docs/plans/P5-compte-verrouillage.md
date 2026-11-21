@@ -1,6 +1,6 @@
 # P5 — Compte facultatif et verrouillage de l’application (révision 4)
 
-Plan de conception, **sans code**. La révision 2 intègre l’audit contradictoire de la révision 1 (contradictions C1 à C14, risques S1 à S8, arbitrages D1 à D7). Chaque affirmation sur le code a été vérifiée sur `main` (commit `deb1cf4`, contenu applicatif identique à `9b5129a`). La section 11 est une auto-relecture contradictoire : les risques qui restent, écrits par l’auteur du plan.
+Plan de conception, **sans code applicatif**. Historique : la révision 2 a traité C1–C14 et S1–S8, puis la révision 3 a ajouté les corrections N1–N6. **Base de la présente révision : `main` au commit `2862ae0`, intégrant la PR A (verrou PIN et confidentialité visuelle).** Le §4.3 et les tests associés décrivent désormais le lot B ; les §5–7 restent des plans non implémentés pour les lots C et D. Les mentions de futures fonctionnalités ne doivent pas être prises pour des caractéristiques déjà livrées.
 
 ### Révision 4 (validation du lot B, 21 novembre 2026)
 
@@ -56,9 +56,9 @@ Texte à l’activation du verrou : « Le verrou empêche une personne qui a ton
 
 ## 3. Démarrage et ordre de rendu (C11)
 
-- `LockGate` enveloppe **tout** le contenu de `components/layout/AppWrapper.tsx`, sous `AppProvider` et `CloudSyncProvider`.
-- Rendu serveur et premier rendu client : `LockGate` affiche un **écran neutre** (logo, aucun enfant rendu). Le budget n’est de toute façon jamais dans le HTML serveur : il n’existe que dans `localStorage`.
-- Après montage : lecture synchrone de `boussole-lock-v1`. Verrou actif → écran de verrouillage ; inactif → enfants. **Aucun enfant n’est rendu avant cette décision.**
+- **Existant PR A :** `LockProvider` enveloppe **tout** le contenu de `components/layout/AppWrapper.tsx`, sous `AppProvider` et `CloudSyncProvider` (`AppWrapper.tsx:L7–15`). La PR B doit **réutiliser ce composant**, pas créer un second `LockGate`.
+- Rendu serveur et premier rendu client : `LockProvider` affiche `NeutralScreen` avant de décider quel écran rendre (`LockProvider.tsx:L207–283`). Le budget n’est pas inclus dans le HTML serveur : il provient du stockage local du client.
+- Au montage : `readLockState(boussole-lock-v1)` distingue verrou absent, valide ou illisible ; les deux derniers états rendent `LockScreen`. **Aucun enfant budgétaire n'est rendu avant cette décision.**
 - **Au lancement à froid, le verrou est toujours engagé** s’il est actif, quel que soit le délai.
 
 ---
@@ -121,16 +121,13 @@ Texte à l’activation du verrou : « Le verrou empêche une personne qui a ton
 - Le résultat `isUserVerifyingPlatformAuthenticatorAvailable()` peut varier selon navigateur, OS et paramétrage. **Faux = méthode non proposée, sans dégrader le PIN**. Chrome iOS peut avoir des restrictions ; aucune affirmation d'indisponibilité générale avant test réel.
 - Il n'est pas requis de supprimer automatiquement un credential du trousseau iCloud/Google : retirer sa référence locale empêche son usage par Boussole, sous réserve du modèle de menace d'un verrou purement client.
 
-### 4.4 Déclenchement
+### 4.4 Déclenchement (état réel PR A, et extension PR B)
 
-Les règles suivantes décrivent le verrouillage **hors vérification WebAuthn**. Pendant une tentative WebAuthn, la machine à états du §4.3 prime pour les transitions, tout en maintenant les protections visuelles du lot A.
-- `visibilitychange` → `hidden` : heure enregistrée en mémoire et dans `sessionStorage` ; ajout **synchrone** de la classe `privacy-veil` sur `document.documentElement` (fond uni, contenu masqué par CSS), en dehors de React.
-- Retour `visible`, **dans le gestionnaire d’événement, avant toute mise à jour React** : calcul synchrone de `shouldLock({ hiddenAt, now, delay })` (verrouillage si `now − hiddenAt >= delay` ; délai 0 : tout passage en arrière-plan verrouille).
-  - Verrouillage nécessaire : le voile **reste en place**, `document.documentElement.dataset.locked = 'true'` est posé, puis l’état React passe à « verrouillé ». C’est `LockScreen` qui retire le voile, dans un `useLayoutEffect` exécuté après son propre rendu et avant l’affichage.
-  - Verrouillage inutile : retrait immédiat du voile.
-  - Règle générale : **le voile n’est jamais retiré par le gestionnaire d’événement si un verrouillage est en cours** ; seul l’écran qui sera affiché le retire.
-- Le voile masque le contenu par CSS (`html.privacy-veil #app-content { visibility: hidden }`, fond uni au-dessus) : même si React tarde, le budget reste invisible.
-- Rechargement ou redémarrage du navigateur : lancement à froid → verrouillé.
+- **Existant PR A :** `components/security/LockProvider.tsx` utilise déjà `visibilitychange`, `pagehide`, `blur`, `pageshow`, `focus`, `pointerdown` et `touchstart`. `hiddenAt` est actuellement conservé en mémoire du module, **pas dans `sessionStorage`**. `lib/app-lock.ts` fournit `returnDecision` et `keepVeil`. La PR B doit prolonger ces mécanismes sans les remplacer par un second gestionnaire indépendant.
+- À la perte de visibilité, `privacy-veil` est appliqué de façon synchrone. `blur` pose seulement le voile : le temps d'absence ne commence pas sans `hidden/pagehide`. Au retour, la décision de verrouiller est prise avant de dévoiler le budget. Si l'écran PIN est déjà monté, le voile peut être retiré tout de suite ; sinon il reste jusqu'au rendu effectif de `LockScreen`. **C'est la correction du bug d'écran vert de la PR A.**
+- **CSS existant :** `app/globals.css:L38–49` masque `html.privacy-veil body > *` puis ajoute `body::after`. Ne pas introduire une règle sur `#app-content` ni un attribut `data-locked` qui n'existent pas dans le code.
+- **Extension PR B :** les signaux intervenant pendant `device-pending` suivent la machine à états du §4.3. Les signaux continuent d'être enregistrés et le voile continue de protéger l'écran. Un dialogue système ne doit jamais permettre un déverrouillage tardif après `hidden/pagehide` ou après un verrouillage concurrent.
+- Au lancement à froid, un PIN existant (valide ou illisible) verrouille l'application ; les délais s'appliquent ensuite aux retours dans l'app. Le masquage de l'aperçu par iOS **n'est pas garanti** même si le voile fonctionne ; l'utilisateur peut verrouiller manuellement avant de quitter.
 
 ### 4.5 Code oublié (S2, C10, C13)
 L’accès à la messagerie **ne suffit jamais** à afficher le budget local.
@@ -147,10 +144,9 @@ Avertissement à l’activation du verrou sans compte ni déverrouillage par le 
 
 ### 4.6 Plusieurs onglets (S6)
 - Canal `BroadcastChannel('boussole-security')` (repli : événement `storage` sur la clé `boussole-security-event`).
-- Messages : `locked`, `signing-out`, `signed-out`, `account-changed`, `local-erased`.
-- `locked` : tous les onglets se verrouillent immédiatement. Le déverrouillage reste propre à chaque onglet.
-- `signing-out` : les autres onglets affichent un écran bloquant « Déconnexion en cours » et suspendent leurs envois automatiques.
-- `signed-out`, `account-changed`, `local-erased` : les autres onglets démontent l’interface et rechargent la page.
+- **Existant PR A** (`lib/security-channel.ts`) : événements `locked`, `lock-enabled`, `lock-settings-changed`, `local-erased`. Le verrouillage se propage, tandis que le déverrouillage par PIN/WebAuthn reste propre à chaque onglet.
+- **PR B :** réutiliser `lock-settings-changed` pour l'activation/désactivation de la méthode téléphone ; garder le même verrouillage inter-onglets. Si `locked` survient pendant un dialogue WebAuthn, invalider la tentative.
+- **Prévu seulement dans la PR D :** ajouter `signing-out`, `signed-out`, `account-changed` ; `signing-out` bloquera l'interface et les envois, les deux autres provoqueront un rechargement sécurisé. Ne pas anticiper ces fonctions dans la PR B.
 
 ---
 
@@ -260,7 +256,7 @@ Aucun contenu du budget local n’est affiché sur ces écrans. Fonction pure `a
 
 **PR B uniquement :** créer `lib/webauthn-lock.ts` (enregistrement, validation registration/assertion, DER→P1363), `lib/device-lock-storage.ts` (credential local indépendant), adapter `components/security/LockProvider.tsx`, `LockScreen.tsx`, `LockSettings.tsx`, `lib/account-lifecycle.ts` (effacement de la nouvelle clé), et ajouter `tests/webauthn-lock.test.mjs`. Aucun ajout Supabase, aucune nouvelle route, aucun changement du chiffrement des budgets. Réutiliser `lib/security-channel.ts` et ses événements existants ; ne créer un événement nouveau que si un test démontre la nécessité. L'intégration doit conserver la PR A en l'état hors adaptations strictement nécessaires. Les modifications du §8 ci-dessous restent le **périmètre global P5**, non une liste à recoder pendant PR B.
 
-Nouveaux : `lib/app-lock.ts` (hachage, comparaison, essais, `shouldLock`), `lib/webauthn-lock.ts` (création, contrôle, vérification de signature), `lib/passphrase.ts`, `lib/account-lifecycle.ts` (`associationDecision`, `signOutSteps`, `proveSynced` sans réseau injecté), `lib/security-channel.ts`, `components/security/LockGate.tsx`, `LockScreen.tsx`, `LockSettings.tsx`, `components/onboarding/AccountChoice.tsx`, `components/sync/AssociationChoice.tsx`, `components/sync/SignOutFlow.tsx`.
+Nouveaux : `lib/app-lock.ts` (hachage, comparaison, essais, `shouldLock`), `lib/webauthn-lock.ts` (création, contrôle, vérification de signature), `lib/passphrase.ts`, `lib/account-lifecycle.ts` (`associationDecision`, `signOutSteps`, `proveSynced` sans réseau injecté), `lib/security-channel.ts`, `components/security/LockProvider.tsx` (déjà livré en A), `LockScreen.tsx` et `LockSettings.tsx` (déjà livrés en A), `components/onboarding/AccountChoice.tsx`, `components/sync/AssociationChoice.tsx`, `components/sync/SignOutFlow.tsx`.
 
 Modifiés : `components/layout/AppWrapper.tsx`, `TopHeader.tsx`, `components/sync/CloudSyncProvider.tsx` (état `awaiting-association`, gel, comparaison avant conflit, suppression du compte séparée), `lib/cloud-remote.ts` (`clearStoredKey` qui propage les erreurs), `components/onboarding/BudgetOnboarding.tsx`, `app/synchronisation/page.tsx` (« Compte et sécurité », même URL), `app/plus/page.tsx` (libellé de l’entrée), `app/sauvegarde/page.tsx` (avertissement fichier en clair), `app/confidentialite/page.tsx` (§2), `app/globals.css` (`privacy-veil`), `docs/audit/README.md`.
 
