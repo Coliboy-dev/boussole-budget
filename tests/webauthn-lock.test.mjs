@@ -5,7 +5,7 @@ import {
   DEVICE_LOCK_STORAGE_KEY, base64UrlToBytes, bytesToBase64Url, readDeviceLock,
   removeDeviceLock, saveDeviceLock,
 } from '../lib/device-lock-storage.ts';
-import { derEs256ToRaw, verifyAssertion, verifyRegistration } from '../lib/webauthn-lock.ts';
+import { canCompleteDeviceUnlock, derEs256ToRaw, verifyAssertion, verifyRegistration } from '../lib/webauthn-lock.ts';
 import { LOCAL_STORAGE_KEYS, eraseLocalData } from '../lib/account-lifecycle.ts';
 
 const RP = 'boussole.example.test';
@@ -150,4 +150,27 @@ test('P5-B — effacement inclut la référence de l’authentificateur', async 
   const outcome = await eraseLocalData({ storage, deleteKeyStore: async () => {} });
   assert.equal(outcome.ok, true);
   assert.equal(storage.getItem(DEVICE_LOCK_STORAGE_KEY), null);
+});
+
+test('P5-B — aucun résultat WebAuthn tardif ne peut ouvrir un budget', async () => {
+  const credential = await verifyRegistration(enrollmentResponse(), CHALLENGE, ORIGIN, RP);
+  const base = {
+    generation: 4, currentGeneration: 4, phase: 'locked', pinValid: true,
+    currentCredential: credential, storedCredential: credential, expectedCredential: credential,
+    visible: true, focused: true, hiddenAt: null, hiddenBefore: null,
+    epochBefore: 42, epochAfter: 42,
+  };
+  assert.equal(canCompleteDeviceUnlock(base), true);
+  for (const change of [
+    { currentGeneration: 5 }, // une autre tentative ou un autre onglet a verrouillé
+    { phase: 'unlocked' }, { pinValid: false },
+    { visible: false }, { focused: false }, // dialogue ou app en arrière-plan
+    { hiddenAt: 100 }, { hiddenBefore: 100 }, // absent pendant Face ID
+    { epochAfter: 43 }, // cadenas activé depuis autre onglet
+    { storedCredential: null }, { currentCredential: null },
+    { storedCredential: { ...credential, publicKeySpki: b64(Buffer.alloc(91, 1)) } },
+    { currentCredential: { ...credential, credentialId: b64(Buffer.alloc(32, 2)) } },
+  ]) {
+    assert.equal(canCompleteDeviceUnlock({ ...base, ...change }), false, JSON.stringify(change));
+  }
 });
