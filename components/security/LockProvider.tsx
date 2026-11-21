@@ -260,7 +260,7 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
         currentCredential: latest.device.status === 'valid' ? latest.device.credential : null,
         storedCredential: persistedDevice.status === 'valid' ? persistedDevice.credential : null,
         expectedCredential: before.device.credential,
-        visible: document.visibilityState === 'visible', focused: document.hasFocus(),
+        visible: document.visibilityState === 'visible',
         hiddenAt, hiddenBefore: previousHidden, epochBefore: firstEpoch, epochAfter: readEpoch(),
       })) return false;
       unlockedAt = Date.now();

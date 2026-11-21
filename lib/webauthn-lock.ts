@@ -228,7 +228,6 @@ export function canCompleteDeviceUnlock(args: {
   storedCredential: DeviceCredential | null;
   expectedCredential: DeviceCredential;
   visible: boolean;
-  focused: boolean;
   hiddenAt: number | null;
   hiddenBefore: number | null;
   epochBefore: number;
@@ -236,7 +235,7 @@ export function canCompleteDeviceUnlock(args: {
 }): boolean {
   const a = args;
   return a.generation === a.currentGeneration && a.phase === 'locked' && a.pinValid
-    && a.visible && a.focused && a.hiddenAt === null && a.hiddenBefore === null
+    && a.visible && a.hiddenAt === null && a.hiddenBefore === null
     && a.epochBefore === a.epochAfter
     && !!a.currentCredential && !!a.storedCredential
     && a.currentCredential.credentialId === a.expectedCredential.credentialId

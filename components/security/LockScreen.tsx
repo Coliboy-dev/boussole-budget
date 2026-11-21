@@ -4,6 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } f
 import { Compass, LockKeyhole } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
 import { PIN_LENGTH, VEIL_CLASS } from '@/lib/app-lock';
+import { deviceAuthenticatorAvailable } from '@/lib/webauthn-lock';
 import { useLock } from './LockProvider';
 
 const fieldClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-center text-2xl tracking-[0.5em] tabular-nums';
@@ -28,6 +29,7 @@ export default function LockScreen() {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [deviceError, setDeviceError] = useState('');
+  const [deviceAvailable, setDeviceAvailable] = useState<boolean | null>(null);
   const [pending, setPending] = useState(false);
   const [forgot, setForgot] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -47,8 +49,16 @@ export default function LockScreen() {
   }, [waiting]);
 
   useEffect(() => {
-    if (!forgot && deviceStatus !== 'valid') inputRef.current?.focus();
-  }, [forgot, deviceStatus]);
+    let cancelled = false;
+    void deviceAuthenticatorAvailable().then((available) => {
+      if (!cancelled) setDeviceAvailable(available);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!forgot && !waiting && (deviceStatus !== 'valid' || deviceAvailable === false)) inputRef.current?.focus();
+  }, [forgot, waiting, deviceStatus, deviceAvailable]);
 
   async function unlockPhone() {
     if (devicePending) return;
@@ -88,7 +98,7 @@ export default function LockScreen() {
       )}
       {forgot || unreadable ? <ForgotPin onCancel={unreadable ? undefined : () => setForgot(false)} /> : (
         <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl border border-line bg-white p-5">
-          {deviceStatus === 'valid' && (
+          {deviceStatus === 'valid' && deviceAvailable === true && (
             <div className="space-y-2">
               <button type="button" disabled={devicePending || pending}
                 onClick={() => void unlockPhone()} className={primaryButton}>
@@ -97,6 +107,11 @@ export default function LockScreen() {
               {deviceError && <p role="alert" className="text-sm text-amber-900">{deviceError}</p>}
               <p className="text-xs text-slate-600">Le téléphone peut demander Face ID, une empreinte ou son code.</p>
             </div>
+          )}
+          {deviceStatus === 'valid' && deviceAvailable === false && (
+            <p className="text-sm text-slate-700">
+              Le déverrouillage par le téléphone n&apos;est pas disponible dans ce navigateur. Utilise ton code Boussole.
+            </p>
           )}
           {deviceStatus === 'invalid' && (
             <p className="text-sm text-amber-900">La méthode du téléphone doit être réactivée dans Compte et sécurité. Ton code Boussole reste valable.</p>
