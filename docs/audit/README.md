@@ -127,6 +127,14 @@ La base est décrite dans `supabase/migrations/`. Chaque compte ne peut lire, mo
 
 `tests/cloud-sync.test.mjs` vérifie le chiffrement (aller-retour, mauvaise phrase, bloc altéré, absence de montant lisible) et toutes les décisions de synchronisation. Un test de bout en bout à deux navigateurs sur le vrai projet a validé l’activation, la récupération sur un second appareil, le refus d’une mauvaise phrase, la propagation d’une modification, le conflit et la suppression du compte.
 
+## Rattachement du budget à un compte (P5-C0)
+
+La connexion par e-mail est réservée aux comptes existants. Si ton budget est associé à un compte, Boussole le garde sur cet appareil après la déconnexion et le masque jusqu’à ta reconnexion au même compte. Un autre compte ne peut pas l’envoyer ni le remplacer. Pour un budget invité, confirme d’abord le compte auquel tu veux l’associer ou la récupération de sa copie en ligne. Le format des fichiers de sauvegarde reste identique.
+
+Au premier lancement de C0, un budget sans propriétaire enregistré devient invité. Boussole retire les anciennes traces de synchronisation et de connexion locales pour que tu puisses consulter et exporter ton budget hors ligne.
+
+Les parcours Chromium dans `tests/browser/account-guard.mjs` couvrent le changement de compte sur deux onglets, l’association et l’export hors ligne après migration. Une recette sur une instance Supabase locale a vérifié la migration SQL et les règles d’accès avec deux comptes fictifs (§9.5 du plan P5).
+
 ## Dépenses et enveloppes : modèle et calcul
 
 Le format de sauvegarde reste en version 2. Les anciennes sauvegardes gardent leur structure. Le moteur traite les champs absents comme des listes vides, une mémoire de commerces vide et une révision de solde à zéro.

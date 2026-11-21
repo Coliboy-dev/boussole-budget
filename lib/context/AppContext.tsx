@@ -35,6 +35,8 @@ import {
 import { todayInBrussels } from '@/lib/local-date';
 import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
 import { updateBalance, type SettledOccurrence } from '@/lib/balance-update';
+import { canAccessBudget, useBudgetAccess } from '@/lib/budget-access';
+import { readBudgetOwner } from '@/lib/account-guard';
 import {
   addSpending as insertSpending,
   deleteEnvelope as removeEnvelope,
@@ -58,6 +60,7 @@ type RuntimeState = AppState & {
 
 type BudgetPersistence = {
   snapshot: BudgetStorageSnapshot;
+  owner: string;
   saved: RuntimeState;
   needsMigration: boolean;
 };
@@ -253,6 +256,7 @@ export interface AppContextType extends AppState {
   isBudgetLoading: boolean;
   needsOnboarding: boolean;
   canExportBudget: boolean;
+  isCurrentBudget: () => boolean;
   lastBackupDate: string | null;
   exportBudget: () => string;
   recordBackupExport: (date: string) => void;
@@ -297,7 +301,7 @@ export interface AppContextType extends AppState {
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, {
+  const [state, dispatchInternal] = useReducer(appReducer, {
     ...emptyBudgetState,
     lastBackupDate: null,
     storageStatus: 'loading',
@@ -306,10 +310,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const persistence = useRef<BudgetPersistence | null>(null);
   const scheduledPaymentUndo = useRef<{ before: AppState; after: RuntimeState } | null>(null);
   const today = useSyncExternalStore(subscribeToCalendar, todayInBrussels, serverDate);
+  const budgetAccess = useBudgetAccess();
+
+  function dispatch(action: AppAction) {
+    if (canAccessBudget() && isCurrentBudget()) dispatchInternal(action);
+  }
+
+  function isCurrentBudget(): boolean {
+    const saved = persistence.current;
+    if (!saved) return false;
+    try {
+      const current = readBudgetSnapshot(localStorage);
+      return current.current === saved.snapshot.current && current.legacy === saved.snapshot.legacy
+        && saved.owner === JSON.stringify(readBudgetOwner(localStorage));
+    } catch {
+      return false;
+    }
+  }
 
   useEffect(() => {
     let snapshot: BudgetStorageSnapshot | undefined;
+    let owner = '';
     try {
+      owner = JSON.stringify(readBudgetOwner(localStorage));
       snapshot = readBudgetSnapshot(localStorage);
       const { current, legacy } = snapshot;
       const { budget, lastBackupDate } = current !== null ? deserializeStoredBudget(current) : {
@@ -322,41 +345,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         storageStatus: current === null && legacy === null ? 'fresh' : 'ready',
         storageRevision: 0,
       };
-      persistence.current = { snapshot, saved: loaded, needsMigration: legacy !== null };
-      dispatch({ type: 'HYDRATE', payload: loaded });
+      persistence.current = { snapshot, owner, saved: loaded, needsMigration: legacy !== null };
+      dispatchInternal({ type: 'HYDRATE', payload: loaded });
     } catch {
       const unavailable: RuntimeState = {
         ...emptyBudgetState, lastBackupDate: null, storageStatus: 'unreadable', storageRevision: 0,
       };
-      persistence.current = snapshot ? { snapshot, saved: unavailable, needsMigration: false } : null;
-      dispatch({ type: 'HYDRATE', payload: unavailable });
+      persistence.current = snapshot ? { snapshot, owner, saved: unavailable, needsMigration: false } : null;
+      dispatchInternal({ type: 'HYDRATE', payload: unavailable });
     }
   }, []);
 
   useEffect(() => {
     const { storageStatus, storageRevision, lastBackupDate, budget } = splitRuntimeState(state);
     const previous = persistence.current;
-    if (storageStatus !== 'ready' || !previous || storageRevision !== previous.saved.storageRevision
+    if (!budgetAccess || !canAccessBudget() || storageStatus !== 'ready' || !previous || storageRevision !== previous.saved.storageRevision
       || (state === previous.saved && !previous.needsMigration)) return;
 
     try {
+      if (previous.owner !== JSON.stringify(readBudgetOwner(localStorage))) return;
       const contents = serializeBudget(budget, lastBackupDate ?? undefined);
       writeBudgetSnapshot(localStorage, previous.snapshot, contents);
-      persistence.current = { snapshot: { current: contents, legacy: null }, saved: state, needsMigration: false };
+      persistence.current = { snapshot: { current: contents, legacy: null }, owner: previous.owner, saved: state, needsMigration: false };
     } catch {
-      dispatch({ type: 'SAVE_FAILED', revision: storageRevision });
+      dispatchInternal({ type: 'SAVE_FAILED', revision: storageRevision });
     }
-  }, [state]);
+  }, [state, budgetAccess]);
 
   const { storageStatus, storageRevision, lastBackupDate, lastAddedSpendingId, budget } = splitRuntimeState(state);
-  const canExportBudget = storageStatus === 'fresh' || storageStatus === 'ready' || storageStatus === 'unsaved';
+  const canExportBudget = budgetAccess && (storageStatus === 'fresh' || storageStatus === 'ready' || storageStatus === 'unsaved');
 
   function exportBudget(): string {
-    if (!canExportBudget) throw new Error('Le budget doit être chargé pour être exporté.');
+    if (!canExportBudget || !canAccessBudget() || !isCurrentBudget()) {
+      throw new Error('Recharge le budget avec le compte auquel il est associé.');
+    }
     return serializeBudget(budget);
   }
 
   function saveBudget(imported: AppState, backupDate = lastBackupDate): RuntimeState {
+    if (!canAccessBudget() || !isCurrentBudget()) throw new Error('Ce budget est temporairement protégé.');
     const previous = persistence.current;
     if (!previous || storageStatus === 'loading') throw new Error('Le stockage du navigateur est indisponible.');
     if (storageRevision !== previous.saved.storageRevision) throw new Error('Une restauration est déjà en cours.');
@@ -370,8 +397,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       storageRevision: storageRevision + 1,
     };
     // A save queued before restoration must not overwrite the newly imported version.
-    persistence.current = { snapshot: { current: contents, legacy: null }, saved: restored, needsMigration: false };
-    dispatch({ type: 'HYDRATE', payload: restored });
+    persistence.current = { snapshot: { current: contents, legacy: null }, owner: previous.owner, saved: restored, needsMigration: false };
+    dispatchInternal({ type: 'HYDRATE', payload: restored });
     return restored;
   }
 
@@ -469,6 +496,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isBudgetLoading: storageStatus === 'loading',
     needsOnboarding: storageStatus === 'fresh',
     canExportBudget,
+    isCurrentBudget,
     lastBackupDate,
     exportBudget,
     recordBackupExport,
