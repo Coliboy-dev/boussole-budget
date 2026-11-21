@@ -217,6 +217,34 @@ export async function verifyAssertion(
   }
 }
 
+/** Garde-fou synchronisé avant toute libération d'un budget après WebAuthn.
+ * Reste testable sans navigateur, contrairement au dialogue système lui-même. */
+export function canCompleteDeviceUnlock(args: {
+  generation: number;
+  currentGeneration: number;
+  phase: 'locked' | 'unlocked' | 'unknown';
+  pinValid: boolean;
+  currentCredential: DeviceCredential | null;
+  storedCredential: DeviceCredential | null;
+  expectedCredential: DeviceCredential;
+  visible: boolean;
+  focused: boolean;
+  hiddenAt: number | null;
+  hiddenBefore: number | null;
+  epochBefore: number;
+  epochAfter: number;
+}): boolean {
+  const a = args;
+  return a.generation === a.currentGeneration && a.phase === 'locked' && a.pinValid
+    && a.visible && a.focused && a.hiddenAt === null && a.hiddenBefore === null
+    && a.epochBefore === a.epochAfter
+    && !!a.currentCredential && !!a.storedCredential
+    && a.currentCredential.credentialId === a.expectedCredential.credentialId
+    && a.currentCredential.publicKeySpki === a.expectedCredential.publicKeySpki
+    && a.storedCredential.credentialId === a.expectedCredential.credentialId
+    && a.storedCredential.publicKeySpki === a.expectedCredential.publicKeySpki;
+}
+
 export function startDeviceRegistration(rpId: string, oldId?: string) {
   const challenge = randomChallenge();
   const userId = crypto.getRandomValues(new Uint8Array(16));
