@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Compass, LockKeyhole } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
 import { PIN_LENGTH, VEIL_CLASS } from '@/lib/app-lock';
+import { deviceAuthenticatorAvailable } from '@/lib/webauthn-lock';
 import { useLock } from './LockProvider';
 
 const fieldClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-center text-2xl tracking-[0.5em] tabular-nums';
 const primaryButton = 'min-h-11 w-full rounded-xl bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-gray-400';
+const textButton = 'min-h-11 w-full text-sm font-semibold text-teal-800 underline disabled:opacity-50';
 const CONFIRM_WORD = 'EFFACER';
 
 function hasAccount(): boolean {
@@ -23,16 +25,21 @@ function formatWait(ms: number): string {
   return seconds >= 60 ? `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, '0')} s` : `${seconds} s`;
 }
 
-export default function LockScreen() {
-  const { unlock, retryAt, unreadable } = useLock();
+export default function LockScreen({ allowAutomaticUnlock }: { allowAutomaticUnlock: boolean }) {
+  const { unlock, unlockWithDevice, cancelDeviceUnlock, retryAt, unreadable, deviceStatus, devicePending } = useLock();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
+  const [method, setMethod] = useState<'phone' | 'unconfirmed' | 'pin'>('phone');
+  const [deviceAvailable, setDeviceAvailable] = useState<boolean | null>(null);
   const [pending, setPending] = useState(false);
   const [forgot, setForgot] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
+  const requestedPhone = useRef(false);
   const errorId = useId();
   const waiting = retryAt > now;
+  const canUsePhone = deviceStatus === 'valid' && deviceAvailable === true;
+  const showPin = deviceStatus !== 'valid' || deviceAvailable === false || method !== 'phone';
 
   // L’écran est rendu : le voile peut être retiré sans dévoiler le budget.
   useLayoutEffect(() => {
@@ -46,12 +53,41 @@ export default function LockScreen() {
   }, [waiting]);
 
   useEffect(() => {
-    if (!forgot) inputRef.current?.focus();
-  }, [forgot]);
+    let cancelled = false;
+    void deviceAuthenticatorAvailable().then((available) => {
+      if (!cancelled) setDeviceAvailable(available);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (showPin && !forgot && !waiting) inputRef.current?.focus();
+  }, [showPin, forgot, waiting]);
+
+  const requestPhone = useCallback(async () => {
+    const ok = await unlockWithDevice();
+    if (!ok && document.visibilityState === 'visible') {
+      setMethod((current) => current === 'pin' ? current : 'unconfirmed');
+    }
+  }, [unlockWithDevice]);
+
+  useEffect(() => {
+    if (!allowAutomaticUnlock || !canUsePhone || devicePending || requestedPhone.current
+      || method !== 'phone' || document.visibilityState !== 'visible') return;
+    requestedPhone.current = true;
+    void requestPhone();
+  }, [allowAutomaticUnlock, canUsePhone, devicePending, method, requestPhone]);
+
+  function choosePin() {
+    requestedPhone.current = true;
+    setMethod('pin');
+    cancelDeviceUnlock();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (waiting || pending) return;
+    if (devicePending) choosePin();
     setPending(true);
     setError('');
     const ok = await unlock(pin);
@@ -84,27 +120,54 @@ export default function LockScreen() {
             <Icon icon={LockKeyhole} className="size-5 text-teal-700" />
             Boussole est verrouillé
           </h1>
-          <div>
-            <label htmlFor="lock-pin" className="mb-1.5 block text-sm font-semibold text-slate-700">Ton code à {PIN_LENGTH} chiffres</label>
-            <input
-              id="lock-pin" ref={inputRef} name="pin" type="password" inputMode="numeric" autoComplete="off"
-              maxLength={PIN_LENGTH} value={pin} disabled={waiting}
-              onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
-              aria-invalid={error ? true : undefined} aria-describedby={error || waiting ? errorId : undefined}
-              className={fieldClass}
-            />
-            {(error || waiting) && (
-              <p id={errorId} role="alert" className="mt-2 text-sm text-red-700">
-                {waiting ? `Trop d’essais. Réessaie dans ${formatWait(retryAt - now)}.` : error}
-              </p>
-            )}
-          </div>
-          <button type="submit" disabled={waiting || pending || pin.length !== PIN_LENGTH} className={primaryButton}>
-            {pending ? 'Vérification…' : 'Déverrouiller'}
-          </button>
-          <button type="button" onClick={() => setForgot(true)} className="min-h-11 w-full text-sm font-semibold text-teal-800 underline">
-            Code oublié ?
-          </button>
+          {canUsePhone && (
+            <button type="button" disabled={devicePending || pending} aria-busy={devicePending}
+              onClick={() => {
+                requestedPhone.current = true;
+                if (showPin) setMethod('unconfirmed');
+                void requestPhone();
+              }}
+              className={showPin ? textButton : primaryButton}>
+              Se déverrouiller
+            </button>
+          )}
+          {!showPin && <button type="button" className={textButton} onClick={choosePin}>Utiliser mon code Boussole</button>}
+          {deviceStatus === 'valid' && deviceAvailable === false && (
+            <p className="text-sm text-slate-700">
+              Le déverrouillage par le téléphone n&apos;est pas disponible dans ce navigateur. Utilise ton code Boussole.
+            </p>
+          )}
+          {deviceStatus === 'invalid' && (
+            <p className="text-sm text-amber-900">La méthode du téléphone doit être réactivée dans Compte et sécurité. Ton code Boussole reste valable.</p>
+          )}
+          {showPin && (
+            <>
+              {canUsePhone && method === 'unconfirmed' && !devicePending && (
+                <p role="alert" className="text-sm text-amber-900">Le téléphone n&apos;a pas confirmé. Entre ton code Boussole.</p>
+              )}
+              <div>
+                <label htmlFor="lock-pin" className="mb-1.5 block text-sm font-semibold text-slate-700">Ton code à {PIN_LENGTH} chiffres</label>
+                <input
+                  id="lock-pin" ref={inputRef} name="pin" type="password" inputMode="numeric" autoComplete="off"
+                  maxLength={PIN_LENGTH} value={pin} disabled={waiting}
+                  onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+                  aria-invalid={error ? true : undefined} aria-describedby={error || waiting ? errorId : undefined}
+                  className={fieldClass}
+                />
+                {(error || waiting) && (
+                  <p id={errorId} role="alert" className="mt-2 text-sm text-red-700">
+                    {waiting ? `Trop d’essais. Réessaie dans ${formatWait(retryAt - now)}.` : error}
+                  </p>
+                )}
+              </div>
+              <button type="submit" disabled={waiting || pending || pin.length !== PIN_LENGTH} className={primaryButton}>
+                {pending ? 'Vérification…' : 'Déverrouiller'}
+              </button>
+              <button type="button" onClick={() => { choosePin(); setForgot(true); }} className={textButton}>
+                Code oublié ?
+              </button>
+            </>
+          )}
         </form>
       )}
     </div>

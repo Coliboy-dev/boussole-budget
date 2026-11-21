@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { LockKeyhole } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import { Icon } from '@/components/ui/icons';
 import { useCloudSync } from '@/components/sync/CloudSyncProvider';
 import { LOCK_DELAYS, PIN_LENGTH, isValidPin, type LockDelay } from '@/lib/app-lock';
 import { useLock } from './LockProvider';
+import { deviceAuthenticatorAvailable } from '@/lib/webauthn-lock';
 
 const fieldClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base tabular-nums';
 const primaryButton = 'min-h-11 rounded-xl bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-gray-400';
@@ -53,6 +54,64 @@ export default function LockSettings() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [pending, setPending] = useState(false);
+  const [deviceAvailable, setDeviceAvailable] = useState<boolean | null>(null);
+  const [deviceMode, setDeviceMode] = useState<'idle' | 'authorize' | 'ready' | 'remove'>('idle');
+  const [devicePin, setDevicePin] = useState('');
+  const [devicePending, setDevicePending] = useState(false);
+  const [deviceError, setDeviceError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void deviceAuthenticatorAvailable().then((available) => {
+      if (!cancelled) setDeviceAvailable(available);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function authorizePhone(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setDevicePending(true);
+    setDeviceError('');
+    try {
+      if (deviceMode === 'remove') {
+        const ok = await lock.removeDevice(devicePin);
+        if (!ok) {
+          setDeviceError('Code incorrect ou méthode impossible à désactiver.');
+          return;
+        }
+        setDeviceMode('idle');
+        setDevicePin('');
+        setNotice('Déverrouillage avec le téléphone désactivé.');
+        return;
+      }
+      const ok = await lock.authorizeDeviceEnrollment(devicePin);
+      if (!ok) {
+        setDeviceError('Code Boussole incorrect. Réessaie.');
+        return;
+      }
+      setDevicePin('');
+      setDeviceMode('ready');
+    } finally {
+      setDevicePending(false);
+    }
+  }
+
+  async function activatePhone() {
+    setDevicePending(true);
+    setDeviceError('');
+    try {
+      const ok = await lock.enrollDevice();
+      if (!ok) {
+        setDeviceError('Activation annulée ou incompatible avec ce téléphone. Ton code Boussole reste valable.');
+        setDeviceMode('idle');
+        return;
+      }
+      setDeviceMode('idle');
+      setNotice('Déverrouillage avec le téléphone activé.');
+    } finally {
+      setDevicePending(false);
+    }
+  }
   const hasAccount = phase === 'syncing' || phase === 'synced' || phase === 'conflict' || phase === 'error';
 
   function reset(next: Mode) {
@@ -131,6 +190,64 @@ export default function LockSettings() {
             <button type="button" className="min-h-11 rounded-xl px-4 text-sm font-semibold text-red-800 underline" onClick={() => reset('disable')}>
               Désactiver
             </button>
+          </div>
+          <div className="space-y-3 border-t border-slate-200 pt-3">
+            <h3 className="text-sm font-semibold text-slate-900">Déverrouillage avec le téléphone</h3>
+            <p className="text-sm text-slate-700">Face ID, empreinte ou code du téléphone, selon l’appareil. L’option est facultative.</p>
+            {lock.deviceStatus === 'invalid' && (
+              <p role="status" className="text-sm text-amber-900">
+                Cette méthode est devenue inutilisable. Tu peux la réactiver ; ton code Boussole fonctionne toujours.
+              </p>
+            )}
+            {lock.deviceStatus === 'valid' && <p role="status" className="text-sm text-green-800">Méthode du téléphone activée.</p>}
+            {deviceMode === 'idle' && deviceError && (
+              <p role="alert" className="text-sm text-red-700">{deviceError}</p>
+            )}
+            {deviceMode === 'idle' && lock.deviceStatus === 'valid' && (
+              <button type="button" className={secondaryButton}
+                onClick={() => { setDeviceMode('remove'); setDevicePin(''); setDeviceError(''); }}>
+                Désactiver le déverrouillage par le téléphone
+              </button>
+            )}
+            {deviceMode === 'idle' && lock.deviceStatus !== 'valid' && deviceAvailable === true && (
+              <button type="button" className={secondaryButton}
+                onClick={() => { setDeviceMode('authorize'); setDevicePin(''); setDeviceError(''); }}>
+                Activer le déverrouillage avec le téléphone
+              </button>
+            )}
+            {deviceMode === 'idle' && lock.deviceStatus !== 'valid' && deviceAvailable === false && (
+              <p className="text-sm text-slate-600">Méthode indisponible dans ce navigateur. Le code Boussole reste disponible.</p>
+            )}
+            {deviceMode === 'authorize' && (
+              <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">
+                Toute personne qui connaît le code de déverrouillage de ce téléphone pourrait aussi ouvrir Boussole.
+                Ton code Boussole restera nécessaire si le téléphone refuse.
+              </p>
+            )}
+            {(deviceMode === 'authorize' || deviceMode === 'remove') && (
+              <form onSubmit={(event) => void authorizePhone(event)} className="space-y-2">
+                <PinField id="phone-pin" label="Confirme ton code Boussole actuel" value={devicePin} onChange={setDevicePin} />
+                {deviceError && <p role="alert" className="text-sm text-red-700">{deviceError}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <button type="submit" className={primaryButton} disabled={devicePending || devicePin.length !== PIN_LENGTH}>
+                    {devicePending ? 'Vérification…' : deviceMode === 'remove' ? 'Désactiver' : 'Confirmer le code'}
+                  </button>
+                  <button type="button" className={secondaryButton} onClick={() => { setDeviceMode('idle'); setDevicePin(''); }}>Annuler</button>
+                </div>
+              </form>
+            )}
+            {deviceMode === 'ready' && (
+              <div className="space-y-2">
+                <p className="text-sm text-slate-700">Confirme maintenant sur ton téléphone pour terminer l’activation.</p>
+                {deviceError && <p role="alert" className="text-sm text-red-700">{deviceError}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={devicePending} onClick={() => void activatePhone()} className={primaryButton}>
+                    {devicePending ? 'Vérification sur le téléphone…' : 'Continuer sur mon téléphone'}
+                  </button>
+                  <button type="button" onClick={() => setDeviceMode('idle')} className={secondaryButton}>Annuler</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
