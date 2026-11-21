@@ -262,12 +262,12 @@ export function startDeviceRegistration(rpId: string, oldId?: string) {
   return { challenge, request: navigator.credentials.create({ publicKey }) };
 }
 
-export function startDeviceAssertion(stored: DeviceCredential) {
+export function startDeviceAssertion(stored: DeviceCredential, signal: AbortSignal) {
   const challenge = randomChallenge();
   const publicKey: PublicKeyCredentialRequestOptions = {
     challenge: challenge as BufferSource, rpId: stored.rpId, timeout: 60000,
     allowCredentials: [{ type: 'public-key', id: base64UrlToBytes(stored.credentialId) as BufferSource }],
     userVerification: 'required',
   };
-  return { challenge, request: navigator.credentials.get({ publicKey }) };
+  return { challenge, request: navigator.credentials.get({ publicKey, signal }) };
 }

@@ -21,21 +21,27 @@ interface LockSnapshot {
   unreadable: boolean;
   device: DeviceLockState;
   devicePending: boolean;
+  lockScreenVisit: number;
+  automaticDeviceUnlock: boolean;
 }
 
 // État du verrou de cet onglet, hors de React : lu sans effet ni second rendu.
 const SERVER_SNAPSHOT: LockSnapshot = {
   phase: 'unknown', config: null, unreadable: false, device: { status: 'absent' }, devicePending: false,
+  lockScreenVisit: 0, automaticDeviceUnlock: false,
 };
 let snapshot: LockSnapshot | null = null;
 let hiddenAt: number | null = null;
 let unlockedAt = 0;
 let deviceAttemptGeneration = 0;
+let deviceAssertion: AbortController | null = null;
 let enrollmentAllowedUntil = 0;
 
 function invalidateDeviceAttempt() {
   deviceAttemptGeneration++;
   enrollmentAllowedUntil = 0;
+  deviceAssertion?.abort();
+  deviceAssertion = null;
   if (snapshot?.devicePending) update({ devicePending: false });
 }
 
@@ -68,6 +74,7 @@ function getSnapshot(): LockSnapshot {
     snapshot = {
       phase: state.status === 'absent' ? 'unlocked' : 'locked',
       ...settingsFrom(state), device: readDevice(), devicePending: false,
+      lockScreenVisit: 0, automaticDeviceUnlock: state.status === 'valid',
     };
   }
   return snapshot;
@@ -106,10 +113,15 @@ function hasLock(current: LockSnapshot): boolean {
  * Si l’écran de verrouillage est déjà affiché, il ne contient aucun montant : le voile est retiré tout de suite.
  * Sinon le voile reste, et c’est l’écran de verrouillage qui le retire après son rendu.
  */
-function showLockScreen() {
-  const phaseBefore = getSnapshot().phase === 'locked' ? 'locked' : 'unlocked';
+function showLockScreen(automatic?: boolean) {
+  const current = getSnapshot();
+  const phaseBefore = current.phase === 'locked' ? 'locked' : 'unlocked';
   setVeil(keepVeil('show-lock', phaseBefore));
-  if (phaseBefore === 'unlocked') update({ phase: 'locked' });
+  if (phaseBefore === 'unlocked' || automatic === true) {
+    update({ phase: 'locked', lockScreenVisit: current.lockScreenVisit + 1, automaticDeviceUnlock: automatic === true });
+  } else if (automatic === false && current.automaticDeviceUnlock) {
+    update({ automaticDeviceUnlock: false });
+  }
 }
 
 function storeConfig(next: LockConfig | null) {
@@ -131,7 +143,7 @@ function lockEverywhere() {
     // Stockage indisponible.
   }
   postSecurityEvent('locked');
-  showLockScreen();
+  showLockScreen(false);
 }
 
 async function checkPin(pin: string): Promise<boolean> {
@@ -156,9 +168,10 @@ function onReturn() {
     phase: current.phase === 'locked' ? 'locked' : 'unlocked',
     state, hiddenAt, now: Date.now(), lockEpoch: readEpoch(), unlockedAt,
   });
+  const wasAway = hiddenAt !== null;
   hiddenAt = null;
   if (decision === 'show-lock') {
-    showLockScreen();
+    showLockScreen(wasAway ? true : undefined);
     return;
   }
   // Verrou absent (désactivé ailleurs) ou délai non écoulé : budget affiché, sans voile.
@@ -179,6 +192,7 @@ interface LockContextValue {
   enrollDevice: () => Promise<boolean>;
   removeDevice: (pin: string) => Promise<boolean>;
   unlockWithDevice: () => Promise<boolean>;
+  cancelDeviceUnlock: () => void;
   enable: (pin: string, delay: LockDelay) => Promise<void>;
   changePin: (current: string, next: string) => Promise<boolean>;
   disable: (current: string) => Promise<boolean>;
@@ -238,14 +252,17 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
   unlockWithDevice: async () => {
     const before = getSnapshot();
     if (before.phase !== 'locked' || before.unreadable
-      || before.device.status !== 'valid' || before.devicePending) return false;
+      || before.device.status !== 'valid' || before.devicePending
+      || document.visibilityState !== 'visible' || hiddenAt !== null) return false;
     const generation = ++deviceAttemptGeneration;
+    const controller = new AbortController();
+    deviceAssertion = controller;
     const firstEpoch = readEpoch();
     const previousHidden = hiddenAt;
     update({ devicePending: true });
     try {
-      // Important pour WebKit : navigator.credentials.get est lancé par le geste utilisateur.
-      const { request, challenge } = startDeviceAssertion(before.device.credential);
+      // Un appui explicite doit conserver son activation utilisateur jusqu’à navigator.credentials.get.
+      const { request, challenge } = startDeviceAssertion(before.device.credential, controller.signal);
       const credential = await request;
       if (!credential || generation !== deviceAttemptGeneration) return false;
       if (!(await verifyAssertion(credential, before.device.credential, challenge, location.origin))) return false;
@@ -269,9 +286,13 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
     } catch {
       return false;
     } finally {
-      if (generation === deviceAttemptGeneration) update({ devicePending: false });
+      if (generation === deviceAttemptGeneration) {
+        deviceAssertion = null;
+        update({ devicePending: false });
+      }
     }
   },
+  cancelDeviceUnlock: invalidateDeviceAttempt,
   enable: async (pin, delay) => {
     storeConfig(await createLockConfig(pin, delay));
     unlockedAt = Date.now();
@@ -331,7 +352,8 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
 const LockContext = createContext<LockContextValue | null>(null);
 
 export function LockProvider({ children }: { children: ReactNode }) {
-  const { phase, config, unreadable } = useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT);
+  const { phase, config, unreadable, device, devicePending, lockScreenVisit, automaticDeviceUnlock } =
+    useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT);
 
   useEffect(() => {
     // Départ de l’app : plusieurs signaux, car iOS n’en garantit aucun en particulier.
@@ -358,13 +380,14 @@ export function LockProvider({ children }: { children: ReactNode }) {
     };
     const unsubscribe = subscribeSecurityEvents((type) => {
       if (type === 'local-erased') {
+        invalidateDeviceAttempt();
         window.location.replace('/');
         return;
       }
       if (type === 'locked' || type === 'lock-enabled') {
         invalidateDeviceAttempt();
         update({ ...settingsFrom(readState()), device: readDevice() });
-        if (hasLock(getSnapshot())) showLockScreen();
+        if (hasLock(getSnapshot())) showLockScreen(false);
         return;
       }
       // Toute modification distante des réglages annule une authentification
@@ -381,6 +404,7 @@ export function LockProvider({ children }: { children: ReactNode }) {
     // Filet de sécurité : un toucher sur un écran resté voilé le rétablit toujours.
     document.addEventListener('pointerdown', onShown, true);
     document.addEventListener('touchstart', onShown, true);
+    if (document.visibilityState === 'hidden') onLeave();
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', onLeave);
@@ -404,14 +428,14 @@ export function LockProvider({ children }: { children: ReactNode }) {
     unreadable,
     delay: config?.delay ?? 0,
     retryAt: config?.retryAt ?? 0,
-    deviceStatus: unreadable ? 'absent' : getSnapshot().device.status,
-    devicePending: getSnapshot().devicePending,
+    deviceStatus: unreadable ? 'absent' : device.status,
+    devicePending,
   };
 
   return (
     <LockContext.Provider value={value}>
       {phase === 'unknown' && <NeutralScreen />}
-      {phase === 'locked' && <LockScreen />}
+      {phase === 'locked' && <LockScreen key={lockScreenVisit} allowAutomaticUnlock={automaticDeviceUnlock} />}
       {phase === 'unlocked' && children}
     </LockContext.Provider>
   );
