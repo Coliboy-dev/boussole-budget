@@ -24,9 +24,10 @@ function formatWait(ms: number): string {
 }
 
 export default function LockScreen() {
-  const { unlock, retryAt, unreadable } = useLock();
+  const { unlock, unlockWithDevice, retryAt, unreadable, deviceStatus, devicePending } = useLock();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
+  const [deviceError, setDeviceError] = useState('');
   const [pending, setPending] = useState(false);
   const [forgot, setForgot] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -46,8 +47,15 @@ export default function LockScreen() {
   }, [waiting]);
 
   useEffect(() => {
-    if (!forgot) inputRef.current?.focus();
-  }, [forgot]);
+    if (!forgot && deviceStatus !== 'valid') inputRef.current?.focus();
+  }, [forgot, deviceStatus]);
+
+  async function unlockPhone() {
+    if (devicePending) return;
+    setDeviceError('');
+    const ok = await unlockWithDevice();
+    if (!ok) setDeviceError('Déverrouillage par le téléphone indisponible ou annulé. Tu peux utiliser ton code Boussole.');
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,6 +88,19 @@ export default function LockScreen() {
       )}
       {forgot || unreadable ? <ForgotPin onCancel={unreadable ? undefined : () => setForgot(false)} /> : (
         <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl border border-line bg-white p-5">
+          {deviceStatus === 'valid' && (
+            <div className="space-y-2">
+              <button type="button" disabled={devicePending || pending}
+                onClick={() => void unlockPhone()} className={primaryButton}>
+                {devicePending ? 'Vérification sur le téléphone…' : 'Déverrouiller avec le téléphone'}
+              </button>
+              {deviceError && <p role="alert" className="text-sm text-amber-900">{deviceError}</p>}
+              <p className="text-xs text-slate-600">Le téléphone peut demander Face ID, une empreinte ou son code.</p>
+            </div>
+          )}
+          {deviceStatus === 'invalid' && (
+            <p className="text-sm text-amber-900">La méthode du téléphone doit être réactivée dans Compte et sécurité. Ton code Boussole reste valable.</p>
+          )}
           <h1 className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <Icon icon={LockKeyhole} className="size-5 text-teal-700" />
             Boussole est verrouillé
