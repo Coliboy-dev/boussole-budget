@@ -1,6 +1,18 @@
-# P5 — Compte facultatif et verrouillage de l’application (révision 2)
+# P5 — Compte facultatif et verrouillage de l’application (révision 3)
 
 Plan de conception, **sans code**. La révision 2 intègre l’audit contradictoire de la révision 1 (contradictions C1 à C14, risques S1 à S8, arbitrages D1 à D7). Chaque affirmation sur le code a été vérifiée sur `main` (commit `deb1cf4`, contenu applicatif identique à `9b5129a`). La section 11 est une auto-relecture contradictoire : les risques qui restent, écrits par l’auteur du plan.
+
+### Révision 3 (audit final du 21 novembre)
+Corrections ciblées, qui remplacent le texte de la révision 2 là où il diverge :
+- **N1** (§4.4) : le voile n’est retiré que par l’écran effectivement affiché, après son rendu ; jamais avant la décision de verrouillage.
+- **N2** (§9.2, test 17) : « zéro écriture » avant la décision d’association, les lectures nécessaires restent permises.
+- **N3** (§7.1) : nouveau prédicat de vacuité, fondé sur l’égalité avec un budget vide, qui couvre toutes les données (médiation, documents, profil…).
+- **N4** (§5.3) : création du premier coffre à partir du budget **retourné** par l’enregistrement, sans passer par l’état React.
+- **N5** (§4.3) : ES256 seul ; `rp.id` = domaine de la page, propre à chaque environnement.
+- **N6** (§4.5, §6.3, §11) : l’effacement local fiable est une primitive livrée dans la **PR A** ; confirmation explicite avant tout effacement.
+- **Affichage pendant l’association** (§7.2) : aucune page budgétaire accessible.
+- **Fenêtre de concurrence à la déconnexion** (§6.1) : gel de toutes les écritures dans tous les onglets, et protection d’écriture existante contre la réapparition d’un ancien budget.
+- **Tests** sur un projet Supabase de test isolé (§9.2).
 
 Règle de validation du chantier : **aucune personne ne doit pouvoir perdre son budget ou voir celui d’une autre à cause d’une connexion, d’une déconnexion ou d’un verrouillage.** Tant qu’un test ne le démontre pas, la PR n’est pas prête.
 
@@ -60,7 +72,7 @@ Texte à l’activation du verrou : « Le verrou empêche une personne qui a ton
 
 ### 4.3 Déverrouillage par le téléphone (WebAuthn, vérifié localement)
 Enregistrement :
-- `navigator.credentials.create` : `rp.id` = domaine de production, `user.id` = 16 octets aléatoires, `challenge` = 32 octets aléatoires, `pubKeyCredParams` = ES256 (-7) puis RS256 (-257), `authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }`, `attestation: 'none'`.
+- `navigator.credentials.create` : `rp.id` = `location.hostname` (le domaine de la page, propre à chaque environnement), `user.id` = 16 octets aléatoires, `challenge` = 32 octets aléatoires, `pubKeyCredParams` = **ES256 (-7) uniquement** (algorithme des authentificateurs de plateforme iPhone et Android ; RS256 n’est pas proposé, faute de vérification implémentée), `authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }`, `attestation: 'none'`.
 - Contrôles : `clientDataJSON.type === 'webauthn.create'`, `challenge` identique, `origin === location.origin`. On conserve `credentialId`, la clé publique (`response.getPublicKey()`, format SPKI) et l’algorithme (`response.getPublicKeyAlgorithm()`).
 
 Déverrouillage :
@@ -69,11 +81,15 @@ Déverrouillage :
 - Tout échec renvoie au code.
 - Ce que cette vérification apporte et n’apporte pas : elle refuse une réponse rejouée ou fabriquée sans l’authentificateur ; elle ne protège pas contre un code d’application modifié, qui pourrait désactiver tout verrou local (§2).
 
-Domaine (S8) : une clé est liée au domaine. Les préversions Vercel ont des domaines différents : la biométrie y est à réactiver. **Décision à prendre avant l’ouverture publique** : un domaine définitif (ex. un sous-domaine de Start’OnLab). Changer de domaine plus tard oblige chaque personne à réactiver la biométrie ; le code reste valable.
+Domaine (S8) : une clé est liée au domaine. Chaque préversion Vercel a son propre domaine, donc son propre `rp.id` : l’inscription y fonctionne, mais une clé créée sur une préversion ne sert pas en production. Si l’algorithme renvoyé n’est pas ES256, l’activation est refusée avec « Ce téléphone ne propose pas une méthode compatible ; le code reste disponible. » **Décision à prendre avant l’ouverture publique** : un domaine définitif (ex. un sous-domaine de Start’OnLab). Changer de domaine plus tard oblige chaque personne à réactiver la biométrie ; le code reste valable.
 
 ### 4.4 Déclenchement
 - `visibilitychange` → `hidden` : heure enregistrée en mémoire et dans `sessionStorage` ; ajout **synchrone** de la classe `privacy-veil` sur `document.documentElement` (fond uni, contenu masqué par CSS), en dehors de React.
-- Retour `visible` : retrait de la classe ; `shouldLock({ hiddenAt, now, delay })` → verrouillage si `now − hiddenAt >= delay` (délai 0 : tout passage en arrière-plan verrouille).
+- Retour `visible`, **dans le gestionnaire d’événement, avant toute mise à jour React** : calcul synchrone de `shouldLock({ hiddenAt, now, delay })` (verrouillage si `now − hiddenAt >= delay` ; délai 0 : tout passage en arrière-plan verrouille).
+  - Verrouillage nécessaire : le voile **reste en place**, `document.documentElement.dataset.locked = 'true'` est posé, puis l’état React passe à « verrouillé ». C’est `LockScreen` qui retire le voile, dans un `useLayoutEffect` exécuté après son propre rendu et avant l’affichage.
+  - Verrouillage inutile : retrait immédiat du voile.
+  - Règle générale : **le voile n’est jamais retiré par le gestionnaire d’événement si un verrouillage est en cours** ; seul l’écran qui sera affiché le retire.
+- Le voile masque le contenu par CSS (`html.privacy-veil #app-content { visibility: hidden }`, fond uni au-dessus) : même si React tarde, le budget reste invisible.
 - Rechargement ou redémarrage du navigateur : lancement à froid → verrouillé.
 
 ### 4.5 Code oublié (S2, C10, C13)
@@ -82,7 +98,11 @@ L’accès à la messagerie **ne suffit jamais** à afficher le budget local.
 2. **Avec compte** : « Effacer ce téléphone et récupérer mon budget en ligne ».
    - Avant d’effacer, sans rien afficher du budget, Boussole indique si des modifications de ce téléphone ne sont pas encore en ligne (comparaison d’empreintes, §6.2) : « Les modifications faites sur ce téléphone depuis le <date> seront perdues. »
    - Effacement local complet (§6.3), puis connexion par code e-mail **et** saisie de la phrase secrète, puis récupération du coffre.
-3. **Sans compte** : « Effacer Boussole sur ce téléphone », puis, si la personne a un fichier de sauvegarde, « Restaurer une sauvegarde » (page existante).
+3. **Sans compte** : « Effacer Boussole sur ce téléphone », puis, si la personne a un fichier de sauvegarde, « Restaurer une sauvegarde » (page existante). Utilise la primitive `eraseLocalData()` (§6.3), livrée dès la PR A.
+
+Confirmation de tout effacement depuis l’écran verrouillé : écran dédié expliquant ce qui sera supprimé, puis saisie du mot « EFFACER ». Limite écrite : « Une personne qui tient ton téléphone peut aussi supprimer Boussole depuis les réglages du téléphone. Le verrou protège tes informations, pas leur conservation : garde une sauvegarde ou un compte. »
+
+Réseau absent ou copie en ligne inaccessible (cas avec compte) : Boussole n’affirme jamais que les modifications sont en ligne. Message : « Impossible de vérifier ta copie en ligne. Si tu effaces maintenant, les modifications faites sur ce téléphone depuis ta dernière synchronisation réussie (<date>) peuvent être perdues. »
 Avertissement à l’activation du verrou sans compte ni déverrouillage par le téléphone : « Sans compte, un code oublié oblige à effacer le budget de ce téléphone. Garde une sauvegarde ou crée un compte. »
 
 ### 4.6 Plusieurs onglets (S6)
@@ -112,7 +132,7 @@ Avertissement à l’activation du verrou sans compte ni déverrouillage par le 
 - Texte : « Si tu perds tous tes appareils et cette phrase, personne ne pourra récupérer ta copie en ligne, pas même nous. »
 
 ### 5.3 Ordre et création du coffre (C6)
-1. E-mail → code → connexion. 2. Phrase secrète. 3. Les trois questions du premier budget. 4. **Création explicite du coffre** : comme `decideSync` renvoie `idle` pour un budget vide, la fin de l’étape 3 appelle `runSync` et attend `create`. L’écran indique « Copie en ligne créée » ou, en cas d’échec, « La copie en ligne n’a pas pu être créée. Ton budget est sur ce téléphone. » avec « Réessayer ». 5. Proposition du verrou.
+1. E-mail → code → connexion. 2. Phrase secrète. 3. Les trois questions du premier budget. 4. **Création explicite du coffre** : comme `decideSync` renvoie `idle` pour un budget vide, et comme `runSync` lit l’état via `appRef` (mis à jour **après** le rendu, `CloudSyncProvider` L62–66), `finishOnboarding` est modifiée pour **retourner l’`AppState` enregistré** ; l’écran appelle alors `createInitialVault(savedState)`, qui chiffre ce budget-là, crée le coffre et écrit la mémoire de synchronisation avec son empreinte. Aucun délai artificiel. L’écran indique « Copie en ligne créée » ou, en cas d’échec, « La copie en ligne n’a pas pu être créée. Ton budget est sur ce téléphone. » avec « Réessayer ». 5. Proposition du verrou.
 
 ### 5.4 Sans compte (C12)
 Après les trois questions, l’écran de résultat (`OnboardingResult`) propose aussi « Verrouiller Boussole avec un code ? ».
@@ -126,6 +146,9 @@ Aucun changement imposé. « Plus → Compte et sécurité » propose « Créer 
 
 ### 6.1 Déroulé de « Se déconnecter »
 1. **Gel** : écran bloquant « Déconnexion en cours » ; envoi `signing-out` aux autres onglets ; annulation du minuteur d’envoi automatique (1,5 s) ; attente de la fin de toute synchronisation en cours (`busy` dans `CloudSyncProvider`).
+   - Pose de la clé `boussole-session-closing` (horodatée) dans `localStorage`. Tant qu’elle existe, **tout onglet** refuse les écritures du budget et les synchronisations (contrôle ajouté à l’entrée de `saveBudget`, de l’effet d’enregistrement d’`AppContext` et de `runSync`), y compris un onglet qui se réveille sans avoir reçu le message.
+   - Après l’effacement, un onglet resté ouvert ne peut pas réécrire l’ancien budget : `writeBudgetSnapshot` (`lib/budget-state.ts` L23–42) refuse déjà toute écriture quand le contenu stocké a changé depuis sa lecture (ici : supprimé).
+   - La clé `boussole-session-closing` est supprimée en dernier, une fois la session fermée ; si elle a plus de 10 minutes au lancement (déconnexion interrompue), Boussole reprend le parcours §6.1 au point 3.
 2. **Envoi** : `runSync` une fois.
 3. **Preuve** (§6.2).
 4. Preuve obtenue → **effacement** (§6.3), puis `auth.signOut({ scope: 'local' })`, envoi `signed-out`, retour à l’écran de choix.
@@ -146,6 +169,7 @@ La même comparaison est ajoutée à `runSync` avant de déclarer un **conflit**
 
 ### 6.3 Effacement local
 Dans cet ordre, chaque étape vérifiée :
+`eraseLocalData()` (`lib/account-lifecycle.ts`), **livrée dans la PR A** et réutilisée par la déconnexion :
 1. `localStorage` : suppression de `boussole-budget-v2`, `boussole-budget-v1`, `boussole-sync-v1`, `boussole-lock-v1`, `boussole-payment-reminders`, `boussole-security-event` ; relecture pour vérifier l’absence.
 2. IndexedDB `boussole-cloud` : suppression des clés, **avec propagation des erreurs** (à corriger dans `clearStoredKey`, qui les ignore aujourd’hui), puis relecture pour vérifier l’absence.
 3. État en mémoire remis à zéro (rechargement de la page après la déconnexion).
@@ -172,7 +196,15 @@ Aucune preuve de synchronisation n’est demandée : la copie en ligne est volon
 
 Nouvel état de `CloudSyncProvider` : **`awaiting-association`**. Tant qu’il dure, `runSync`, l’envoi automatique, la synchronisation au retour sur l’app et au retour réseau sont **interdits**.
 
-Entrée dans cet état : après connexion **et** saisie de la phrase secrète, si le budget local n’est pas vide **et** si la mémoire de synchronisation n’appartient pas à ce `userId`, **sauf** intention explicite d’associer (cas A).
+### 7.1 Budget vide
+`localIsEmpty` actuel (`CloudSyncProvider` L68–70) ignore la médiation, les documents et le profil. Il est remplacé par `isPristineBudget(state)` : vrai **seulement si** `serializeBudget(state) === serializeBudget(emptyBudgetState)` et qu’aucune sauvegarde legacy (`boussole-budget-v1`) n’existe. Toute différence (prénom, réserve, document, étape de médiation, enveloppe…) = budget non vide. Utilisé par `decideSync`, par l’association et par la création du premier coffre.
+
+### 7.2 Entrée et affichage
+Entrée dans cet état : après connexion **et** saisie de la phrase secrète, si `isPristineBudget` est faux **et** si la mémoire de synchronisation n’appartient pas à ce `userId`, **sauf** intention explicite d’associer (cas A).
+
+Pendant `awaiting-association`, un `AccountGate` (même place que `LockGate`) remplace **toutes les pages** par l’écran d’association : une navigation directe vers `/dashboard`, `/analyse` ou toute autre page n’affiche aucun montant.
+
+Lectures permises : `fetchVault` (existence du coffre, sel). **Aucune écriture** (création, mise à jour, suppression de coffre) avant la décision.
 
 | Cas | Copie en ligne du compte | Choix proposés |
 |---|---|---|
@@ -212,16 +244,22 @@ Modifiés : `components/layout/AppWrapper.tsx`, `TopHeader.tsx`, `components/syn
 13. Ajout d’une dépense puis « Se déconnecter » dans la seconde suivante : la dépense est dans la copie en ligne ou la déconnexion est bloquée ; jamais perdue.
 14. « Se déconnecter » pendant une synchronisation en cours : attente puis preuve, ou blocage.
 15. Réponse réseau perdue après une écriture réussie (requête Supabase interceptée, réponse supprimée) : pas de faux conflit, preuve obtenue au second essai.
-16. Création de compte avant le premier budget : coffre créé à la fin de l’étape 3 et récupéré sur un second navigateur.
-17. Association : budget sans compte + compte vide (cas B) ; budget sans compte + compte avec copie (cas C) ; aucun envoi avant le choix (requêtes vers `budget_vaults` interceptées et comptées : 0).
+16. Création de compte avant le premier budget : coffre créé à la fin de l’étape 3 **sans attente entre la fin du questionnaire et la création**, contenant exactement le budget enregistré, et récupéré sur un second navigateur.
+17. Association : budget sans compte + compte vide (cas B) ; budget sans compte + compte avec copie (cas C) ; **zéro écriture** vers `budget_vaults` avant le choix (requêtes `POST`, `PATCH`, `DELETE` interceptées et comptées : 0 ; les lectures sont permises).
+17 bis. Budget contenant **uniquement** une étape de médiation, ou uniquement un document, ou uniquement un prénom : jamais considéré comme vide, jamais remplacé sans choix.
+17 ter. Pendant l’association, navigation directe vers `/dashboard` et `/analyse` : aucun montant local dans le DOM.
 18. Code oublié avec compte : impossible d’afficher le budget local sans effacement préalable ; après effacement, récupération exigeant code e-mail **et** phrase secrète.
 19. Suppression du compte : parcours complet, sans blocage, choix local respecté.
 20. Biométrie avec l’authentificateur virtuel de Chromium (CDP `WebAuthn.addVirtualAuthenticator`, `hasUserVerification: true` puis `false`) : activation et déverrouillage ; refus si UV absent.
 21. Verrou proposé après un premier budget sans compte.
 22. Retour après 59 s, 60 s, 61 s avec un délai d’une minute ; redémarrage du navigateur → verrouillé.
+22 bis. Retour au premier plan après le délai : captures du DOM et de la page à chaque image entre le retour `visible` et l’affichage de l’écran verrouillé ; aucune ne montre de montant.
+22 ter. Deux onglets dont un suspendu (émulation de gel du processus) ; verrouillage dans l’autre ; réveil de l’onglet suspendu : aucun budget visible.
+22 quater. Code oublié sans compte : aucune suppression sans la saisie « EFFACER » ; après suppression, toutes les clés locales absentes et l’écran de choix affiché.
+22 quinquies. Synchronisation en cours dans un onglet, déconnexion dans l’autre : aucune dépense perdue, aucun ancien budget réécrit après l’effacement.
 23. `privacy-veil` présente pendant `hidden` (test technique seulement, voir 9.3).
 24. axe-core : 0 violation sur l’écran de choix, la phrase secrète, le verrouillage, les réglages, l’association, la déconnexion bloquée.
-Les tests 11 à 19 utilisent le vrai projet Supabase avec des comptes jetables supprimés ensuite.
+Les tests 11 à 19 utilisent un **projet Supabase de test isolé** (projet gratuit distinct, mêmes migrations), jamais le projet de production. Prérequis des PR C et D, pas de la PR A.
 
 ### 9.3 Recette manuelle sur appareils (avant fusion, captures à l’appui)
 iPhone (Safari et PWA installée) et Android (Chrome et PWA installée) : aperçu du sélecteur d’applications, proposition d’enregistrement dans le trousseau iCloud et Google, remplissage automatique sur un second appareil, déverrouillage par le téléphone. Les limites constatées sont écrites dans la page Confidentialité.
@@ -254,4 +292,5 @@ iPhone (Safari et PWA installée) et Android (Chrome et PWA installée) : aperç
 6. **Effacement par `localStorage.removeItem`** : le navigateur peut garder des traces sur le disque. Dit « supprimé de Boussole », pas plus.
 7. **Le trousseau iCloud dans une PWA installée** : non vérifié à ce stade ; si la proposition d’enregistrement n’apparaît pas, le bouton « Copier » et la case de confirmation restent le seul filet. Constat à écrire après la recette §9.3.
 8. **Horloge de l’appareil** : l’attente après échecs se fonde dessus ; la reculer raccourcit l’attente. Même catégorie que le point 1.
-9. **Volume du chantier** : nettement plus gros que la révision 1 (déconnexion prouvée, association, onglets, WebAuthn vérifié). Découpage proposé : **PR A** verrou, code, onglets, voile, code oublié sans compte ; **PR B** WebAuthn vérifié ; **PR C** écran de choix, phrase, création du coffre ; **PR D** déconnexion prouvée, association, suppression du compte, déconnexion non demandée.
+9. **Volume du chantier** : nettement plus gros que la révision 1. Découpage : **PR A** verrou, code, onglets, voile (§4.4 révisé), `eraseLocalData()` et code oublié sans compte, tests 1 à 3, 9, 10 (partie verrou), 22 à 22 quater, 23, 24 ; **PR B** WebAuthn ES256 vérifié ; **PR C** écran de choix, phrase, `isPristineBudget`, création du premier coffre ; **PR D** déconnexion prouvée, association et `AccountGate`, suppression du compte, déconnexion non demandée.
+10. **Effacement abusif** : une personne qui tient le téléphone peut effacer Boussole (depuis l’écran verrouillé après « EFFACER », ou en supprimant l’app du téléphone). Non évitable ; écrit dans l’app (§4.5).
