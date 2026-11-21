@@ -1,16 +1,16 @@
-# P5 — Compte facultatif et verrouillage de l’application (révision 5)
+# P5 — Compte facultatif et verrouillage de l’application (révision 5.1)
 
-Plan de conception revu contre **`main` au commit `cfd94c9`**, qui intègre les lots A et B. La révision 2 a traité C1–C14 et S1–S8. La révision 3 a ajouté N1–N6. La révision 4 a cadré WebAuthn. La révision 5 cible les lots C et D décrits aux §5–7.
+Plan revu contre **`main` au commit `cfd94c9`**, qui intègre les lots A et B. La révision 4 a cadré WebAuthn et la révision 5 a précisé les lots C et D. La révision 5.1 rend C0 livrable seul et fixe les conditions d’ouverture de C1.
 
-### Révision 5 — Association du budget et création de compte (21 novembre 2026)
+### Révision 5.1 — Association du budget et création de compte (21 novembre 2026)
 
 | Lot | Périmètre | Condition de passage |
 |---|---|---|
-| **C0** | Rattachement local, calcul de vacuité, contrôle de session, écran global et gel des opérations. Protège aussi l’entrée de synchronisation existante. | Tests d’identité et de concurrence du §9.5 réussis avant d’activer les nouvelles inscriptions. |
-| **C1** | Compte facultatif, OTP, phrase secrète, premier budget et création explicite du coffre (§5). | C0 vérifié. Inscription et récupération validées sur un projet Supabase de test isolé. |
-| **D** | Preuve de synchronisation avant effacement, détachement volontaire, fin de session et parcours de suppression de compte (§6). | Réutilise le rattachement et le blocage de C0. Les parcours du §6 passent les tests du §9 avant livraison. |
+| **C0** | `accountGuard`, propriétaire dans une clé séparée, Web Locks pour les transitions et écran de compte. La connexion existante utilise `shouldCreateUser: false`. | PR autonome après recette sur deux onglets, puis sur le projet Supabase isolé (§9.5). |
+| **C1** | Compte facultatif, OTP, phrase secrète, premier budget et création explicite du coffre (§5). | PR séparée après C0. Avant l’ouverture aux utilisateurs, valider l’inscription sur le projet isolé et l’expéditeur au nom de Boussole. |
+| **D** | Déconnexion avec preuve, effacement, détachement volontaire et suppression du compte (§6). | Réutilise C0. Peut attendre les premiers usages réels de C1. |
 
-C0 rend les transitions de compte sûres dès sa livraison. C1 est désactivé jusqu’à la validation de C0. Le découpage peut être matérialisé en deux PR ou en deux lots vérifiés dans une même PR.
+C0 corrige le parcours déjà livré et doit pouvoir être fusionné indépendamment. `sendCode` crée déjà des comptes sur `main`. Si le compte actif diffère du propriétaire du budget local, un coffre absent permet actuellement sa création à partir de ce budget et un coffre présent peut ouvrir un conflit dont l’option distante remplace le budget local. [Connexion et déverrouillage](https://github.com/Coliboy-dev/boussole-budget/blob/cfd94c9/components/sync/CloudSyncProvider.tsx#L231) · [Décision de synchronisation](https://github.com/Coliboy-dev/boussole-budget/blob/cfd94c9/lib/cloud-sync.ts#L32)
 
 Quatre constats structurent ce découpage.
 
@@ -18,6 +18,8 @@ Quatre constats structurent ce découpage.
 2. `signOut` efface la mémoire de synchronisation et conserve le budget. C0 garde le rattachement du budget à son compte même quand la session se ferme. [CloudSyncProvider](https://github.com/Coliboy-dev/boussole-budget/blob/cfd94c9/components/sync/CloudSyncProvider.tsx#L294)
 3. `finishOnboarding` enregistre le budget et renvoie actuellement `void`. C1 doit créer le coffre avec l’état sauvegardé retourné par cette opération, avant d’autoriser la synchronisation automatique. [AppContext](https://github.com/Coliboy-dev/boussole-budget/blob/cfd94c9/lib/context/AppContext.tsx#L390)
 4. `AppWrapper` compose `AppProvider`, `CloudSyncProvider` et `LockProvider`. C0 ajoute le contrôle d’association sous le verrou existant et protège aussi les points d’écriture des deux fournisseurs. [AppWrapper](https://github.com/Coliboy-dev/boussole-budget/blob/cfd94c9/components/layout/AppWrapper.tsx#L7)
+
+La migration SQL du dépôt met `user_id` en clé primaire et limite l’accès par RLS à `auth.uid() = user_id`. Le client crée par `INSERT` et traite le doublon `23505` comme une création concurrente. Une mise à jour exige la version attendue. C0 et C1 utilisent ces garanties avec l’identité du budget contrôlée dans le navigateur. La recette isolée vérifie les politiques et la migration en place. [Migration du coffre](https://github.com/Coliboy-dev/boussole-budget/blob/cfd94c9/supabase/migrations/20261120091727_budget_vaults.sql) · [Écritures du coffre](https://github.com/Coliboy-dev/boussole-budget/blob/cfd94c9/lib/cloud-remote.ts#L58)
 
 ### Révision 4 (validation du lot B, 21 novembre 2026)
 
@@ -169,7 +171,7 @@ Avertissement à l’activation du verrou sans compte ni déverrouillage par le 
 
 ## 5. Premier lancement et création de compte
 
-**Lot C1**, ouvert seulement après validation de C0 (§7 et §9.5). Jusqu’à cette validation et l’ouverture de C1, l’entrée e-mail existante de C0 permet la connexion aux comptes existants avec `shouldCreateUser: false`. Le parcours **Créer mon compte** demande explicitement la création.
+**Lot C1**, dans une PR séparée après la fusion de C0 (§7 et §9.5). La connexion aux comptes existants utilise `shouldCreateUser: false`. Le parcours **Créer mon compte** demande explicitement la création. Son ouverture aux utilisateurs exige l’expéditeur Boussole du §5.6.
 
 ### 5.1 Écran de choix (`components/onboarding/AccountChoice.tsx`, avant l’étape 1 de `BudgetOnboarding`)
 - **Créer mon compte** (bouton principal) : « Sauvegarde en ligne chiffrée, plusieurs appareils, et plus tard le partage en couple. La copie en ligne est chiffrée sur ton téléphone avant l’envoi : nous ne pouvons pas la lire. »
@@ -189,19 +191,22 @@ Avertissement à l’activation du verrou sans compte ni déverrouillage par le 
 ### 5.3 Ordre et création du coffre (C6)
 
 1. Après l’OTP, C0 valide le compte et le cas d’association. Pour un premier budget, l’appareil doit être vide et l’absence de coffre confirmée par une lecture réussie. La phrase secrète est confirmée selon le §5.2.
-2. Le parcours pose les trois questions. `finishOnboarding` retourne l’`AppState` effectivement persisté et l’identifiant de son instantané local. Le premier enregistrement autorisé rattache le budget au compte qui termine le parcours. Aucun envoi automatique ne peut partir pendant cette création.
-3. `createInitialVault` chiffre et crée le coffre à partir de cet instantané, après avoir revalidé le compte actif et la réservation d’écriture du §7.4. La mémoire enregistre l’empreinte de ce même contenu. « Copie en ligne créée » s’affiche après confirmation. Boussole propose ensuite le verrou.
-4. Si la requête échoue ou sa réponse est perdue, le budget local reste rattaché et la création reste en attente. « La copie en ligne n’a pas pu être confirmée. Ton budget est sur ce téléphone. » propose **Réessayer**. Après rechargement, seul le même compte peut reprendre avec le brouillon local vérifié. Relire le coffre au moment de la reprise. S’il existe, le déchiffrer et comparer son empreinte à l’instantané enregistré. Une égalité confirme la création. Un contenu différent passe par un choix explicite avant toute modification. Un compte différent ne peut ni reprendre la création, ni voir le budget.
+2. `finishOnboarding` retourne l’`AppState` effectivement persisté après les trois questions. Le premier enregistrement rattache le budget à ce compte (§7). Garder la synchronisation automatique en attente pendant la création du coffre.
+3. `createInitialVault` utilise l’instantané sauvegardé et `accountGuard` avant `createVault`. L’`INSERT` réussi confirme la création et permet d’enregistrer l’empreinte correspondante avant de reprendre la synchronisation normale.
+4. En cas d’échec ou de réponse perdue, garder le budget local et proposer **Réessayer** au même compte. Après rechargement, reprendre avec l’instantané local vérifié et refaire l’`INSERT`. Si `createVault` renvoie `null` (`23505`), relire le coffre, le déchiffrer et comparer son empreinte à celle de l’instantané. Une égalité confirme la création. Un contenu différent ouvre un choix explicite et conserve les deux copies. L’insertion de reprise ne bascule pas vers une mise à jour.
+5. Afficher « Copie en ligne créée » seulement après confirmation, puis proposer le verrou. Une erreur ou un coffre qui ne peut pas être relu ou déchiffré maintient la création en attente.
 
 ### 5.4 Sans compte (C12)
 Après les trois questions, l’écran de résultat (`OnboardingResult`) propose aussi « Verrouiller Boussole avec un code ? ».
 
 ### 5.5 Personnes existantes
-Les parcours sans compte restent disponibles. « Plus → Compte et sécurité » propose « Créer un compte pour ce budget » lorsque la provenance du budget permet ce choix. L’intention ouvre un parcours d’association pour un instantané précis (§7, cas A). La confirmation se fait avec le compte identifié.
+Les parcours sans compte restent disponibles. « Plus → Compte et sécurité » propose « Créer un compte pour ce budget » pour un budget invité. La personne confirme l’instantané à associer après identification du compte (§7, cas A).
 
 ### 5.6 E-mail d’authentification et environnement de test
 
-Réutiliser le domaine Resend `mail.startonlab.be`, signalé vérifié et actif dans l’audit, et prévoir `connexion@mail.startonlab.be` comme expéditeur. Le raccordement SMTP personnalisé ou Supabase–Resend et la réception effective restent à vérifier sur le projet de test. Le modèle d’e-mail en français contient `{{ .Token }}` pour transmettre le code numérique. Valider l’expéditeur, la réception, la consommation et l’expiration du code avec des comptes de test. [SMTP Supabase](https://supabase.com/docs/guides/auth/auth-smtp) · [Modèles d’e-mails Supabase](https://supabase.com/docs/guides/auth/auth-email-templates)
+Sur le projet de test, utiliser `connexion@mail.startonlab.be` via le domaine signalé vérifié dans Resend. Vérifier le raccordement SMTP ou Supabase–Resend et la réception effective. Le modèle en français contient `{{ .Token }}` pour transmettre le code numérique. Vérifier la consommation et l’expiration de l’OTP. [SMTP Supabase](https://supabase.com/docs/guides/auth/auth-smtp) · [Modèles d’e-mails Supabase](https://supabase.com/docs/guides/auth/auth-email-templates)
+
+Pour ouvrir C1 aux utilisateurs, choisir le domaine définitif et vérifier la réception des OTP en production avec un expéditeur au nom de **Boussole** sur un domaine identifiable comme le sien. Ce choix conditionne l’ouverture de C1. C0 peut être livré avant cette mise en place.
 
 Utiliser un projet Supabase isolé avec des comptes et des budgets fictifs. Avant les tests d’intégration, relever la référence du projet et obtenir une preuve que la migration `20261120091727_budget_vaults.sql` y est appliquée. Tester les politiques d’accès avec deux comptes jetables et les identifiants publics de l’environnement de test. Le fichier de migration est présent dans le dépôt. Sa présence ne démontre pas l’état de la base distante. La configuration de production et la livraison des e-mails à de vrais utilisateurs sont validées séparément avant ouverture.
 
@@ -259,13 +264,15 @@ Aucune preuve de synchronisation n’est demandée : la copie en ligne est volon
 
 `isPristineBudget` compare le budget complet sérialisé à `serializeBudget(emptyBudgetState)` et vérifie l’absence de la clé `boussole-budget-v1`, même si la version 2 existe. Le prénom, la réserve, les documents, la médiation et les données P3 comptent aussi. Un stockage illisible, en chargement ou comportant des modifications non persistées impose d’attendre ou de réparer le stockage. Il ne vaut jamais budget vide.
 
-Le budget local a un rattachement indépendant de la session, du trousseau et de `boussole-sync-v1` : **invité**, **lié à un `userId`**, ou **provenance inconnue**. Enregistrer le rattachement avec le budget dans le stockage local, dans des métadonnées de l’enveloppe v2. Le fichier exporté et le contenu chiffré synchronisé gardent leur format actuel. Une écriture ordinaire ne change pas le rattachement. Un nouveau budget créé en mode invité est marqué comme tel.
+Enregistrer le propriétaire dans la clé `localStorage` **`boussole-budget-owner-v1`**. La valeur est un objet JSON `{type: 'guest'}` ou `{type: 'account', userId}`. Ajouter la clé à `LOCAL_STORAGE_KEYS` pour les parcours d’effacement explicitement confirmés. Elle reste séparée de l’enveloppe v2, de `serializeBudget`, des empreintes et du coffre. Une édition ordinaire, une déconnexion simple ou la perte du trousseau ne change pas cette clé. Une valeur présente mais illisible maintient le budget masqué et intact. Signaler une erreur de stockage et conserver la valeur.
 
-Pour un budget créé avant C0, une mémoire de synchronisation valide désigne le compte à protéger. Si son empreinte correspond au budget local, établir le rattachement à ce compte. En cas d’écart, réserver la reprise à ce même compte, avec confirmation avant toute synchronisation. En l’absence de preuve exploitable, garder la provenance inconnue. Un budget ancien déjà accessible en mode local peut le rester hors session, selon le verrou existant, avec accès à l’export local. Après connexion, Boussole le masque tant que son rattachement ne peut pas être établi. C0 ne peut pas retrouver le propriétaire d’un budget dont les anciennes versions ont effacé toute trace de compte.
+Un budget présent sans clé de propriétaire est un ancien budget. Initialiser la clé sous le verrou du §7.4 avant de reprendre la synchronisation. Lire la mémoire de synchronisation existante sans la filtrer sur le compte qui vient de se connecter. Si elle est valide, utiliser `memory.userId`. Le moteur de synchronisation traite une différence d’empreinte comme une modification du budget. Si la mémoire est absente, marquer le budget **invité**. Si la mémoire est présente mais illisible, conserver les données et signaler l’erreur. Un premier budget créé en mode local est marqué invité.
+
+Cette migration suppose que les anciens comptes utilisés avec Boussole sont des comptes de test. L’audit n’a pas recensé les coffres de production. Confirmer cette hypothèse avant de livrer C0. Si des utilisateurs réels sont déjà concernés, relire la règle de migration avant le déploiement.
 
 ### 7.2 Blocage global avant l’OTP et le chargement de la clé
 
-Séparer la décision d’accès au budget de l’état d’avancement réseau. Pendant l’amorçage avec synchronisation configurée, un changement de session ou une association incertaine, `CloudSyncProvider` expose un état bloquant comme `awaiting-association`. Le blocage s’applique dès le début de la vérification d’OTP ou dès réception d’un événement de changement de compte, **avant** le chargement de la clé et tout résultat asynchrone. Distinguer les événements qui répètent le même compte d’un vrai changement de session. Un résultat tardif de `getSession`, du trousseau ou du réseau ne décide jamais à la place de l’identité actuelle.
+Pendant l’amorçage, avant la vérification de l’OTP ou dès réception d’un changement de compte, masquer le budget jusqu’à ce que la session, la clé et le propriétaire soient résolus. `AccountGate` utilise la décision du §7.4. Il affiche le choix d’association si nécessaire, en restant bloquant tant que le choix manque.
 
 Composer `AppProvider → CloudSyncProvider → LockProvider → AccountGate → contenu` dans `AppWrapper`. Le verrou PIN ou téléphone reste prioritaire. Dès que ce verrou s’ouvre, `AccountGate` affiche l’écran de connexion, d’association ou de récupération si le budget reste protégé. Il ne monte pas les pages budgétaires, l’en-tête ni la navigation dans cet état. Ce test s’applique aussi au premier rendu, à l’hydratation et à un accès direct à `/dashboard`, `/analyse` ou `/sauvegarde`.
 
@@ -281,19 +288,26 @@ Une décision indique le compte, la provenance du budget, l’instantané local 
 | **B.** Budget invité non vide, compte existant sans coffre | « Associer ce budget à mon compte », « Commencer avec un budget vide » après confirmation explicite, ou « Annuler ». |
 | **C.** Budget invité non vide, compte avec coffre | « Remplacer ce budget par celui de mon compte » après confirmation, ou « Annuler ». Déchiffrer et valider le coffre avant de remplacer le budget local. |
 | Budget local vide, sans rattachement à un autre compte | Récupérer le coffre du compte vérifié après validation de la clé si le coffre existe. Sinon, autoriser le premier budget (§5.3 pour C1). |
-| Budget rattaché au compte actif | Autoriser la reprise normale après vérification de l’identité et de la clé. Pour une migration avec empreinte divergente, demander une confirmation au propriétaire. |
+| Budget rattaché au compte actif | Autoriser la reprise normale après vérification de la session et de la clé. Le moteur existant traite les modifications et conflits du budget. |
 | Budget rattaché à A, session absente ou compte B | Masquer et conserver le budget. Proposer de revenir au compte A. B ne peut ni associer, ni remplacer, ni effacer le budget de A depuis l’association. Cette règle vaut même si le budget de A est vide. |
-| Provenance inconnue, compte connecté | Garder le budget intact et masqué. Proposer d’annuler la connexion. Un coffre déchiffré du compte actif avec une empreinte identique permet de vérifier la provenance. |
 
-« Annuler » conserve le budget, son rattachement et le coffre. Pour un budget invité, l’annulation rend le mode local après confirmation de fermeture de la session en cours. Pour un budget rattaché, l’écran de compte reste en place jusqu’à vérification du propriétaire. Couvrir la matrice par une fonction pure `associationDecision` et des tests sur les décisions invalidées.
+« Annuler » conserve le budget, son rattachement et le coffre. Pour un budget invité, l’annulation rend le mode local après confirmation de fermeture de la session en cours. Pour un budget rattaché, l’écran de compte reste en place jusqu’à vérification du propriétaire.
 
-### 7.4 Un même contrôle pour l’écran, les écritures et les onglets
+### 7.4 Contrôle de compte et verrou de transition
 
-- **Synchronisation.** Avant toute opération, vérifier la session, le rattachement, la clé et la génération de transition. Appliquer la même règle à `runSync`, à ses relances, au délai d’envoi après édition, au retour sur l’app ou du réseau, aux commandes manuelles et à `resolveConflict`. Le calcul de `decideSync` intervient après ce contrôle. Le chiffrement AES-GCM et les politiques RLS existantes sont réutilisés.
-- **Écritures locales.** Le blocage couvre les mutations et les effets de persistance d’`AppContext`, `saveBudget`, la restauration, la migration et les opérations de paiement. Il couvre aussi l’export ordinaire tant que le budget est masqué. Les choix autorisés reçoivent une permission limitée à l’opération, au compte, à la génération et à l’instantané confirmés. Le parcours d’effacement d’urgence de la PR A garde sa confirmation explicite « EFFACER » et retire le rattachement avec le budget.
-- **Concurrence.** Inscrire le blocage dans un état partagé du navigateur avant de commencer une transition, en complément des événements inter-onglets. Chaque onglet relit l’état partagé avant une action et au retour au premier plan, y compris s’il a manqué le message. S’en servir pour masquer l’interface avant d’afficher le budget. Sérialiser les transitions et les écritures locales critiques entre onglets. La comparaison de `writeBudgetSnapshot` protège contre une divergence constatée. La lecture suivie d’une écriture `localStorage` doit être couverte par une exclusion entre onglets pour les transitions.
-- **Opérations en cours.** À un changement de compte, invalider la génération, retirer la clé active et annuler les opérations annulables. Contrôler la génération à la reprise de chaque attente et juste avant une écriture, une restauration ou la publication d’un résultat. Une requête déjà partie reste strictement liée au compte validé au départ. Sa réponse tardive ne doit ni modifier le budget ou la mémoire locale, ni lancer une nouvelle requête après le changement de compte. Pour une transition déclenchée par l’app, geler d’abord les nouveaux envois et attendre la fin des opérations déjà parties avant de poursuivre.
-- **Reprise et déconnexion.** Pendant C0 et C1, fermer la session ou nettoyer la mémoire de synchronisation conserve le rattachement et le budget. Le détenteur du compte propriétaire doit se reconnecter pour retrouver un budget masqué. Après un rechargement ou une interruption, relire l’état partagé et la session avant de lever le blocage. D ajoute seulement la preuve, l’effacement ou le détachement volontaire et la suppression du compte (§6).
+```text
+accountGuard({ sessionUserId, keyUserId, owner }) → autorisé | masqué
+```
+
+En mode invité, l’accès est autorisé quand l’absence de session et de clé est confirmée. Pour un budget rattaché, le propriétaire, le compte de la session et celui de la clé utilisée doivent correspondre. Les autres cas restent masqués. L’accès invité permet les opérations locales. Une opération de coffre exige un compte et une clé.
+
+Appliquer ce contrôle dans `AccountGate`, au début de `runSync`, juste avant `createVault` et `updateVault`, et avant tout remplacement local par récupération distante, résolution de conflit ou restauration. Les commandes d’édition et l’export local restent bloqués quand le budget est masqué. Relire la session active et le propriétaire au point d’écriture, même après un retour de l’arrière-plan. Pour un résultat asynchrone, `keyUserId` désigne la clé utilisée par cette opération. Ainsi, un résultat lancé sous A reste refusé dès que l’identité active ne correspond plus, même si une clé B est déjà chargée. Vérifier aussi ce contrôle avant de retenir la clé chargée ou de mettre à jour la mémoire de synchronisation. Une requête déjà partie reste liée au compte et au jeton de départ, avec la RLS et le contrôle de version du coffre.
+
+Utiliser **`navigator.locks.request('boussole-account-transition', …)`** uniquement pour les transitions de compte, dont l’initialisation du propriétaire, l’association et le détachement. Sous le verrou, relire le propriétaire source, la session et l’instantané. Un choix explicite du §7.3 peut engager un changement du propriétaire invité vers le compte confirmé. Avant un remplacement dans ce cas, contrôler aussi la correspondance entre ce compte et la clé de l’opération. Réutiliser `writeBudgetSnapshot` pour refuser l’écriture si l’instantané local a changé.
+
+Si une transition modifie à la fois le budget et son propriétaire, utiliser un marqueur `{type: 'transition', userId}` dans **la même clé** pendant les deux écritures. `accountGuard` le traite comme masqué. Publier le propriétaire final après réussite. Après une interruption, conserver les données présentes et reprendre la décision sous le même verrou avec le compte indiqué. Le marqueur ne change jamais la règle de migration d’une clé absente. Si le verrou est indisponible, garder les transitions en attente et conserver l’accès des budgets invités hors session.
+
+En C0, `signOut` conserve le budget et son propriétaire. Relire le propriétaire et la session après chaque événement de compte et au premier plan. L’effacement d’urgence de la PR A garde sa confirmation « EFFACER ». Le lot D ajoute la déconnexion avec preuve et le détachement volontaire (§6).
 
 ---
 
@@ -302,11 +316,11 @@ Une décision indique le compte, la provenance du budget, l’instantané local 
 | Lot | Fichiers et responsabilités |
 |---|---|
 | A et B, livrés | Verrou PIN et WebAuthn sous `components/security/`, `lib/app-lock.ts`, `lib/webauthn-lock.ts`, `lib/device-lock-storage.ts` et tests associés. |
-| C0 | `AppWrapper.tsx` et le nouvel `AccountGate`, `AssociationChoice`, `CloudSyncProvider.tsx`, `app/synchronisation/page.tsx`, `AppContext.tsx`, stockage local et décisions d’association, événements inter-onglets dans `lib/security-channel.ts`. Encadrer les appels existants aux coffres et l’effacement d’urgence. |
+| C0 | `AccountGate` dans `AppWrapper.tsx`, écran de compte, `accountGuard` et clé de propriétaire dans `lib/`. Appeler la garde depuis `CloudSyncProvider.tsx` et `AppContext.tsx`. Ajouter la clé à `LOCAL_STORAGE_KEYS`. |
 | C1 | `AccountChoice`, `BudgetOnboarding.tsx`, `lib/passphrase.ts`, `finishOnboarding` dans `AppContext.tsx` et création initiale dans `CloudSyncProvider.tsx`. |
 | D | `SignOutFlow`, `lib/account-lifecycle.ts` pour la preuve et l’ordre des opérations, `CloudSyncProvider.tsx`, et propagation des erreurs de trousseau dans `lib/cloud-remote.ts`. |
 
-Les lots C0 et C1 réutilisent le format du coffre, le chiffrement et les politiques RLS présents dans le dépôt. La révision 5 ne prévoit aucun changement de schéma pour ces lots. Documenter les parcours livrés dans `docs/audit/README.md`.
+Les lots C0 et C1 réutilisent le format du coffre, le chiffrement et les politiques RLS présents dans le dépôt. Leurs changements portent sur l’application et le stockage local. Documenter les parcours livrés dans `docs/audit/README.md`.
 
 ---
 
@@ -318,7 +332,7 @@ Les lots C0 et C1 réutilisent le format du coffre, le chiffrement et les politi
 3. `shouldLock` : délai 0, 60 s, 300 s ; retour à 59 s, 60 s, 61 s.
 4. `generatePassphrase` avec générateur injecté : format exact ; octets ≥ 248 rejetés (séquence d’entrée connue → sortie connue) ; les 31 symboles atteignables ; entropie théorique 99,1 bits ; la fonction par défaut utilise `crypto.getRandomValues`.
 5. WebAuthn : tests indépendants de **l'inscription et de l'assertion**, avec fixtures de CBOR/authenticatorData et signatures ES256 encodées DER (production possible via `node:crypto`), puis DER→P1363 vérifié. Positive : inscription UP/UV/AT correcte, credential ID/rpIdHash/clé/algorithme cohérents ; assertion valide et compteur de signature 0 accepté. Négatifs **indépendants** : `challenge` différent ou rejoué ; `origin` différente ; `crossOrigin:true` ; `type` faux ; RP ID invalide ; UP=0 ou UV=0 ; credential ID inconnu ; clé remplacée ; signature altérée ; erreur d'algorithme ; DER mal formé, tronqué, entier négatif ou surlongueur ; données d'inscription incohérentes ; absence de clé publique. Une réponse de tentative abandonnée/ancienne est toujours rejetée.
-6. `associationDecision` et `isPristineBudget` couvrent toute la matrice du §7.3. Vérifier la priorité du rattachement, la provenance inconnue, le coffre d’état inconnu et l’invalidation d’une décision après changement d’identité, de budget ou de version distante.
+6. `accountGuard` couvre la concordance ou la divergence entre session, clé et propriétaire, l’accès invité hors session et la clé de propriétaire illisible ou en transition. Vérifier la migration avec et sans mémoire, `isPristineBudget` et les décisions du §7.3.
 7. `proveSynced` : identique → preuve ; une dépense de plus en local → pas de preuve ; copie en ligne plus récente que le local → pas de preuve ; mauvaise phrase → erreur, pas de preuve.
 8. `signOutSteps` : preuve → effacement ; sans preuve → blocage, aucun effacement ; échec simulé de la suppression IndexedDB → « effacement incomplet », pas de succès.
 
@@ -353,7 +367,7 @@ Sur iPhone, tester **Safari, Chrome iOS et la PWA installée**. Sur Android, tes
 
 ### 9.4 Preuves minimales spécifiques à la PR B
 
-- **Précondition :** la suite de tests déjà présente sur `main` reste verte. Les nouvelles suites vérifient les transitions WebAuthn en plus des 103 tests rapportés lors de la PR A, sans supposer que ce nombre reste constant.
+- **Précondition.** La suite de tests présente sur `main` reste verte. Les tests WebAuthn couvrent aussi les transitions de navigateur et les réponses tardives.
 - **Stockage.** `boussole-lock-v1` de la PR A fonctionne sans migration. Une référence WebAuthn absente, altérée ou incompatible préserve le PIN et le solde. Une nouvelle référence est écrite après validation. Pour remplacer une référence valide, la désactivation précède la réactivation et le PIN reste utilisable si celle-ci est annulée. Désactiver le verrou PIN ou effacer Boussole retire la référence WebAuthn et vérifie son absence.
 - **Concurrence.** Une seule tentative peut être en cours par onglet. Le message `locked` d’un autre onglet invalide la tentative. Une assertion valide peut être acceptée après un simple `blur` si la page est toujours visible. Un `visibilitychange:hidden` ou `pagehide` invalide la tentative même si la signature renvoyée est valide. Au retour, le budget reste masqué et le voile laisse le PIN accessible.
 - **Secours :** si la méthode téléphone devient indisponible, le PIN déverrouille ; une annulation WebAuthn ne consomme aucun essai PIN ; un succès WebAuthn ne remet pas le compteur PIN à zéro ; perte/oubli de PIN n'est jamais « réparé » automatiquement par WebAuthn.
@@ -366,13 +380,14 @@ Sur iPhone, tester **Safari, Chrome iOS et la PWA installée**. Sur Android, tes
 |---|---|---|
 | C0 | A est connecté. Déconnexion, session expirée ou passage à B, dans le même onglet puis sur deux onglets. Tester B sans coffre et B avec coffre. | Le budget de A reste intact et masqué. Aucun transfert à B, aucun remplacement et aucune écriture autorisée par B. La reconnexion vérifiée à A rétablit l’accès. |
 | C0 | Association en attente. Déclencher une modification différée, un retour visible, un retour réseau, une synchronisation manuelle et une résolution de conflit. | Zéro écriture vers le coffre et zéro mutation du budget local avant le choix. Aucun contenu budgétaire dans le DOM. Les lectures autorisées sont limitées au compte actif. |
-| C0 | Suspendre un onglet. Dans un autre, changer de compte pendant une lecture, une dérivation de clé, une restauration ou la réponse d’un envoi. Puis réveiller l’onglet. | Masque en place avant l’affichage. Une réponse de l’ancienne génération ne modifie ni le budget, ni la clé active, ni la mémoire de synchronisation. Les requêtes déjà parties restent liées au compte qui les a autorisées. |
+| C0 | Changer de compte dans un onglet avant une écriture déjà préparée dans l’autre. Vérifier aussi après retour de l’arrière-plan. | La relecture du propriétaire et de la session au point d’écriture bloque l’opération préparée pour l’ancien compte. Le budget reste masqué tant que le compte ne correspond pas. |
 | C0 | Connexion sur budget invité, compte sans coffre puis compte avec coffre. Tester la confirmation, l’annulation, une lecture distante en échec et un changement de budget entre choix et confirmation. | La matrice du §7.3 s’applique. La lecture en échec reste d’état inconnu. Aucun envoi ni remplacement sans décision valide sur le même instantané. |
-| C0 | Budget vierge, fichier legacy seul ou encore présent avec la v2, données limitées au profil, à la médiation, aux documents ou à P3. Stockage illisible et ancien budget sans provenance. | Seul le budget complet vierge sans legacy est déclaré vide. Un ancien budget sans provenance garde ses données et ne s’associe pas automatiquement à un nouveau compte. |
-| C1 | Création avec OTP reçu, phrase confirmée et premier budget. Rejouer avec une panne avant l’envoi et une réponse perdue après l’insertion. Reprendre après rechargement. | Le budget persiste localement. Le premier coffre correspond exactement à l’instantané sauvegardé. La reprise ne crée ni doublon ni écrasement et le second navigateur récupère ce même budget. |
+| C0 | Ancien budget avec une mémoire A et une empreinte différente, puis ancien budget sans mémoire. Clé propriétaire présente mais illisible ou transition locale interrompue. | Migration vers A dans le premier cas et vers invité dans le deuxième. Dans les cas illisibles ou interrompus, le budget reste intact et masqué jusqu’à résolution. |
+| C0 | Budget vierge, fichier legacy seul ou encore présent avec la v2, données limitées au profil, à la médiation, aux documents ou à P3. Stockage illisible. | Seul le budget complet vierge sans fichier legacy est déclaré vide. |
+| C1 | Premier budget avec OTP et phrase confirmée. Perdre la réponse après insertion. Rejouer après rechargement, puis avec création concurrente d’un coffre différent depuis un second appareil. | Sur `23505`, relire et comparer. Un coffre identique confirme la création. Un coffre différent laisse les deux copies intactes et demande un choix. Vérifier qu’aucune mise à jour n’est émise par la reprise. |
 | C1 | Mode invité pendant la coupure réseau, retour avec et sans compte, confirmation de la phrase générée. | Le parcours invité reste disponible et le parcours compte exige la confirmation de sauvegarde de la phrase. Le compte reçoit seulement le budget qui lui a été associé. |
 
-Pour chaque lot, lancer `npm test`, `npx tsc --noEmit`, `npm run lint` et `npm run build`. Vérifier d’abord C0 en tests unitaires et dans Playwright, puis sur le projet isolé. C1 reste désactivé tant que cette preuve manque. Les essais réels de création de compte nécessitent la preuve de migration et de livraison OTP du §5.6. Une validation sur le projet isolé ne vaut pas validation de la configuration d’envoi en production.
+Pour chaque lot, lancer `npm test`, `npx tsc --noEmit`, `npm run lint` et `npm run build`. Vérifier d’abord C0 en tests unitaires et dans Playwright sur deux onglets, puis sur le projet isolé. Fusionner C0 indépendamment de C1. L’ouverture de C1 nécessite les preuves de migration et de livraison OTP en test, puis la validation de l’expéditeur Boussole en production (§5.6).
 
 ---
 
@@ -395,16 +410,16 @@ Pour chaque lot, lancer `npm test`, `npx tsc --noEmit`, `npm run lint` et `npm r
 Écrite par l’auteur du plan, en se plaçant contre lui.
 
 1. **Le verrou peut être contourné par quiconque modifie l’application** (code compromis, extension). Assumé et écrit (§2). Pas de parade dans une application web.
-2. **Biométrie et domaine** : tant que le domaine définitif n’est pas choisi, chaque changement de domaine oblige à réactiver la biométrie. Décision attendue du fondateur.
+2. **Domaine et expéditeur.** Changer de domaine implique de réactiver la méthode du téléphone. Comme en révision 4, le domaine définitif reste hors du périmètre bloquant de B. Il est requis pour ouvrir C1 avec l’expéditeur Boussole (§5.6).
 3. **« Me déconnecter sans effacer ce téléphone »** laisse un budget lisible par la personne suivante si le verrou n’est pas actif. C’est un choix explicite, mais il peut être fait sans lire. Mesure : le bouton n’est pas le choix principal et exige une confirmation.
-4. **Ancienne provenance inconnue.** La mémoire effacée par une ancienne version peut rendre la provenance impossible à établir. La règle du §7.3 conserve ce budget et bloque son association avec un compte jusqu’à preuve de correspondance.
+4. **Héritage.** La migration sans mémoire classe le budget invité. Elle repose sur l’hypothèse des comptes de test du §7.1. La confirmer avant de déployer C0.
 5. **Onglet gelé.** `BroadcastChannel` peut manquer un onglet suspendu. À son réveil, le verrou vérifie ses réglages et C0 relit le contrôle de session et le rattachement avant de rendre le budget.
 6. **Effacement par `localStorage.removeItem`** : le navigateur peut garder des traces sur le disque. Dit « supprimé de Boussole », pas plus.
 7. **Le trousseau iCloud dans une PWA installée** : non vérifié à ce stade ; si la proposition d’enregistrement n’apparaît pas, le bouton « Copier » et la case de confirmation restent le seul filet. Constat à écrire après la recette §9.3.
 8. **Horloge de l’appareil** : l’attente après échecs se fonde dessus ; la reculer raccourcit l’attente. Même catégorie que le point 1.
 9. **PR B et téléphone partagé** : quelqu'un connaissant le code du téléphone peut potentiellement vérifier l'utilisateur via WebAuthn. La méthode reste optionnelle et désactivée par défaut ; l'avertissement est affiché **avant** son activation. Une passkey synchronisée ne garantit pas la possession exclusive de cet iPhone. Ce lot ne modifie pas la sécurité cryptographique des données locales.
 10. **Conflits iOS / dialogue WebAuthn** : il peut être impossible de distinguer tous les événements du système d'une véritable sortie de l'application ; la machine à états échoue fermée si un événement `hidden/pagehide` invalide une tentative. Si la méthode ne fonctionne pas en pratique sur Chrome iOS, la masquer et conserver le PIN : ne jamais relâcher les contrôles UV ou de visibilité pour améliorer artificiellement le taux de succès.
-11. **Ordre des lots.** A et B sont livrés. C0 protège les transitions de compte et conditionne l’ouverture de C1. D réutilise C0 pour la déconnexion prouvée et la suppression de compte.
+11. **Ordre des lots.** A et B sont livrés. C0 est fusionnable seul. C1 suit dans une autre PR. D peut attendre les premiers usages réels de C1.
 12. **Effacement abusif.** Une personne qui tient le téléphone peut effacer Boussole depuis l’écran verrouillé après « EFFACER », ou en supprimant l’app du téléphone (§4.5).
 
 ## 12. Arbitrages définitifs de la PR B (révision 4)
@@ -419,4 +434,4 @@ Pour chaque lot, lancer `npm test`, `npx tsc --noEmit`, `npm run lint` et `npm r
 | iOS | Événements conservés, `blur` distinct de `hidden/pagehide`, tentative invalidée en cas de véritable sortie | Compatibilité physique à tester ; erreur = PIN, jamais assouplir UV |
 | Périmètre | PR B limitée au verrou ; aucune nouvelle fonctionnalité compte, cloud ou Foyer | PR C et D restent indépendantes |
 
-La révision 4 a défini les conditions de recette de la PR B (§9.3–9.4). La révision 5 prend sa fusion sur `main` comme base C0.
+La révision 4 a défini les conditions de recette de la PR B (§9.3–9.4). La révision 5.1 prend sa fusion sur `main` comme base C0.
