@@ -399,6 +399,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     const previous = accountRef.current === undefined ? undefined : accountRef.current?.userId ?? null;
     if (authBusy.current || readStoredSessionUserId(localStorage) !== userId
       || (!force && previous === userId && onlineAccount.current === verified)) return;
+    const resumedOnline = verified && previous === userId && !onlineAccount.current;
     accountRef.current = next;
     onlineAccount.current = verified;
     keyRef.current = null;
@@ -455,7 +456,10 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
       if (owner.type === 'account' && stored && accountGuard({ owner, sessionUserId: userId, keyUserId: stored.userId })) {
         keyRef.current = stored;
         publishBudgetAccess(userId, stored.userId);
-        setPhase(!verified ? 'local-only' : readPendingVault(localStorage) !== null ? 'vault-pending' : 'syncing');
+        const pending = readPendingVault(localStorage) !== null;
+        setPhase(!verified ? 'local-only' : pending ? 'vault-pending' : 'syncing');
+        // L’accès local peut rester vrai avant et après le renouvellement dans le même rendu.
+        if (resumedOnline && !pending) window.setTimeout(() => retrySync.current(), 0);
         return;
       }
       if (!verified) {

@@ -224,6 +224,7 @@ test('C1 — les erreurs réseau de renouvellement gardent le budget disponible 
   await page.getByText(/Ton budget est disponible sur cet appareil/).waitFor();
   assert.deepEqual(vaultRequests, []);
   online = true;
+  await page.clock.setSystemTime(new Date(Date.now() + 65000)); // Dépasser le délai de reprise du SDK après un échec.
   await button(page, 'Vérifier la connexion').click();
   await page.getByRole('status').filter({ hasText: 'Synchronisé' }).waitFor();
   assert.ok(vaultRequests.length > 0);
