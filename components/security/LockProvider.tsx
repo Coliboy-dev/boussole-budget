@@ -209,10 +209,10 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
       );
       const credential = await request;
       if (!credential || generation !== deviceAttemptGeneration || getSnapshot().phase !== 'unlocked'
-        || document.visibilityState !== 'visible') return false;
+        || readState().status !== 'valid' || document.visibilityState !== 'visible') return false;
       const verified = await verifyRegistration(credential, challenge, location.origin, location.hostname);
       if (generation !== deviceAttemptGeneration || getSnapshot().phase !== 'unlocked'
-        || document.visibilityState !== 'visible') return false;
+        || readState().status !== 'valid' || document.visibilityState !== 'visible') return false;
       saveDeviceLock(localStorage, verified);
       update({ device: { status: 'valid', credential: verified } });
       postSecurityEvent('lock-settings-changed');
@@ -250,8 +250,15 @@ const actions: Omit<LockContextValue, 'enabled' | 'unreadable' | 'delay' | 'retr
       if (!credential || generation !== deviceAttemptGeneration) return false;
       if (!(await verifyAssertion(credential, before.device.credential, challenge, location.origin))) return false;
       const latest = getSnapshot();
+      // La diffusion entre onglets peut être retardée : toujours relire les deux clés
+      // directement avant de rendre le budget, et pas seulement le snapshot React.
+      const persistedPin = readState();
+      const persistedDevice = readDevice();
       if (generation !== deviceAttemptGeneration || latest.phase !== 'locked' || latest.unreadable
+        || persistedPin.status !== 'valid' || persistedDevice.status !== 'valid'
         || latest.device.status !== 'valid'
+        || persistedDevice.credential.credentialId !== before.device.credential.credentialId
+        || persistedDevice.credential.publicKeySpki !== before.device.credential.publicKeySpki
         || latest.device.credential.credentialId !== before.device.credential.credentialId
         || document.visibilityState !== 'visible' || !document.hasFocus()
         || hiddenAt !== null || previousHidden !== null || readEpoch() > firstEpoch) return false;
@@ -359,6 +366,9 @@ export function LockProvider({ children }: { children: ReactNode }) {
         if (hasLock(getSnapshot())) showLockScreen();
         return;
       }
+      // Toute modification distante des réglages annule une authentification
+      // en cours, même si le navigateur n'a pas reçu le message de verrouillage.
+      if (type === 'lock-settings-changed') invalidateDeviceAttempt();
       if (document.visibilityState === 'visible') onReturn();
       else update({ device: readDevice() });
     });
