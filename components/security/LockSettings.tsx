@@ -200,6 +200,9 @@ export default function LockSettings() {
               </p>
             )}
             {lock.deviceStatus === 'valid' && <p role="status" className="text-sm text-green-800">Méthode du téléphone activée.</p>}
+            {deviceMode === 'idle' && deviceError && (
+              <p role="alert" className="text-sm text-red-700">{deviceError}</p>
+            )}
             {deviceMode === 'idle' && lock.deviceStatus === 'valid' && (
               <button type="button" className={secondaryButton}
                 onClick={() => { setDeviceMode('remove'); setDevicePin(''); setDeviceError(''); }}>
