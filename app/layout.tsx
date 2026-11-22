@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   icons: { apple: '/icons/capiste-180.png' },
 };
 
-export const viewport: Viewport = { themeColor: '#087f78' };
+export const viewport: Viewport = { themeColor: '#0b5f5d' };
 
 export default async function RootLayout({
   children,

@@ -21,7 +21,7 @@ export default function TopHeader() {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
       <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-between">
         <div className="flex items-center">
-          <BrandLogo height={30} priority />
+          <BrandLogo height={34} priority />
         </div>
         <div className="flex items-center gap-1">
         {lock.enabled && (

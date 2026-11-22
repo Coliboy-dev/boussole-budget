@@ -10,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/dashboard',
     scope: '/',
     display: 'standalone',
-    background_color: '#f5f3ee',
-    theme_color: '#087f78',
+    background_color: '#fbf7ee',
+    theme_color: '#0b5f5d',
     icons: [
       { src: '/icons/capiste-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: '/icons/capiste-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

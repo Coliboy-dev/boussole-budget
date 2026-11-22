@@ -105,7 +105,7 @@ export default function LockScreen({ allowAutomaticUnlock }: { allowAutomaticUnl
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4 py-8">
       <div className="flex items-center justify-center">
-        <BrandLogo height={40} priority />
+        <BrandLogo height={48} priority />
       </div>
       {unreadable && (
         <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
