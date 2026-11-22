@@ -173,7 +173,11 @@ Les éléments du foyer sont chiffrés sur l’appareil. Leur identifiant, celui
 
 La suppression d’un compte efface son adhésion et son profil. Les entrées du foyer restent accessibles à l’autre membre et les références à l’auteur supprimé sont retirées. Au départ du dernier membre, le foyer et ses entrées sont supprimés côté serveur.
 
-Les tests unitaires font partie de `npm test`. Pour relancer la recette d’intégration, applique les migrations sur une instance Supabase locale et renseigne `SUPABASE_LOCAL_URL`, `SUPABASE_LOCAL_PUBLISHABLE_KEY` et `SUPABASE_LOCAL_SECRET_KEY` avec sa configuration. Depuis la racine du dépôt, lance `node --experimental-strip-types --test tests/integration/households.mjs`. Les quatre scénarios utilisent des comptes fictifs et couvrent les accès, les invitations concurrentes, l’ordre des modifications et la suppression de compte.
+Les tests unitaires font partie de `npm test`. Pour relancer la recette d’intégration, applique les migrations sur une instance Supabase locale et renseigne `SUPABASE_LOCAL_URL`, `SUPABASE_LOCAL_PUBLISHABLE_KEY` et `SUPABASE_LOCAL_SECRET_KEY` avec sa configuration. Depuis la racine du dépôt, lance `node --experimental-strip-types --test tests/integration/households.mjs`. Les scénarios utilisent des comptes fictifs et couvrent les accès, les invitations concurrentes, l’ordre des modifications et la suppression de compte.
+
+## Synchronisation du Foyer (P4, préparation de la PR 2)
+
+Le registre `household_writes` conserve les identifiants des écritures acceptées. Le renvoi d’un lot après coupure rend le numéro d’origine et préserve les modifications validées entre-temps. Chaque recopie de solde a un UUID distinct. Le calcul sélectionne la dernière recopie validée par le serveur et rattache les dépenses et leurs effets à leur recopie. L’identifiant du moteur reste dans le contenu chiffré et l’UUID de synchronisation est dérivé par foyer, type et identifiant d’origine.
 
 ## Hygiène technique et formulaires
 

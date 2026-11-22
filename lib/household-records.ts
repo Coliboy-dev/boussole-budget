@@ -34,6 +34,10 @@ export async function derivedRecordId(householdId: string, key: string): Promise
   return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
 }
 
+export function householdRecordId(householdId: string, kind: HouseholdRecordKind, engineId: string): Promise<string> {
+  return derivedRecordId(householdId, `${kind}|${engineId}`);
+}
+
 function additionalData(householdId: string, recordId: string, keyVersion: number) {
   return encoder.encode(`${householdId}|${recordId}|${keyVersion}`);
 }

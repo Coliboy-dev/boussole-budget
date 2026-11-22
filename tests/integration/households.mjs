@@ -4,7 +4,7 @@ import { after, before, test } from 'node:test';
 import { createClient } from '@supabase/supabase-js';
 import { POST } from '../../app/api/household-key/route.ts';
 import { createInvitationToken } from '../../lib/household-invitations.ts';
-import { decryptHouseholdRecord, derivedRecordId, encryptHouseholdRecord } from '../../lib/household-records.ts';
+import { decryptHouseholdRecord, encryptHouseholdRecord, householdRecordId } from '../../lib/household-records.ts';
 
 const url = new URL(process.env.SUPABASE_LOCAL_URL ?? 'http://127.0.0.1:54321');
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname), 'Utilise une instance Supabase locale.');
@@ -80,8 +80,11 @@ async function importKey(actor, householdId) {
   return crypto.subtle.importKey('raw', Buffer.from(material, 'base64'), 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
-async function encryptedRecord(key, householdId, kind, id, data) {
-  return encryptHouseholdRecord(key, { householdId, recordId: id, keyVersion: 1 }, { kind, id, data });
+async function encryptedRecord(key, householdId, kind, id, data, recordId = id) {
+  return {
+    ...await encryptHouseholdRecord(key, { householdId, recordId, keyVersion: 1 }, { kind, id, data }),
+    write_id: randomUUID(),
+  };
 }
 
 test('F-E · Seuls les membres actifs lisent et écrivent les éléments et obtiennent la clé', async () => {
@@ -183,6 +186,33 @@ test('Les lots suivent leur ordre, les écritures incompatibles sont annulées e
   assert.equal(edited.updated_by, personB.id);
 });
 
+test('F-D · Le renvoi de A reçoit son numéro d’origine après une modification de B', async () => {
+  const { household_id: h } = await createHousehold(personA);
+  success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personA, h);
+  const id = 'loyer-ancien-identifiant';
+  const recordId = await householdRecordId(h, 'expense', id);
+  const first = await encryptedRecord(key, h, 'expense', id, { amount: 95000 }, recordId);
+  const second = await encryptedRecord(key, h, 'expense', id, { amount: 92000 }, recordId);
+  const original = success(await rpc(personA, 'upsert_records', { h, records: [first] }));
+  assert.deepEqual(original, [{ record_id: first.record_id, seq: 1 }]);
+  assert.deepEqual(success(await rpc(personB, 'upsert_records', { h, records: [second] })), [
+    { record_id: second.record_id, seq: 2 },
+  ]);
+  assert.deepEqual(success(await rpc(personA, 'upsert_records', { h, records: [first] })), original);
+
+  const [latest] = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
+  assert.equal(latest.updated_by, personB.id);
+  assert.deepEqual(await decryptHouseholdRecord(key, h, latest), { kind: 'expense', id, data: { amount: 92000 } });
+  assert.deepEqual(success(await rpc(personA, 'pull_records', { h, after_seq: 2 })), []);
+
+  const another = await encryptedRecord(key, h, 'expense', id, { amount: 90000 }, recordId);
+  assert.deepEqual(success(await rpc(personA, 'upsert_records', { h, records: [another] })), [
+    { record_id: another.record_id, seq: 3 },
+  ]);
+  for (const api of [personA.api, anonymous, admin]) assert.ok((await api.from('household_writes').select('*')).error);
+});
+
 test('F-E · La suppression d’un compte retire son profil et conserve le budget de l’autre membre', async () => {
   const { household_id: h, member_id: memberA } = await createHousehold(personD);
   const { household_id: onlyMember } = await createHousehold(personD);
@@ -190,10 +220,10 @@ test('F-E · La suppression d’un compte retire son profil et conserve le budge
   const key = await importKey(personD, h);
   const one = await encryptedRecord(key, h, 'spending', randomUUID(), { amount: 500 });
   const two = await encryptedRecord(key, h, 'spending', randomUUID(), { amount: 800 });
-  const profileId = await derivedRecordId(h, `member|${memberA}`);
-  const profile = await encryptedRecord(key, h, 'member', profileId, { memberId: memberA, name: 'Sam' });
+  const profileId = await householdRecordId(h, 'member', memberA);
+  const profile = await encryptedRecord(key, h, 'member', memberA, { memberId: memberA, name: 'Sam' }, profileId);
   success(await rpc(personB, 'upsert_records', { h, records: [two] }));
-  success(await rpc(personD, 'upsert_records', { h, records: [one, two, profile] }));
+  success(await rpc(personD, 'upsert_records', { h, records: [one, { ...two, write_id: randomUUID() }, profile] }));
   success(await rpc(personD, 'delete_my_account'));
   assert.equal((await requestKey(personD, h)).status, 401);
   assert.deepEqual(success(await admin.from('households').select('id').eq('id', onlyMember)), []);

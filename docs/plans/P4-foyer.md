@@ -6,6 +6,8 @@ Plan de conception, **pas encore de développement**. Il intègre les correction
 
 La gestion des clés et la suppression de compte sont alignées sur le parcours de compte de `main` (`875e277`). Capiste gère une clé par foyer. Une connexion au compte suffit pour retrouver un foyer dont on est toujours membre. Les entrées partagées sont conservées pour le membre restant après une suppression de compte, avec « Ancien membre » à la place du nom de l’auteur supprimé. Le départ du dernier membre supprime le foyer côté serveur.
 
+Avant la PR 2, la relecture de `main` (`404e458`) a confirmé trois corrections (§5.2 à §5.6). Le serveur conserve les identifiants des écritures déjà acceptées. Chaque recopie du solde a son propre identifiant. Le Foyer dérive ses UUID de synchronisation à partir des identifiants du moteur.
+
 Signature du mode : **« Votre budget commun, en toute transparence. Les finances personnelles de chacun restent privées. »**
 
 ---
@@ -198,12 +200,14 @@ create index household_records_seq on public.household_records (household_id, se
 - `household_members` : `select` des lignes des foyers dont l’appelant est membre actif. Une ligne de membre contient des identifiants et des dates d’adhésion.
 - `household_invitations` : aucun `select` direct.
 
+La PR 2 ajoute `household_writes` dans une nouvelle migration. La table associe `household_id`, `write_id` (UUID), `record_id`, `seq` et `accepted_at`. Sa clé primaire est `(household_id, write_id)`. La RLS est activée et les rôles d’API n’ont aucun accès direct. Les écritures acceptées sont conservées pendant toute la vie du foyer en V1 et supprimées en cascade à sa suppression.
+
 Fonctions (`security definer`, `search_path = ''`, `revoke` à `public`/`anon`, `grant execute` à `authenticated`) :
 - `create_household() returns table(household_id uuid, member_id uuid)` — crée le foyer et le premier membre dans la même transaction.
 - `create_invitation(h uuid, token_hash text) returns uuid` — membre actif ; refusé si le foyer compte déjà 2 membres actifs ; invalide les invitations non utilisées précédentes du foyer.
 - `revoke_invitation(h uuid, invitation uuid)` — membre actif ; invalide une invitation ouverte du foyer.
 - `accept_invitation(invitation uuid, token text) returns table(household_id uuid, member_id uuid)` — vérifie `encode(sha256(convert_to(token, 'UTF8')), 'hex') = token_hash`, `used_at is null`, `expires_at > now()`, l’adhésion active de la personne qui invite, moins de 2 membres actifs et l’absence d’adhésion active de l’appelant. Insère le membre ou réactive sa ligne existante, puis marque l’invitation utilisée dans la même transaction. Message d’erreur générique « Cette invitation n’est plus valable. »
-- `upsert_records(h uuid, records jsonb) returns table(record_id uuid, seq bigint)` — **verrouille la ligne `households`** (`select … for update`), vérifie que l’appelant est membre actif, attribue `last_seq + 1, + 2, …` dans l’ordre du tableau, met à jour `last_seq`, fait un `insert … on conflict (household_id, record_id) do update`. Renseigne `created_by` seulement à l’insertion et `updated_by` à chaque écriture avec `auth.uid()`. Refuse un `key_version` différent de celui du foyer. 500 éléments au plus par appel.
+- `upsert_records(h uuid, records jsonb) returns table(record_id uuid, seq bigint)` — **verrouille la ligne `households`** (`select … for update`) et vérifie que l’appelant est membre actif. Chaque élément porte un `write_id`. Un `write_id` déjà accepté pour le même élément reçoit le `seq` d’origine, sans nouvelle écriture. Pour les nouveaux `write_id`, attribue `last_seq + 1, + 2, …` dans l’ordre du tableau, écrit l’élément avec `insert … on conflict (household_id, record_id) do update` et inscrit le reçu dans `household_writes`. Met à jour `last_seq` dans la même transaction. Renseigne `created_by` à l’insertion et `updated_by` à chaque nouvelle écriture avec `auth.uid()`. Refuse une nouvelle écriture si sa `key_version` diffère de celle du foyer. 500 éléments au plus par appel.
 - `pull_records(h uuid, after_seq bigint) returns setof household_records` — membre actif ; `seq > after_seq` trié par `seq`, 1 000 lignes au plus par appel.
 - `leave_household(h uuid)`, `stop_sharing_with(h uuid, other_member uuid)` — met `removed_at = now()` sur l’adhésion visée. Tout membre actif peut quitter le foyer ou arrêter le partage avec l’autre.
 - `delete_my_account()` verrouille les foyers de l’appelant dans l’ordre de leurs identifiants avant de supprimer le compte. Les adhésions sont effacées en cascade. Les entrées partagées conservées ont `created_by` ou `updated_by` à `null` quand la référence désignait ce compte.
@@ -215,15 +219,15 @@ Quand une adhésion est supprimée avec le compte, le déclencheur efface aussi 
 Le verrou sur `households` garantit que l’ordre des `seq` est l’ordre de validation : un client qui tire `seq > dernier_vu` ne manque jamais un élément.
 
 ### 5.3 Éléments chiffrés
-Chaque élément = `{ kind, id, data }` chiffré en AES-GCM 256 avec la clé du foyer, **données additionnelles authentifiées** `"${household_id}|${record_id}|${key_version}"` (empêche de déplacer un élément d’un foyer ou d’un identifiant à l’autre). `record_id` = identifiant de l’entité (UUID), ou dérivé pour les éléments composés (voir `occurrence`). L’attribution des écritures vient des colonnes renseignées par le serveur au §5.2.
+Chaque élément = `{ kind, id, data }` chiffré en AES-GCM 256 avec la clé du foyer, **données additionnelles authentifiées** `"${household_id}|${record_id}|${key_version}"` (empêche de déplacer un élément d’un foyer ou d’un identifiant à l’autre). Le contenu chiffré conserve l’identifiant du moteur. L’UUID de synchronisation `record_id` est calculé par ``derivedRecordId(householdId, `${kind}|${engineId}`)``. L’attribution des écritures vient des colonnes renseignées par le serveur au §5.2.
 
 | `kind` | Contenu | Fusion |
 |---|---|---|
 | `settings` | nom du foyer, réserve, `hasJointAccount` (id fixe dérivé du foyer, voir ci-dessous) | dernière écriture gagne |
-| `member` | `memberId`, prénom affiché. Identifiant dérivé avec le préfixe `member`, une barre verticale et le `memberId` | dernière écriture gagne |
+| `member` | `memberId`, prénom affiché. Clé de dérivation composée de `member`, d’une barre verticale et du `memberId`, comme dans le déclencheur SQL de suppression de compte | dernière écriture gagne |
 | `income`, `expense`, `debt`, `envelope`, `goal`, `spending`, `transfer`, `gap` | l’entité, montants en centimes, **sans** `occurrenceStatuses` | dernière écriture gagne par élément |
-| `occurrence` | `{ entityKind, entityId, dueDate, status }`, id dérivé de `entityKind|entityId|dueDate` | dernière écriture gagne ; suppression = statut retiré |
-| `checkpoint` | solde recopié de la banque : `{ amount, date, revision }` (id fixe) | dernière écriture gagne |
+| `occurrence` | `{ entityKind, entityId, dueDate, status }`, identifiant du moteur composé du type, de l’identifiant de l’entité et de la date, séparés par des barres verticales | dernière écriture gagne ; suppression = statut retiré |
+| `checkpoint` | solde recopié de la banque sous la forme `{ checkpointId, amount, date }`, avec un UUID aléatoire distinct pour chaque relevé | ajout seul ; le plus grand `seq` désigne le relevé actif |
 | `effect` | variation de solde : `{ checkpointId, deltaCents }` | **ajout seul**, jamais modifié |
 
 Suppression = élément `deleted: true` dont le contenu chiffré ne garde que `{ kind, id }`.
@@ -233,11 +237,11 @@ Identifiant dérivé (sans dépendance) : les 16 premiers octets de `SHA-256(hou
 ### 5.4 Le solde commun ne se stocke pas, il se calcule
 Si le solde était un élément « dernière écriture gagne », deux dépenses simultanées (Sam −65 €, Marc −40 €, chacun partant de 500 €) donneraient 435 € ou 460 € au lieu de 395 €. Règle :
 
-`soldeCommun = checkpoint.amount + Σ effect.deltaCents pour les effets dont checkpointId = checkpoint.id`
+`soldeCommun = checkpoint.amount + Σ effect.deltaCents pour les effets dont checkpointId = checkpoint.checkpointId`
 
-- Recopier le solde de la banque (`updateBalance`) écrit un nouveau `checkpoint` ; les effets rattachés à l’ancien sont ignorés (ils sont déjà dans le solde bancaire), exactement comme la règle R6 de P3.
+- Recopier le solde de la banque (`updateBalance`) ajoute un relevé avec un nouveau `checkpointId`. Chaque dépense conserve le `checkpointId` actif lors de sa saisie. Un effet d’ajout, de modification ou de suppression d’une dépense est rattaché au relevé de cette dépense. Les effets associés aux autres relevés ne comptent plus. Le moteur identifie la dépense par le relevé auquel elle appartient pour appliquer la règle R6 de P3.
 - Toute autre action qui change `currentBalance` (dépense débitée, « Payé », « Reçu », paiement de dette, suppression d’une dépense) ajoute un `effect` du delta.
-- Deux recopies simultanées : la dernière validée par le serveur gagne ; les effets rattachés à la perdante sont ignorés.
+- Après deux recopies simultanées, le relevé actif est celui dont le `seq` est le plus grand, indépendamment de la date de solde saisie. Les effets rattachés à l’autre relevé sont ignorés.
 
 ### 5.5 Écrire sans réécrire le moteur : la différence d’états
 L’espace Foyer réutilise **le même réducteur** que l’espace Personnel. Après chaque action dans le foyer :
@@ -250,7 +254,7 @@ Matérialisation inverse : `materializeHousehold(records): AppState` (fonction p
 Propriété testée : pour toute action `a`, `materialize(records ∪ diff(prev, reduce(prev, a))) ≡ reduce(prev, a)` (égalité des sérialisations).
 
 ### 5.6 Hors ligne, envoi et réception
-- File d’envoi locale (IndexedDB, clé `boussole-household-queue-<householdId>`), éléments identifiés par `record_id` + un `writeId` aléatoire : un renvoi après coupure est **idempotent**.
+- La file d’envoi locale en IndexedDB conserve le `record_id` et le `write_id` aléatoire de chaque écriture. Un renvoi après coupure réutilise le même `write_id` et reçoit le `seq` d’origine si le serveur a déjà accepté cette écriture (§5.2). Une écriture réellement nouvelle sur le même élément reste soumise à la règle de la dernière écriture validée.
 - Réception : `pull_records(after_seq)` à l’ouverture, au retour en ligne, au retour sur l’application et toutes les 30 secondes tant que l’espace Foyer est affiché. Pas de Supabase Realtime en V1.
 - Les éléments reçus remplacent la version locale d’un même `record_id` si leur `seq` est plus grand ; les éléments locaux non encore envoyés restent prioritaires à l’affichage jusqu’à leur accusé de réception.
 - Limite connue et documentée : deux modifications **du même élément** (ex. le montant du loyer) en même temps → la dernière validée gagne. Deux dépenses, deux statuts, deux effets ne sont **jamais** le même élément, donc jamais perdus.
@@ -349,6 +353,9 @@ Foyer à 500 € (point de départ P1). Appareil A hors ligne ajoute une dépens
 - renvoi du même lot par A après coupure : toujours deux dépenses, toujours 395 € ;
 - A modifie le montant du loyer à 950 € pendant que B le modifie à 920 € : les deux appareils convergent vers la valeur validée en dernier, et le détail indique qui l’a modifiée ;
 - A recopie le solde bancaire (400 €, point de départ P2) pendant que B ajoute une dépense de 20 € rattachée à P1 : solde **400 €** (l’effet de B appartient à P1, déjà inclus dans le solde bancaire).
+- A écrit une modification et perd la réponse, puis B modifie la même entrée. Au renvoi de A, le serveur renvoie le `seq` d’origine et conserve la modification de B.
+- Depuis 500 €, A recopie 450 € et y ajoute une dépense de 20 €. B recopie 400 € avec le même numéro de révision local. Si le relevé de B est validé en dernier, supprimer la dépense rattachée au relevé de A laisse le solde à **400 €**. Chaque ordre de validation doit produire le même solde sur les deux appareils.
+- L’UUID de synchronisation d’un profil `member` correspond à celui recalculé par le déclencheur de suppression de compte.
 Propriété : pour chaque action du réducteur couverte par les tests P0–P3, `materialize(records ∪ diff) ≡ reduce`.
 
 **F-E. Sécurité et accès (PR 1 et 5).**
