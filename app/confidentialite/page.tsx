@@ -24,6 +24,10 @@ export default function PrivacyPage() {
           <>
             <p>Quand tu crées ton budget avec un compte, une copie chiffrée est sauvegardée automatiquement chez Supabase, notre sous-traitant d’hébergement de base de données en Irlande. Tes modifications sont envoyées à chaque synchronisation.</p>
             <p>Start’OnLab gère les clés des nouvelles copies. Le service peut déchiffrer ta copie pour te la restituer après que tu t’es connecté avec le code reçu par e-mail. Les anciennes copies protégées par une phrase secrète gardent ce mode de récupération.</p>
+            <p>
+              Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne protégée par une clé gérée par
+              Start’OnLab. Protège ta messagerie avec un mot de passe unique et active la double authentification.
+            </p>
             <p>Ton compte utilise ton adresse e-mail. La copie en ligne contient tes données de budget sous forme chiffrée, avec un numéro de version et la date de la dernière mise à jour.</p>
           </>
         ) : (

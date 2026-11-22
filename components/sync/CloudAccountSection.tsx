@@ -81,6 +81,12 @@ function SignIn() {
   return (
     <Card className="space-y-3">
       <h2 className="text-base font-semibold text-slate-900">{signingUp ? 'Créer mon compte' : '1. Te connecter'}</h2>
+      {signingUp && managedBackupsEnabled && !otpEmail && (
+        <p className="text-sm text-slate-700">
+          Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne. Protège ta messagerie avec un
+          mot de passe unique et active la double authentification.
+        </p>
+      )}
       {!otpEmail ? (
         <form onSubmit={submitEmail} noValidate className="space-y-3">
           <FormField label="Adresse e-mail" required hint="Tu recevras un code de connexion. Aucun mot de passe à retenir.">

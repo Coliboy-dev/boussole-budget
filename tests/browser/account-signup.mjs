@@ -100,7 +100,10 @@ test('C1 — inscription explicite puis réponse du premier coffre perdue, dépe
   });
 
   await page.goto('/dashboard');
+  await page.getByText(/nous ne pouvons pas la lire/).waitFor();
   await page.getByRole('link', { name: 'Créer mon compte', exact: true }).click();
+  await heading(page, 'Créer mon compte').waitFor();
+  assert.equal(await page.getByText(/Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne/).count(), 0);
   await page.locator('input[name=email]').fill('c1@example.test');
   await button(page, 'Recevoir un code').click();
   await page.locator('input[name=code]').fill('111111');

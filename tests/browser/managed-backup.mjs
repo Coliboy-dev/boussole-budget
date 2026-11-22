@@ -75,6 +75,25 @@ async function setPin(page) {
 
 const stored = (page, key) => page.evaluate((name) => localStorage.getItem(name), key);
 
+test('le risque lié à la messagerie figure dans la confidentialité et à la création du compte', async (t) => {
+  const page = await device(t, { otp: [], keyRequests: 0 });
+  const notice = page.getByText(/Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne/);
+
+  await page.goto('/confidentialite');
+  await notice.waitFor();
+  await page.getByText(/mot de passe unique.*double authentification/).waitFor();
+
+  await page.goto('/dashboard');
+  await button(page, 'Créer mon compte').click();
+  await heading(page, 'Créer mon compte').waitFor();
+  await notice.waitFor();
+  await page.getByText(/mot de passe unique.*double authentification/).waitFor();
+
+  await button(page, 'J’ai déjà un compte').click();
+  await heading(page, '1. Te connecter').waitFor();
+  assert.equal(await notice.count(), 0);
+});
+
 test('inscription et récupération sur un autre appareil par e-mail, avec un code local et une copie chiffrée', async (t) => {
   const copy = { otp: [], keyRequests: 0 };
   const first = await device(t, copy);

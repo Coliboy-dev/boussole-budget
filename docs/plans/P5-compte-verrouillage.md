@@ -17,7 +17,7 @@ Ce lot part de `main` (`499b754`, C0 et C1 livrés). Il remplace le parcours d�
 - La route serveur `/api/budget-key` vérifie le jeton auprès de Supabase et fournit le matériel de clé du compte authentifié. Elle le dérive par HMAC-SHA-256 avec `BUDGET_VAULT_MANAGED_KEY_V1`, un secret de 32 octets aléatoires encodé en base64. Le navigateur réutilise la dérivation et le chiffrement du coffre. La réponse est exclue du cache. Le secret serveur reste dans l’environnement serveur.
 - Préserver la reprise C1 du premier envoi et les contrôles au changement de compte. Une panne du service de clé suspend les opérations qui en dépendent. La reprise conserve l’instantané local et respecte les confirmations de remplacement.
 - Préserver les anciens coffres et leur mécanisme de lecture. Une éventuelle conversion fera l’objet d’un changement séparé. Elle devra pouvoir ouvrir le coffre avec la clé historique ou la phrase d’origine avant de le réchiffrer à la version lue.
-- Mettre à jour la politique de confidentialité à la livraison. Elle annonce la sauvegarde automatique et le fait que Start’OnLab gère les clés des nouveaux coffres. Les copies stockées restent chiffrées. Le service peut les déchiffrer pour les restituer après la connexion.
+- Pour les clés gérées, l’inscription et la politique de confidentialité expliquent que l’accès à la boîte e-mail suffit à ouvrir une copie. Elles recommandent un mot de passe unique et la double authentification pour la messagerie. La politique précise que Start’OnLab gère les clés des nouveaux coffres et que le service peut déchiffrer les copies pour les restituer après connexion.
 
 #### Recette avant ouverture
 
@@ -28,9 +28,12 @@ Ce lot part de `main` (`499b754`, C0 et C1 livrés). Il remplace le parcours d�
 
 #### Activation après validation
 
-Appliquer la migration en premier. Configurer le secret serveur `BUDGET_VAULT_MANAGED_KEY_V1` séparément pour chaque environnement. Conserver une copie protégée de chaque secret et garder le même pour les redéploiements de l’environnement qui l’utilise. Une rotation devra versionner et migrer les coffres avant de retirer un secret encore utilisé.
+1. Fusionner avec les deux drapeaux désactivés. Appliquer la migration Supabase depuis le fichier versionné après validation de la PR.
+2. Créer une clé `BUDGET_VAULT_MANAGED_KEY_V1` différente pour la préversion et la production. Conserver chaque valeur dans un gestionnaire de mots de passe avant de la renseigner dans Vercel comme variable `Sensitive`. Vercel masque alors la valeur après l’enregistrement. Garder chaque clé stable pour les redéploiements de son environnement.
+3. Activer `NEXT_PUBLIC_MANAGED_BUDGET_BACKUPS=true` et tester l’inscription en recette, avec `NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED=true`, l’inscription Supabase ouverte dans l’environnement de test et des comptes fictifs. Vérifier le parcours sur iPhone avant l’ouverture en production.
+4. Après la recette, activer les clés gérées en production. Pour ouvrir les inscriptions, autoriser les nouveaux comptes côté Supabase et activer `NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED=true` dans Vercel.
 
-Activer `NEXT_PUBLIC_MANAGED_BUDGET_BACKUPS=true` pour utiliser les clés gérées. `NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED=true` et l’ouverture des inscriptions côté Supabase activent ensuite le parcours obligatoire pour les nouveaux comptes. L’environnement de recette utilise son propre secret, sa propre base et des adresses fictives.
+La clé serveur est nécessaire pour récupérer une copie gérée sur un nouvel appareil. Une fuite simultanée de la clé serveur et de la base permet de déchiffrer les copies de cet environnement. Une rotation devra versionner et migrer les coffres avant de retirer un secret encore utilisé. L’environnement de recette utilise sa propre base.
 
 ---
 
