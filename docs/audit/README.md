@@ -167,6 +167,14 @@ Depuis **Budget** ou **Dépenses du mois**, ouvre **Où part mon argent** pour c
 
 Dans une catégorie de dépenses du quotidien, tu peux tester un nouveau montant d’enveloppe et voir son effet sur ton vrai disponible avant d’appuyer sur **Appliquer**. Pour créer une enveloppe, Boussole propose une moyenne des mois précédents renseignés, arrondie aux 5 € supérieurs. Au premier mois renseigné, tu choisis le montant.
 
+## Foyer partagé (P4, PR 1)
+
+Les éléments du foyer sont chiffrés sur l’appareil. Leur identifiant, celui du foyer et la version de clé sont vérifiés au déchiffrement. La route `POST /api/household-key` rend la clé gérée aux membres actifs après vérification du compte et de l’adhésion sous les règles d’accès Supabase. Les invitations expirent après sept jours et sont à usage unique.
+
+La suppression d’un compte efface son adhésion et son profil. Les entrées du foyer restent accessibles à l’autre membre et les références à l’auteur supprimé sont retirées. Au départ du dernier membre, le foyer et ses entrées sont supprimés côté serveur.
+
+Les tests unitaires font partie de `npm test`. Pour relancer la recette d’intégration, applique les migrations sur une instance Supabase locale et renseigne `SUPABASE_LOCAL_URL`, `SUPABASE_LOCAL_PUBLISHABLE_KEY` et `SUPABASE_LOCAL_SECRET_KEY` avec sa configuration. Depuis la racine du dépôt, lance `node --experimental-strip-types --test tests/integration/households.mjs`. Les quatre scénarios utilisent des comptes fictifs et couvrent les accès, les invitations concurrentes, l’ordre des modifications et la suppression de compte.
+
 ## Hygiène technique et formulaires
 
 Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.
