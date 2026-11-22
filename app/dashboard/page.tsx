@@ -20,9 +20,11 @@ import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
 import { getUpcomingReminders, formatDate, hasUndatedPayments } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
+import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 
 export default function DashboardPage() {
   const { isBudgetLoading, needsOnboarding } = useApp();
+  const { active: household } = useHouseholdWorkspace();
   const { firstBudgetResult, initialVaultConfirmed, dismissFirstBudgetResult } = useCloudSync();
   const [guestChosen, setGuestChosen] = useState(false);
   const [showFirstResult, setShowFirstResult] = useState(false);
@@ -30,6 +32,7 @@ export default function DashboardPage() {
   if (isBudgetLoading) {
     return <p role="status" className="px-4 py-6 text-sm text-gray-600">Chargement du budget…</p>;
   }
+  if (household) return <SavedBudgetDashboard />;
   if (showFirstResult) return <OnboardingResult onContinue={() => setShowFirstResult(false)} />;
   if (firstBudgetResult && initialVaultConfirmed) return <OnboardingResult onContinue={dismissFirstBudgetResult} onlineCopy />;
   if (needsOnboarding && accountSignupEnabled && !guestChosen) return <AccountChoice onGuest={() => setGuestChosen(true)} />;
@@ -39,6 +42,7 @@ export default function DashboardPage() {
 }
 
 function SavedBudgetDashboard() {
+  const { active: household } = useHouseholdWorkspace();
   const {
     summary, advice, expenses, debts, balanceDate, storageBlocked, today, goals, lastBackupDate,
     recordScheduledPayment, undoScheduledPayment, lastAddedSpendingId,
@@ -123,7 +127,7 @@ function SavedBudgetDashboard() {
           payDisabled={storageBlocked}
         />
       )}
-      <BackupStatus today={today} lastBackupDate={lastBackupDate} hasBudget={!summary.emptyBudget || Boolean(balanceDate) || goals.length > 0} />
+      {!household && <BackupStatus today={today} lastBackupDate={lastBackupDate} hasBudget={!summary.emptyBudget || Boolean(balanceDate) || goals.length > 0} />}
       {(!summary.emptyBudget || balanceDate) && (
         <DailyBalanceCurve
           points={summary.availableForecast.dailyBalances}

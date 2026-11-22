@@ -175,11 +175,15 @@ La suppression d’un compte efface son adhésion et son profil. Les entrées du
 
 Les tests unitaires font partie de `npm test`. Pour relancer la recette d’intégration, applique les migrations sur une instance Supabase locale et renseigne `SUPABASE_LOCAL_URL`, `SUPABASE_LOCAL_PUBLISHABLE_KEY` et `SUPABASE_LOCAL_SECRET_KEY` avec sa configuration. Depuis la racine du dépôt, lance `node --experimental-strip-types --test tests/integration/households.mjs`. Les scénarios utilisent des comptes fictifs et couvrent les accès, les invitations concurrentes, l’ordre des modifications et la suppression de compte.
 
-## Synchronisation du Foyer (P4, préparation de la PR 2)
+## Synchronisation du Foyer (P4, PR 2)
+
+Dans **Plus → Notre foyer**, un compte connecté peut créer un foyer et ouvrir son budget commun depuis le sélecteur de l’en-tête. Le même compte permet d’ouvrir le foyer sur un second appareil. Le mode Foyer utilise le réducteur et le moteur de calcul du budget, avec son propre stockage chiffré. Le budget personnel reste dans son espace.
 
 Le registre `household_writes` conserve les identifiants des écritures acceptées. Le renvoi d’un lot après coupure rend le numéro d’origine et préserve les modifications validées entre-temps. Chaque recopie de solde a un UUID distinct. Le calcul sélectionne la dernière recopie validée par le serveur et rattache les dépenses et leurs effets à leur recopie. L’identifiant du moteur reste dans le contenu chiffré et l’UUID de synchronisation est dérivé par foyer, type et identifiant d’origine.
 
 Le débit ou le crédit est chiffré avec l’opération qui le produit. Parmi plusieurs versions d’une échéance, seule la version retenue peut affecter le solde. Une annulation retire cet effet et un nouveau relevé repart de son montant. Le test Supabase fait enregistrer la même échéance par deux comptes et vérifie que le solde passe de 500 € à 400 €, puis revient à 500 € à l’annulation.
+
+Sur l’appareil, les modifications hors ligne restent chiffrées dans la file IndexedDB. Le client les envoie à la reconnexion après avoir vérifié la version de synchronisation dans Supabase. La recette `tests/browser/household-sync.mjs` vérifie le parcours sur deux navigateurs en largeur 390 px avec Supabase local. Lance le build avec l’URL et la clé publique locales dans les variables publiques Supabase et une valeur de test pour `BUDGET_VAULT_MANAGED_KEY_V1`. Renseigne ensuite les variables de la recette d’intégration et `BOUSSOLE_TEST_URL`, puis lance `node --experimental-strip-types --test tests/browser/household-sync.mjs`.
 
 ## Hygiène technique et formulaires
 

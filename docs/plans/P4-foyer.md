@@ -204,6 +204,8 @@ create index household_records_seq on public.household_records (household_id, se
 
 La PR 2 ajoute `household_writes` dans une nouvelle migration. La table associe `household_id`, `write_id` (UUID), `record_id`, `seq` et `accepted_at`. Sa clé primaire est `(household_id, write_id)`. La RLS est activée et les rôles d’API n’ont aucun accès direct. Les écritures acceptées sont conservées pendant toute la vie du foyer en V1 et supprimées en cascade à sa suppression.
 
+Le client vérifie `household_sync_version() = 2` avant d’utiliser le service. La migration des reçus fournit cette fonction aux comptes authentifiés. Un déploiement de l’application avant la migration laisse donc la file locale en attente.
+
 Fonctions (`security definer`, `search_path = ''`, `revoke` à `public`/`anon`, `grant execute` à `authenticated`) :
 - `create_household() returns table(household_id uuid, member_id uuid)` — crée le foyer et le premier membre dans la même transaction.
 - `create_invitation(h uuid, token_hash text) returns uuid` — membre actif ; refusé si le foyer compte déjà 2 membres actifs ; invalide les invitations non utilisées précédentes du foyer.
@@ -259,6 +261,7 @@ Propriété testée : pour toute action `a`, `materialize(records ∪ diff(prev,
 
 ### 5.6 Hors ligne, envoi et réception
 - La file d’envoi locale en IndexedDB conserve le `record_id` et le `write_id` aléatoire de chaque écriture. Un renvoi après coupure réutilise le même `write_id` et reçoit le `seq` d’origine si le serveur a déjà accepté cette écriture (§5.2). Une écriture réellement nouvelle sur le même élément reste soumise à la règle de la dernière écriture validée.
+- La file, les éléments reçus et la clé sont rattachés au compte et au foyer dans le trousseau de l’appareil. Le client retire les écritures de la file après accusé et réception des versions en ligne. Seule la réception avance le curseur.
 - Réception : `pull_records(after_seq)` à l’ouverture, au retour en ligne, au retour sur l’application et toutes les 30 secondes tant que l’espace Foyer est affiché. Pas de Supabase Realtime en V1.
 - Les éléments reçus remplacent la version locale d’un même `record_id` si leur `seq` est plus grand ; les éléments locaux non encore envoyés restent prioritaires à l’affichage jusqu’à leur accusé de réception.
 - Deux modifications du même élément convergent vers la dernière validée, y compris son effet sur le solde. Les éléments d’opérations distinctes sont conservés et leurs effets se cumulent.

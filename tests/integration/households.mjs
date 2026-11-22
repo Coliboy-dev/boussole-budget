@@ -56,6 +56,11 @@ after(async () => {
 
 const rpc = (actor, name, args) => actor.api.rpc(name, args);
 
+test('La version de synchronisation n’est disponible qu’après la migration des reçus', async () => {
+  assert.equal(success(await rpc(personA, 'household_sync_version')), 2);
+  assert.ok((await anonymous.rpc('household_sync_version')).error);
+});
+
 async function createHousehold(actor) {
   const [row] = success(await rpc(actor, 'create_household'));
   return row;

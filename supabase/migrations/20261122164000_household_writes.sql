@@ -77,3 +77,12 @@ begin
   end if;
 end;
 $$;
+
+-- Le client vérifie cette version avant d’envoyer une écriture munie d’un reçu.
+create function public.household_sync_version() returns integer
+language sql stable
+set search_path = ''
+as $$ select 2; $$;
+
+revoke all on function public.household_sync_version() from public, anon, authenticated, service_role;
+grant execute on function public.household_sync_version() to authenticated;

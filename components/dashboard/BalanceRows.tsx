@@ -10,6 +10,7 @@ import { isBudgetAmount } from '@/lib/budget-schema';
 import { balanceFreshness, passedOccurrences, type PassedOccurrence } from '@/lib/balance-update';
 import { useApp } from '@/lib/context/AppContext';
 import { fromCents } from '@/lib/money';
+import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 
 const keyOf = (item: PassedOccurrence) => `${item.type}:${item.id}:${item.dueDate}`;
 
@@ -22,6 +23,7 @@ function ageLabel(days: number) {
 /** Solde et réserve : les deux réglages qui déterminent directement le vrai disponible. */
 export default function BalanceRows() {
   const app = useApp();
+  const { active: household } = useHouseholdWorkspace();
   const { currentBalance, setBalance, balanceDate, userProfile, today } = app;
   const [step, setStep] = useState<'view' | 'amount' | 'passed'>('view');
   const [input, setInput] = useState('');
@@ -218,7 +220,7 @@ export default function BalanceRows() {
         {step === 'view' && feedback && <p role="status" className="mt-1 text-xs text-green-800">{feedback}</p>}
       </div>
       <Link
-        href="/reglages#reserve"
+        href={household ? '/foyer#reserve' : '/reglages#reserve'}
         className="flex min-h-14 items-center justify-between gap-3 px-4 py-2 hover:bg-white/70"
       >
         <span className="flex items-center gap-2.5 text-sm font-medium text-slate-900">
