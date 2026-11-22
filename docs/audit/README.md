@@ -143,6 +143,10 @@ Après le code e-mail, Boussole propose une phrase secrète générée. La perso
 
 Une session propriétaire expirée peut ouvrir le budget local pendant le renouvellement si le compte, la clé et le rattachement concordent. Le coffre reste en pause jusqu’à la validation en ligne. Avec une absence de session confirmée, un rattachement illisible peut repasser en mode invité sous le verrou de transition. `tests/browser/account-signup.mjs` couvre ces parcours avec Chromium et une API Supabase simulée.
 
+## Mot de passe du compte et verrou proposé (P5, révision 6.1)
+
+La connexion se fait par e-mail et mot de passe (Supabase Auth, 12 caractères minimum dans l’app et côté serveur). Le code e-mail sert à confirmer l’adresse à l’inscription et à récupérer un compte (« Mot de passe oublié ou pas encore créé ? ») ; après un code, le choix du mot de passe passe avant tout autre écran. Le code à 6 chiffres et Face ID ne sont plus imposés : ils sont proposés une fois après la connexion, avec « Plus tard ». `tests/browser/managed-backup.mjs` couvre l’inscription, la connexion sur un second appareil, le mauvais mot de passe, la récupération, le coffre historique et la proposition du verrou.
+
 ## Dépenses et enveloppes : modèle et calcul
 
 Le format de sauvegarde reste en version 2. Les anciennes sauvegardes gardent leur structure. Le moteur traite les champs absents comme des listes vides, une mémoire de commerces vide et une révision de solde à zéro.

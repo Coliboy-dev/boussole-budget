@@ -23,12 +23,13 @@ export default function PrivacyPage() {
         {managedBackupsEnabled ? (
           <>
             <p>Quand tu crées ton budget avec un compte, une copie chiffrée est sauvegardée automatiquement chez Supabase, notre sous-traitant d’hébergement de base de données en Irlande. Tes modifications sont envoyées à chaque synchronisation.</p>
-            <p>Start’OnLab gère les clés des nouvelles copies. Le service peut déchiffrer ta copie pour te la restituer après que tu t’es connecté avec le code reçu par e-mail. Les anciennes copies protégées par une phrase secrète gardent ce mode de récupération.</p>
+            <p>Start’OnLab gère les clés des nouvelles copies. Le service peut déchiffrer ta copie pour te la restituer après que tu t’es connecté avec ton mot de passe, ou avec un code reçu par e-mail si tu l’as oublié. Les anciennes copies protégées par une phrase secrète gardent ce mode de récupération.</p>
             <p>
-              Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne protégée par une clé gérée par
-              Start’OnLab. Protège ta messagerie avec un mot de passe unique et active la double authentification.
+              Toute personne qui connaît ton mot de passe, ou qui a accès à ta boîte e-mail, peut ouvrir ta copie en ligne
+              protégée par une clé gérée par Start’OnLab. Choisis un mot de passe que tu n’utilises nulle part ailleurs,
+              protège ta messagerie avec un mot de passe unique et active la double authentification.
             </p>
-            <p>Ton compte utilise ton adresse e-mail. La copie en ligne contient tes données de budget sous forme chiffrée, avec un numéro de version et la date de la dernière mise à jour.</p>
+            <p>Ton compte utilise ton adresse e-mail et un mot de passe, conservé par Supabase sous forme hachée : personne ne peut le lire. La copie en ligne contient tes données de budget sous forme chiffrée, avec un numéro de version et la date de la dernière mise à jour.</p>
           </>
         ) : (
           <>
@@ -38,7 +39,7 @@ export default function PrivacyPage() {
               sous-traitant d’hébergement de base de données, sur des serveurs situés en Irlande, dans l’Union européenne.
             </p>
             <p>
-              Le serveur conserve uniquement : ton adresse e-mail (pour t’envoyer un code de connexion), le bloc chiffré
+              Le serveur conserve uniquement : ton adresse e-mail et ton mot de passe sous forme hachée (pour te connecter), le bloc chiffré
               de ton budget, un numéro de version et la date de la dernière mise à jour. Ni Start’OnLab ni Supabase ne
               peuvent lire le contenu de ton budget. La phrase secrète n’est jamais transmise : si tu l’oublies, la copie
               en ligne ne peut pas être récupérée.

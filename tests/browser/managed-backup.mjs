@@ -37,6 +37,18 @@ async function device(t, copy) {
       return route.fulfill({ json: {} });
     }
     if (path === '/auth/v1/verify') return route.fulfill({ json: session });
+    if (path === '/auth/v1/token') {
+      const body = request.postDataJSON();
+      copy.passwordLogins = (copy.passwordLogins ?? 0) + 1;
+      if (body.password !== copy.password) {
+        return route.fulfill({ status: 400, json: { code: 'invalid_credentials', error_code: 'invalid_credentials', msg: 'Invalid login credentials' } });
+      }
+      return route.fulfill({ json: session });
+    }
+    if (path === '/auth/v1/user' && request.method() === 'PUT') {
+      copy.password = request.postDataJSON().password;
+      return route.fulfill({ json: session.user });
+    }
     if (path === '/rest/v1/budget_vaults') {
       if (request.method() === 'GET') return route.fulfill({ json: copy.vault ? [copy.vault] : [] });
       if (request.method() === 'POST') {
@@ -58,96 +70,123 @@ async function device(t, copy) {
   return page;
 }
 
-async function authenticate(page, choice) {
-  await button(page, choice).click();
+async function signUp(page) {
+  await button(page, 'Créer mon compte').click();
   await page.locator('input[name=email]').fill('capiste@example.test');
   await button(page, 'Recevoir un code').click();
   await page.locator('input[name=code]').fill('111111');
-  await button(page, choice === 'Créer mon compte' ? 'Confirmer mon adresse' : 'Me connecter').click();
+  await button(page, 'Confirmer mon adresse').click();
 }
 
-async function setPin(page) {
-  await heading(page, 'Protège ton budget').waitFor();
-  await page.getByLabel('Code à 6 chiffres', { exact: true }).fill('726491');
-  await page.getByLabel('Confirme le code', { exact: true }).fill('726491');
-  await button(page, 'Enregistrer mon code').click();
+async function choosePassword(page, password = 'un mot de passe long') {
+  await heading(page, 'Choisis ton mot de passe').waitFor();
+  await page.locator('input[name=password]').fill(password);
+  await page.locator('input[name=confirmation]').fill(password);
+  await button(page, 'Enregistrer mon mot de passe').click();
+}
+
+async function signIn(page, password) {
+  await button(page, 'J’ai déjà un compte').click();
+  await heading(page, 'Te connecter').waitFor();
+  await page.locator('input[name=email]').fill('capiste@example.test');
+  await page.locator('input[name=password]').fill(password);
+  await button(page, 'Me connecter').click();
+}
+
+async function firstBudget(page) {
+  await page.locator('input[name=balance]').fill('1200');
+  await button(page, 'Continuer').click();
+  await button(page, 'Pas de rentrée confirmée').click();
+  await button(page, 'Calculer sans ajouter de facture').click();
 }
 
 const stored = (page, key) => page.evaluate((name) => localStorage.getItem(name), key);
 
-test('le risque lié à la messagerie figure dans la confidentialité et à la création du compte', async (t) => {
+test('le risque lié au mot de passe et à la messagerie figure dans la confidentialité et à l’inscription', async (t) => {
   const page = await device(t, { otp: [], keyRequests: 0 });
-  const notice = page.getByText(/Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne/);
-
   await page.goto('/confidentialite');
-  await notice.waitFor();
+  await page.getByText(/Toute personne qui connaît ton mot de passe, ou qui a accès à ta boîte e-mail, peut ouvrir ta copie en ligne/).waitFor();
   await page.getByText(/mot de passe unique.*double authentification/).waitFor();
 
+  const notice = page.getByText(/Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne/);
   await page.goto('/dashboard');
   await button(page, 'Créer mon compte').click();
   await heading(page, 'Créer mon compte').waitFor();
   await notice.waitFor();
-  await page.getByText(/mot de passe unique.*double authentification/).waitFor();
-
   await button(page, 'J’ai déjà un compte').click();
-  await heading(page, '1. Te connecter').waitFor();
+  await heading(page, 'Te connecter').waitFor();
   assert.equal(await notice.count(), 0);
 });
 
-test('inscription et récupération sur un autre appareil par e-mail, avec un code local et une copie chiffrée', async (t) => {
+test('inscription par code puis mot de passe, et connexion par mot de passe sur un autre appareil, sans code local imposé', async (t) => {
   const copy = { otp: [], keyRequests: 0 };
   const first = await device(t, copy);
   await first.goto('/depenses');
   await button(first, 'Créer mon compte').waitFor();
   assert.equal(await heading(first, 'Dépenses').count(), 0);
-  await authenticate(first, 'Créer mon compte');
-  await heading(first, 'Protège ton budget').waitFor();
-  assert.equal(await first.locator('input[name=passphrase]').count(), 0);
-  assert.equal(await stored(first, budgetKey), null);
-  await setPin(first);
-  await first.locator('input[name=balance]').fill('1200');
-  await button(first, 'Continuer').click();
-  await button(first, 'Pas de rentrée confirmée').click();
-  await button(first, 'Calculer sans ajouter de facture').click();
+  await signUp(first);
+  await choosePassword(first);
+  assert.equal(copy.password, 'un mot de passe long');
+  await firstBudget(first);
   await heading(first, 'Ton premier budget').waitFor();
   assert.deepEqual(copy.otp, [true]);
   assert.equal(copy.vault.key_mode, 'managed_v1');
-  assert.ok(copy.vault.ciphertext.length > 16);
-  assert.ok(await stored(first, 'boussole-lock-v1'));
+  assert.equal(await stored(first, 'boussole-lock-v1'), null);
 
   const second = await device(t, copy);
   await second.goto('/dashboard');
-  await authenticate(second, 'J’ai déjà un compte');
-  await heading(second, 'Protège ton budget').waitFor();
-  assert.equal(await stored(second, budgetKey), null);
-  await setPin(second);
+  await signIn(second, 'un mot de passe long');
   await heading(second, 'Aujourd’hui').waitFor();
   assert.equal(deserializeBudget(await stored(second, budgetKey)).currentBalance, 1200);
-  assert.equal(await second.locator('input[name=passphrase]').count(), 0);
-  assert.deepEqual(copy.otp, [true, false]);
+  assert.equal(await stored(second, 'boussole-lock-v1'), null);
+  assert.deepEqual(copy.otp, [true]);
   assert.equal(copy.keyRequests, 2);
 });
 
-test('la connexion conserve la phrase de récupération d’un coffre historique', async (t) => {
+test('un mauvais mot de passe ne connecte pas et ne montre aucun budget', async (t) => {
+  const copy = { otp: [], keyRequests: 0, password: 'le bon mot de passe' };
+  const page = await device(t, copy);
+  await page.goto('/dashboard');
+  await signIn(page, 'pas le bon mot de passe');
+  await page.getByRole('alert').filter({ hasText: 'E-mail ou mot de passe incorrect.' }).waitFor();
+  assert.equal(await heading(page, 'Aujourd’hui').count(), 0);
+  assert.equal(copy.keyRequests, 0);
+});
+
+test('mot de passe oublié : code e-mail sans création de compte, puis nouveau mot de passe obligatoire', async (t) => {
+  const copy = { otp: [], keyRequests: 0, password: 'ancien mot de passe' };
+  const page = await device(t, copy);
+  await page.goto('/dashboard');
+  await button(page, 'J’ai déjà un compte').click();
+  await button(page, 'Mot de passe oublié ou pas encore créé ?').click();
+  await page.locator('input[name=email]').fill('capiste@example.test');
+  await button(page, 'Recevoir un code').click();
+  await page.locator('input[name=code]').fill('111111');
+  await button(page, 'Me connecter').click();
+  await choosePassword(page, 'nouveau mot de passe');
+  assert.deepEqual(copy.otp, [false]);
+  assert.equal(copy.password, 'nouveau mot de passe');
+  await page.locator('input[name=balance]').waitFor();
+});
+
+test('la connexion par mot de passe conserve la phrase de récupération d’un coffre historique', async (t) => {
   const phrase = 'ma phrase historique';
   const salt = newSalt();
   const kdf_iterations = 100_000;
-  const copy = { otp: [], keyRequests: 0, vault: { user_id: userId, version: 1, key_mode: 'legacy', salt,
+  const copy = { otp: [], keyRequests: 0, password: 'un mot de passe long', vault: { user_id: userId, version: 1, key_mode: 'legacy', salt,
     kdf_iterations, updated_at: '2026-11-21T10:00:00Z', ...await encryptText(await deriveKey(phrase, salt, kdf_iterations), oldBudget) } };
   const page = await device(t, copy);
   await page.goto('/dashboard');
-  await authenticate(page, 'J’ai déjà un compte');
+  await signIn(page, copy.password);
   await page.locator('input[name=passphrase]').fill(phrase);
   await button(page, 'Déverrouiller').click();
-  await setPin(page);
   await heading(page, 'Aujourd’hui').waitFor();
   assert.equal(deserializeBudget(await stored(page, budgetKey)).currentBalance, 789.25);
   assert.equal(copy.keyRequests, 0);
   assert.equal(copy.vault.key_mode, 'legacy');
 });
 
-test('le déverrouillage du téléphone peut être activé à l’inscription', async (t) => {
-  const page = await device(t, { otp: [], keyRequests: 0 });
+async function withAuthenticator(page) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('WebAuthn.enable', { enableUI: false });
   const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -156,29 +195,36 @@ test('le déverrouillage du téléphone peut être activé à l’inscription', 
       isUserVerified: true, automaticPresenceSimulation: true,
     },
   });
+  return { cdp, authenticatorId };
+}
+
+test('Face ID et le code sont proposés une fois après la connexion, puis activés', async (t) => {
+  const page = await device(t, { otp: [], keyRequests: 0 });
+  const { cdp, authenticatorId } = await withAuthenticator(page);
   await page.goto('/dashboard');
-  await authenticate(page, 'Créer mon compte');
-  await setPin(page);
-  assert.equal(await page.locator('input[name=balance]').count(), 0);
+  await signUp(page);
+  await choosePassword(page);
+  await firstBudget(page);
+  await heading(page, 'Ouvre l’app en un geste').waitFor();
+  await page.getByLabel('Code à 6 chiffres', { exact: true }).fill('726491');
+  await page.getByLabel('Confirme le code', { exact: true }).fill('726491');
+  await button(page, 'Enregistrer mon code').click();
   await button(page, 'Activer le déverrouillage avec le téléphone').click();
-  await page.locator('input[name=balance]').waitFor();
+  await heading(page, 'Ton premier budget').waitFor();
   const { credentials } = await cdp.send('WebAuthn.getCredentials', { authenticatorId });
   assert.equal(credentials.length, 1);
   assert.ok(await stored(page, 'boussole-lock-v1'));
 });
 
-test('le code local suffit après l’annulation du déverrouillage du téléphone', async (t) => {
-  const page = await device(t, { otp: [], keyRequests: 0 });
-  await page.addInitScript(() => {
-    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
-    navigator.credentials.create = async () => { throw new DOMException('Annulé', 'NotAllowedError'); };
-  });
+test('la proposition du verrou peut être remise à plus tard', async (t) => {
+  const copy = { otp: [], keyRequests: 0, password: 'un mot de passe long' };
+  const page = await device(t, copy);
+  await withAuthenticator(page);
   await page.goto('/dashboard');
-  await authenticate(page, 'Créer mon compte');
-  await setPin(page);
-  await button(page, 'Activer le déverrouillage avec le téléphone').click();
-  await page.getByRole('alert').filter({ hasText: 'Tu peux continuer avec ton code' }).waitFor();
-  await button(page, 'Continuer avec mon code').click();
-  await page.locator('input[name=balance]').waitFor();
-  assert.ok(await stored(page, 'boussole-lock-v1'));
+  await signIn(page, copy.password);
+  await firstBudget(page);
+  await heading(page, 'Ouvre l’app en un geste').waitFor();
+  await button(page, 'Plus tard').click();
+  await heading(page, 'Ton premier budget').waitFor();
+  assert.equal(await stored(page, 'boussole-lock-v1'), null);
 });
