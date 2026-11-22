@@ -6,8 +6,9 @@ import Card from '@/components/ui/Card';
 import AlertBanner from '@/components/ui/AlertBanner';
 import FormField from '@/components/forms/FormField';
 import { Icon } from '@/components/ui/icons';
-import { useCloudSync } from '@/components/sync/CloudSyncProvider';
+import { accountSignupEnabled, useCloudSync } from '@/components/sync/CloudSyncProvider';
 import { MIN_PASSPHRASE_LENGTH } from '@/lib/cloud-crypto';
+import { generatePassphrase } from '@/lib/passphrase';
 
 const fieldClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
 const primaryButton = 'min-h-11 rounded-xl bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-gray-400';
@@ -49,7 +50,7 @@ function Explanation() {
 }
 
 function SignIn() {
-  const { sendCode, verifyCode, otpEmail, resetCode, error: syncError } = useCloudSync();
+  const { sendCode, verifyCode, otpEmail, resetCode, signingUp, error: syncError } = useCloudSync();
   const { pending, error, run } = useAction();
 
   function submitEmail(event: FormEvent<HTMLFormElement>) {
@@ -72,7 +73,7 @@ function SignIn() {
 
   return (
     <Card className="space-y-3">
-      <h2 className="text-base font-semibold text-slate-900">1. Te connecter</h2>
+      <h2 className="text-base font-semibold text-slate-900">{signingUp ? 'Créer mon compte' : '1. Te connecter'}</h2>
       {!otpEmail ? (
         <form onSubmit={submitEmail} noValidate className="space-y-3">
           <FormField label="Adresse e-mail" required hint="Tu recevras un code de connexion. Aucun mot de passe à retenir.">
@@ -93,7 +94,7 @@ function SignIn() {
           <ErrorText message={error || syncError} />
           <div className="flex flex-wrap gap-2">
             <button type="submit" disabled={pending} className={primaryButton}>
-              {pending ? 'Vérification…' : 'Me connecter'}
+              {pending ? 'Vérification…' : signingUp ? 'Confirmer mon adresse' : 'Me connecter'}
             </button>
             <button type="button" disabled={pending} onClick={resetCode} className={secondaryButton}>
               Changer d’adresse
@@ -105,8 +106,62 @@ function SignIn() {
   );
 }
 
+function NewPassphrase() {
+  const { account, unlock, signOut, error: syncError } = useCloudSync();
+  const { pending, error, run } = useAction();
+  const [phrase, setPhrase] = useState(generatePassphrase);
+  const [custom, setCustom] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saved) void run(() => unlock(phrase, true));
+  }
+
+  return (
+    <Card className="space-y-3">
+      <h2 className="text-base font-semibold text-slate-900">Enregistre ta phrase secrète</h2>
+      <p className="text-sm text-slate-700">Si tu perds tous tes appareils et cette phrase, personne ne pourra récupérer ta copie en ligne, pas même nous.</p>
+      <form className="space-y-3" onSubmit={submit}>
+        <FormField label="Adresse e-mail">
+          <input name="username" type="email" autoComplete="username" readOnly value={account?.email ?? ''} className={fieldClass} />
+        </FormField>
+        {!custom && <p className="break-words rounded-lg bg-teal-50 px-3 py-2 font-mono text-base font-semibold text-teal-900">{phrase}</p>}
+        <FormField label="Phrase secrète" required hint={custom ? `Choisis au moins ${MIN_PASSPHRASE_LENGTH} caractères.` : undefined}>
+          <input name="passphrase" type="password" autoComplete="new-password" required
+            minLength={MIN_PASSPHRASE_LENGTH} readOnly={!custom} spellCheck={false} value={phrase} className={fieldClass}
+            onChange={(event) => { setPhrase(event.target.value); setSaved(false); setCopied(false); }} />
+        </FormField>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={pending} className={secondaryButton} onClick={() => void run(async () => {
+            await navigator.clipboard.writeText(phrase);
+            setCopied(true);
+          })}>Copier</button>
+          <button type="button" disabled={pending} className={secondaryButton} onClick={() => {
+            setCustom(!custom);
+            setPhrase(custom ? generatePassphrase() : '');
+            setSaved(false);
+            setCopied(false);
+          }}>{custom ? 'Générer une phrase' : 'Choisir ma propre phrase'}</button>
+        </div>
+        {copied && <p role="status" className="text-sm text-teal-800">Phrase copiée.</p>}
+        <label className="flex items-start gap-2 text-sm text-slate-800">
+          <input type="checkbox" required checked={saved} onChange={(event) => setSaved(event.target.checked)} />
+          J’ai enregistré ma phrase secrète dans mon gestionnaire de mots de passe ou dans un endroit sûr
+        </label>
+        <ErrorText message={error || syncError} />
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={pending || !saved} className={primaryButton}>Continuer</button>
+          <button type="button" disabled={pending} onClick={() => void run(signOut)} className={secondaryButton}>Se déconnecter</button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 function Passphrase() {
-  const { remoteExists, unlock, account, signOut, refreshAccount, error: syncError } = useCloudSync();
+  const { remoteExists, unlock, account, signOut, refreshAccount, signingUp, error: syncError } = useCloudSync();
   const { pending, error, run } = useAction();
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -134,6 +189,8 @@ function Passphrase() {
       </Card>
     );
   }
+
+  if (signingUp && !remoteExists) return <NewPassphrase />;
 
   return (
     <Card className="space-y-3">
@@ -248,14 +305,36 @@ function formatDateTime(value: string) {
     .format(new Date(value));
 }
 
+export function VaultProgress() {
+  const { phase, initialVaultConfirmed, error, resumeVault, refreshAccount } = useCloudSync();
+  const action = useAction();
+  if (phase === 'local-only') return (
+    <Card className="space-y-2 text-sm text-slate-700">
+      <p role="status">Ton budget est disponible sur cet appareil. La synchronisation reprendra après vérification du compte.</p>
+      <button type="button" disabled={action.pending} className={secondaryButton} onClick={() => void action.run(refreshAccount)}>Vérifier la connexion</button>
+    </Card>
+  );
+  if (phase === 'vault-pending') return (
+    <Card className="space-y-2 text-sm text-slate-700">
+      <p role="status">Copie en ligne en attente de confirmation.</p>
+      <ErrorText message={action.error || error} />
+      <button type="button" disabled={action.pending} className={secondaryButton} onClick={() => void action.run(resumeVault)}>Réessayer</button>
+    </Card>
+  );
+  if (initialVaultConfirmed) return <p role="status" className="px-4 py-2 text-sm font-medium text-teal-800">Copie en ligne créée.</p>;
+  return null;
+}
+
 function Active() {
-  const { phase, account, lastSyncedAt, conflictRemoteDate, error, syncNow, resolveConflict, signOut, deleteAccount } = useCloudSync();
+  const { phase, account, lastSyncedAt, conflictRemoteDate, error, initialVaultConfirmed,
+    syncNow, resolveConflict, signOut, deleteAccount } = useCloudSync();
   const action = useAction();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <>
-      {phase === 'conflict' ? (
+      {phase === 'synced' && initialVaultConfirmed && <VaultProgress />}
+      {phase === 'vault-pending' || phase === 'local-only' ? <VaultProgress /> : phase === 'conflict' ? (
         <AlertBanner variant="warning" title="Deux versions différentes de ton budget">
           <p>
             Ce téléphone et la copie en ligne
@@ -300,7 +379,7 @@ function Active() {
           Se déconnecter de cet appareil
         </button>
         <p className="text-xs text-slate-600">Le budget reste sur ce téléphone. Reconnecte-toi au même compte pour y accéder.</p>
-        {!confirmDelete ? (
+        {phase !== 'vault-pending' && phase !== 'local-only' && (!confirmDelete ? (
           <button type="button" onClick={() => setConfirmDelete(true)}
             className="block min-h-11 text-sm font-semibold text-red-700 underline">
             Supprimer mon compte en ligne
@@ -318,14 +397,14 @@ function Active() {
               <button type="button" onClick={() => setConfirmDelete(false)} className={secondaryButton}>Annuler</button>
             </div>
           </div>
-        )}
+        ))}
       </Card>
     </>
   );
 }
 
 export default function CloudAccountSection({ protectedBudget = false }: { protectedBudget?: boolean }) {
-  const { phase } = useCloudSync();
+  const { phase, beginSignIn, signingUp, otpEmail } = useCloudSync();
 
   return (
     <>
@@ -341,10 +420,16 @@ export default function CloudAccountSection({ protectedBudget = false }: { prote
         <p className="text-sm text-slate-700">Reconnecte-toi au compte de ce budget pour y accéder.</p>
       )}
       {phase === 'signed-out' && <SignIn />}
+      {phase === 'signed-out' && accountSignupEnabled && !protectedBudget && !otpEmail && (
+        <button type="button" className={secondaryButton} onClick={() => beginSignIn(!signingUp)}>
+          {signingUp ? 'J’ai déjà un compte' : 'Créer un compte pour ce budget'}
+        </button>
+      )}
       {phase === 'needs-passphrase' && <Passphrase />}
       {phase === 'awaiting-association' && <AssociationChoice />}
       {(phase === 'account-error' || phase === 'account-mismatch') && <AccountProblem />}
-      {!protectedBudget && (phase === 'syncing' || phase === 'synced' || phase === 'conflict' || phase === 'error') && <Active />}
+      {!protectedBudget && (phase === 'syncing' || phase === 'synced' || phase === 'conflict' || phase === 'error'
+        || phase === 'local-only' || phase === 'vault-pending') && <Active />}
     </>
   );
 }

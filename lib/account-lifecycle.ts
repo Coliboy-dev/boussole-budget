@@ -4,12 +4,14 @@
 import { ACCOUNT_OWNER_KEY } from './account-guard.ts';
 import { BUDGET_STORAGE_KEY, LEGACY_BUDGET_STORAGE_KEY } from './budget-state.ts';
 import { SYNC_MEMORY_KEY } from './cloud-sync.ts';
+import { PENDING_VAULT_KEY } from './vault-pending.ts';
 
 /** Toutes les clés que Boussole enregistre dans le navigateur. */
 export const LOCAL_STORAGE_KEYS = [
   BUDGET_STORAGE_KEY,
   LEGACY_BUDGET_STORAGE_KEY,
   SYNC_MEMORY_KEY,
+  PENDING_VAULT_KEY,
   ACCOUNT_OWNER_KEY,
   'boussole-lock-v1',
   'boussole-lock-device-v1',
@@ -35,7 +37,7 @@ export async function eraseLocalData({ storage, deleteKeyStore }: EraseDependenc
   const failed: string[] = [];
   for (const key of LOCAL_STORAGE_KEYS) {
     // Un budget qui a résisté à l’effacement conserve ses preuves de rattachement.
-    if ((key === ACCOUNT_OWNER_KEY || key === SYNC_MEMORY_KEY)
+    if ((key === ACCOUNT_OWNER_KEY || key === SYNC_MEMORY_KEY || key === PENDING_VAULT_KEY)
       && (failed.includes(BUDGET_STORAGE_KEY) || failed.includes(LEGACY_BUDGET_STORAGE_KEY))) continue;
     try {
       storage.removeItem(key);
