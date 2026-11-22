@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { Compass, LockKeyhole } from 'lucide-react';
+import { LockKeyhole } from 'lucide-react';
+import BrandLogo from '@/components/ui/BrandLogo';
 import { Icon } from '@/components/ui/icons';
 import { PIN_LENGTH, VEIL_CLASS } from '@/lib/app-lock';
 import { managedBackupsEnabled } from '@/lib/cloud-remote';
@@ -103,23 +104,20 @@ export default function LockScreen({ allowAutomaticUnlock }: { allowAutomaticUnl
 
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4 py-8">
-      <div className="flex items-center justify-center gap-2.5">
-        <span className="flex size-10 items-center justify-center rounded-xl border border-teal-200 bg-teal-50 text-teal-700">
-          <Icon icon={Compass} />
-        </span>
-        <span className="font-display text-xl font-bold tracking-tight text-teal-800">Boussole Budget</span>
+      <div className="flex items-center justify-center">
+        <BrandLogo height={40} priority />
       </div>
       {unreadable && (
         <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          Le réglage du verrou est illisible sur ce téléphone. Pour protéger ton budget, Boussole reste verrouillé :
-          la seule issue est d’effacer Boussole sur ce téléphone, puis de récupérer ton budget depuis ta copie en ligne ou une sauvegarde.
+          Le réglage du verrou est illisible sur ce téléphone. Pour protéger ton budget, Capiste reste verrouillé :
+          la seule issue est d’effacer Capiste sur ce téléphone, puis de récupérer ton budget depuis ta copie en ligne ou une sauvegarde.
         </div>
       )}
       {forgot || unreadable ? <ForgotPin onCancel={unreadable ? undefined : () => setForgot(false)} /> : (
         <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl border border-line bg-white p-5">
           <h1 className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <Icon icon={LockKeyhole} className="size-5 text-teal-700" />
-            Boussole est verrouillé
+            Capiste est verrouillé
           </h1>
           {canUsePhone && (
             <button type="button" disabled={devicePending || pending} aria-busy={devicePending}
@@ -132,19 +130,19 @@ export default function LockScreen({ allowAutomaticUnlock }: { allowAutomaticUnl
               Se déverrouiller
             </button>
           )}
-          {!showPin && <button type="button" className={textButton} onClick={choosePin}>Utiliser mon code Boussole</button>}
+          {!showPin && <button type="button" className={textButton} onClick={choosePin}>Utiliser mon code Capiste</button>}
           {deviceStatus === 'valid' && deviceAvailable === false && (
             <p className="text-sm text-slate-700">
-              Le déverrouillage par le téléphone n&apos;est pas disponible dans ce navigateur. Utilise ton code Boussole.
+              Le déverrouillage par le téléphone n&apos;est pas disponible dans ce navigateur. Utilise ton code Capiste.
             </p>
           )}
           {deviceStatus === 'invalid' && (
-            <p className="text-sm text-amber-900">La méthode du téléphone doit être réactivée dans Compte et sécurité. Ton code Boussole reste valable.</p>
+            <p className="text-sm text-amber-900">La méthode du téléphone doit être réactivée dans Compte et sécurité. Ton code Capiste reste valable.</p>
           )}
           {showPin && (
             <>
               {canUsePhone && method === 'unconfirmed' && !devicePending && (
-                <p role="alert" className="text-sm text-amber-900">Le téléphone n&apos;a pas confirmé. Entre ton code Boussole.</p>
+                <p role="alert" className="text-sm text-amber-900">Le téléphone n&apos;a pas confirmé. Entre ton code Capiste.</p>
               )}
               <div>
                 <label htmlFor="lock-pin" className="mb-1.5 block text-sm font-semibold text-slate-700">Ton code à {PIN_LENGTH} chiffres</label>
@@ -198,15 +196,15 @@ function ForgotPin({ onCancel }: { onCancel?: () => void }) {
       return;
     }
     setPending(false);
-    setFailure('L’effacement n’est pas complet. Ferme les autres onglets de Boussole puis réessaie.');
+    setFailure('L’effacement n’est pas complet. Ferme les autres onglets de Capiste puis réessaie.');
   }
 
   return (
     <form onSubmit={erase} noValidate className="space-y-4 rounded-2xl border border-red-200 bg-white p-5 text-sm text-slate-700">
       <h1 ref={heading} tabIndex={-1} className="text-lg font-bold text-slate-900 focus:outline-none">
-        {onCancel ? 'Code oublié' : 'Effacer Boussole sur ce téléphone'}
+        {onCancel ? 'Code oublié' : 'Effacer Capiste sur ce téléphone'}
       </h1>
-      <p>Sans le code, la seule issue est d’effacer Boussole sur ce téléphone : budget, réglages et verrou.</p>
+      <p>Sans le code, la seule issue est d’effacer Capiste sur ce téléphone : budget, réglages et verrou.</p>
       {account ? (
         <p>
           {managedBackupsEnabled
@@ -220,7 +218,7 @@ function ForgotPin({ onCancel }: { onCancel?: () => void }) {
         </p>
       )}
       <p className="text-xs text-slate-600">
-        Une personne qui tient ton téléphone peut aussi supprimer Boussole depuis les réglages du téléphone. Le verrou protège tes informations, pas leur conservation.
+        Une personne qui tient ton téléphone peut aussi supprimer Capiste depuis les réglages du téléphone. Le verrou protège tes informations, pas leur conservation.
       </p>
       <div>
         <label htmlFor="erase-confirm" className="mb-1.5 block font-semibold text-slate-800">
@@ -234,7 +232,7 @@ function ForgotPin({ onCancel }: { onCancel?: () => void }) {
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={pending || word.trim().toUpperCase() !== CONFIRM_WORD}
           className="min-h-11 rounded-xl bg-red-700 px-4 font-semibold text-white hover:bg-red-800 disabled:bg-gray-400">
-          {pending ? 'Effacement…' : 'Effacer Boussole sur ce téléphone'}
+          {pending ? 'Effacement…' : 'Effacer Capiste sur ce téléphone'}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel} className="min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-slate-800">

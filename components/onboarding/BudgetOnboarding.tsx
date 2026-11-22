@@ -248,7 +248,7 @@ export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinu
       <button type="button" className={primaryClass} onClick={onContinue}>Voir mon tableau de bord</button>
       {!lockEnabled && <p className="text-sm text-gray-700">
         Tu veux empêcher une autre personne de voir ton budget sur ce téléphone ?{' '}
-        <Link href="/synchronisation#verrouillage" className="font-semibold text-teal-800 underline">Verrouiller Boussole avec un code</Link>
+        <Link href="/synchronisation#verrouillage" className="font-semibold text-teal-800 underline">Verrouiller Capiste avec un code</Link>
       </p>}
     </div>
   );
