@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import SummaryCard from '@/components/dashboard/SummaryCard';
+import { accountSignupEnabled, useCloudSync } from '@/components/sync/CloudSyncProvider';
 import FormField from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Card from '@/components/ui/Card';
@@ -227,6 +228,7 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
 
 export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinue: () => void; onlineCopy?: boolean }) {
   const { summary, balanceDate } = useApp();
+  const { phase, beginSignIn } = useCloudSync();
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -248,6 +250,12 @@ export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinu
         Tu veux empêcher une autre personne de voir ton budget sur ce téléphone ?{' '}
         <Link href="/synchronisation#verrouillage" className="font-semibold text-teal-800 underline">Verrouiller Boussole avec un code</Link>
       </p>
+      {accountSignupEnabled && phase === 'signed-out' && !onlineCopy && (
+        <Link href="/synchronisation" onClick={() => beginSignIn(true)}
+          className="inline-flex min-h-11 items-center text-sm font-semibold text-teal-800 underline">
+          Sauvegarder en ligne
+        </Link>
+      )}
     </div>
   );
 }

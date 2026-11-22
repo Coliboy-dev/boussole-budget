@@ -66,6 +66,42 @@ async function installKey(page, passphrase, salt) {
   }, { id: userId, passphrase, salt });
 }
 
+test('C1 — le budget se crée avant de choisir la sauvegarde en ligne', async (t) => {
+  const { context, page } = await fixture(t);
+  const authRequests = [];
+  await context.route(origin + '/auth/v1/**', (route) => {
+    authRequests.push(route.request().postDataJSON());
+    return route.fulfill({ json: {} });
+  });
+
+  await page.goto('/dashboard');
+  await heading(page, 'Comment veux-tu commencer ?').waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Créer mon compte', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'J’ai déjà un compte', exact: true }).count(), 1);
+  await button(page, 'Commencer mon budget').click();
+  await page.locator('input[name=balance]').fill('1200');
+  await button(page, 'Continuer').click();
+  await button(page, 'Pas de rentrée confirmée').click();
+  await button(page, 'Calculer sans ajouter de facture').click();
+
+  await heading(page, 'Ton premier budget').waitFor();
+  const budget = await stored(page, budgetKey);
+  assert.equal(deserializeBudget(budget).currentBalance, 1200);
+  assert.equal(await stored(page, authKey), null);
+  assert.deepEqual(authRequests, []);
+  assert.equal(await button(page, 'Voir mon tableau de bord').count(), 1);
+  assert.equal(await page.getByRole('link', { name: 'Verrouiller Boussole avec un code', exact: true }).count(), 1);
+
+  await page.getByRole('link', { name: 'Sauvegarder en ligne', exact: true }).click();
+  await heading(page, 'Créer mon compte').waitFor();
+  assert.equal(await stored(page, budgetKey), budget);
+  assert.deepEqual(authRequests, []);
+  await page.locator('input[name=email]').fill('c1@example.test');
+  await button(page, 'Recevoir un code').click();
+  await page.locator('input[name=code]').waitFor();
+  assert.deepEqual(authRequests.map((request) => request.create_user), [true]);
+});
+
 test('C1 — inscription explicite puis réponse du premier coffre perdue, dépense ajoutée et rechargement', { timeout: 40000 }, async (t) => {
   const { context, page } = await fixture(t);
   let vault;
@@ -99,8 +135,10 @@ test('C1 — inscription explicite puis réponse du premier coffre perdue, dépe
     return route.fulfill({ status: 404 });
   });
 
-  await page.goto('/dashboard');
-  await page.getByRole('link', { name: 'Créer mon compte', exact: true }).click();
+  // Exercer l’option de compte depuis les réglages pour conserver la recette du premier coffre.
+  // Le nouveau parcours d’accueil est vérifié séparément et crée d’abord le budget invité.
+  await page.goto('/synchronisation');
+  await button(page, 'Créer un compte pour ce budget').click();
   await page.locator('input[name=email]').fill('c1@example.test');
   await button(page, 'Recevoir un code').click();
   await page.locator('input[name=code]').fill('111111');
