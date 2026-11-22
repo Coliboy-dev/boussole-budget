@@ -2,7 +2,7 @@ import type { AppState } from './budget-state.ts';
 import { householdCopy, householdMessages } from './household-copy.ts';
 import { latestHouseholdRecords, type SequencedHouseholdRecord } from './household-records.ts';
 import { toCents } from './money.ts';
-import { incomeOccurrences, type Occurrence } from './occurrences.ts';
+import { expenseOccurrences, incomeOccurrences, isOpenOccurrence, type Occurrence } from './occurrences.ts';
 import { AVAILABLE_HORIZON, buildProjection } from './projection.ts';
 import { envelopesOf, spendingsOf } from './spending.ts';
 import type { Expense, Income } from './types.ts';
@@ -67,28 +67,32 @@ export function householdAttention(state: AppState, today: string): string | nul
 
 export function mirrorContributions<T extends AppState>(
   personal: T, householdId: string, memberId: string, incomes: Income[],
+  source?: { seq: number; today: string },
 ): T {
   let expenses = personal.expenses;
   for (const income of incomes) {
     if (income.type !== 'household_contribution' || income.contributionMemberId !== memberId || !income.expectedDate) continue;
-    const linkedRecordId = `${householdId}|income|${income.id}`;
+    const linkedRecordId = contributionLink(householdId, income.id);
     const index = expenses.findIndex((expense) => expense.category === 'household' && expense.linkedRecordId === linkedRecordId);
     const existing = expenses[index];
+    if (source && source.seq < (existing?.linkedRecordSeq ?? 0)) continue;
+    const reopening = existing && !existing.isRecurring && source && source.today > income.expectedDate;
     const scheduled: Expense = {
       ...existing,
       id: existing?.id ?? `household|${linkedRecordId}`,
       linkedRecordId,
+      ...(source && { linkedRecordSeq: source.seq }),
       label: householdCopy.contribution,
       category: 'household',
       amount: income.amount,
       frequency: income.frequency,
       dueDate: income.expectedDate,
-      trackedFrom: income.expectedDate,
+      trackedFrom: reopening ? source.today : income.expectedDate,
+      endDate: income.endDate,
       isPaid: false,
       isRecurring: true,
     };
-    if (existing && existing.amount === scheduled.amount && existing.frequency === scheduled.frequency
-      && existing.dueDate === scheduled.dueDate) continue;
+    if (existing && sameMirrorSchedule(existing, income) && existing.linkedRecordSeq === scheduled.linkedRecordSeq) continue;
     if (expenses === personal.expenses) expenses = [...expenses];
     if (existing) expenses[index] = scheduled;
     else expenses.push(scheduled);
@@ -99,8 +103,86 @@ export function mirrorContributions<T extends AppState>(
 export function trustedContributionSchedules(
   incomes: Income[], rows: readonly SequencedHouseholdRecord[], userId: string, cursor: number,
 ): Income[] {
+  // Les numéros supérieurs au curseur sont réservés à la file locale de ce compte.
   const authored = new Set(latestHouseholdRecords(rows)
     .filter(({ record, seq, updatedBy }) => record.kind === 'income' && (seq > cursor || updatedBy === userId))
     .map(({ record }) => record.id));
   return incomes.filter(({ type, id }) => type === 'household_contribution' && authored.has(id));
+}
+
+type MirrorSchedule = { kind: 'schedule'; income: Income; seq: number };
+export type ContributionMirrorChange = MirrorSchedule | { kind: 'close'; id: string; seq: number };
+export type ContributionMirrorPlan = { automatic: ContributionMirrorChange[]; proposals: MirrorSchedule[] };
+
+function contributionLink(householdId: string, incomeId: string): string {
+  return `${householdId}|income|${incomeId}`;
+}
+
+export function findContributionMirror(expenses: Expense[], householdId: string, incomeId: string): Expense | undefined {
+  const link = contributionLink(householdId, incomeId);
+  return expenses.find(({ category, linkedRecordId }) => category === 'household' && linkedRecordId === link);
+}
+
+function sameMirrorSchedule(expense: Expense, income: Income): boolean {
+  return expense.isRecurring && expense.amount === income.amount && expense.frequency === income.frequency
+    && expense.dueDate === income.expectedDate && expense.endDate === income.endDate;
+}
+
+export function contributionMirrorPlan(
+  incomes: Income[], rows: readonly SequencedHouseholdRecord[], userId: string, memberId: string, cursor: number,
+): ContributionMirrorPlan {
+  const plan: ContributionMirrorPlan = { automatic: [], proposals: [] };
+  const trusted = new Set(trustedContributionSchedules(incomes, rows, userId, cursor).map(({ id }) => id));
+  const byId = new Map(incomes.map((income) => [income.id, income]));
+
+  for (const { seq, record } of latestHouseholdRecords(rows)) {
+    if (record.kind !== 'income') continue;
+    const income = byId.get(record.id);
+    if (income?.type === 'household_contribution' && income.contributionMemberId === memberId) {
+      if (!income.expectedDate) continue;
+      const schedule: MirrorSchedule = { kind: 'schedule', income, seq: Math.min(seq, cursor) };
+      if (trusted.has(income.id)) plan.automatic.push(schedule);
+      else plan.proposals.push(schedule);
+    } else if (seq <= cursor) {
+      plan.automatic.push({ kind: 'close', id: record.id, seq });
+    }
+  }
+  return plan;
+}
+
+export function contributionMirrorNeedsUpdate(expenses: Expense[], householdId: string, schedule: MirrorSchedule): boolean {
+  const mirror = findContributionMirror(expenses, householdId, schedule.income.id);
+  return !mirror || (schedule.seq >= (mirror.linkedRecordSeq ?? 0) && !sameMirrorSchedule(mirror, schedule.income));
+}
+
+export function applyContributionMirrorChanges<T extends AppState>(
+  personal: T, householdId: string, memberId: string, changes: ContributionMirrorChange[], today: string,
+): T {
+  let next = personal;
+  for (const change of changes) {
+    if (change.kind === 'schedule') {
+      next = mirrorContributions(next, householdId, memberId, [change.income], { seq: change.seq, today });
+      continue;
+    }
+    const link = contributionLink(householdId, change.id);
+    const index = next.expenses.findIndex(({ category, linkedRecordId }) => category === 'household' && linkedRecordId === link);
+    const mirror = next.expenses[index];
+    if (!mirror || change.seq <= (mirror.linkedRecordSeq ?? 0)) continue;
+    const closed: Expense = { ...mirror, linkedRecordSeq: change.seq };
+    if (mirror.isRecurring) {
+      // Le moteur relit aussi les échéances en retard et utilise une date de fin inclusive.
+      const occurrences = expenseOccurrences(mirror, today, today).filter(isOpenOccurrence);
+      if (occurrences.length) {
+        const statuses = { ...mirror.occurrenceStatuses };
+        for (const { dueDate } of occurrences) statuses[dueDate] = 'cancelled';
+        closed.occurrenceStatuses = statuses;
+      }
+      closed.isRecurring = false;
+      closed.endDate = today;
+    }
+    const expenses = [...next.expenses];
+    expenses[index] = closed;
+    next = { ...next, expenses };
+  }
+  return next;
 }

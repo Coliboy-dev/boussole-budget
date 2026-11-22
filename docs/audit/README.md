@@ -193,6 +193,8 @@ Chaque membre peut programmer son versement depuis « Notre foyer ». Un verseme
 
 Le budget Personnel du membre concerné reprend le versement comme charge certaine. Après paiement, son montant figure séparément dans l’analyse et reste exclu du total des dépenses. Les scénarios F-A et F-C vérifient les montants, la réception et l’idempotence de la ligne miroir.
 
+Une proposition ou modification du partenaire attend une confirmation du membre concerné. La suppression ou la réattribution confirmée clôture la ligne miroir et conserve ses paiements. Une version plus ancienne du Foyer ne peut pas réactiver une ligne déjà clôturée.
+
 L’accueil du Foyer affiche le disponible confirmé et le disponible avec les versements attendus. L’alerte F3 distingue une échéance dépendante d’un versement, un solde sous zéro et une réserve entamée. La recette navigateur couvre la saisie, la réception et la ligne miroir sur un écran de 390 px.
 
 ## Hygiène technique et formulaires

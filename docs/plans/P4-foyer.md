@@ -143,7 +143,7 @@ Tous les textes viennent de `household-copy.ts`, énoncent un fait financier vé
 **F5 — Transfert (M4).** Entité `MemberTransfer { id, fromMemberId, toMemberId, amount, date, status: 'declared' | 'confirmed' | 'not_received', declaredAt, confirmedAt? }`. Seul le destinataire peut passer `declared` → `confirmed` ou `not_received`. Aucun effet sur le solde commun ni sur l’analyse du foyer.
 
 **F6 — Lignes miroir personnelles.** Créées **par l’appareil de la personne concernée**, dans **son** espace Personnel, jamais par l’autre :
-- M2 : `Expense { category: 'household', label: 'Versement au compte commun', amount, frequency, dueDate, isRecurring: true, linkedRecordId }`, mise à jour si le versement du foyer change ;
+- M2 : `Expense { category: 'household', label: 'Versement au compte commun', amount, frequency, dueDate, isRecurring: true, linkedRecordId }`. La création ou la modification est automatique pour un versement saisi par le membre concerné. Si l’autre membre l’a saisi ou modifié, le membre concerné peut accepter le montant affiché ou choisir « Pas maintenant ». Une suppression ou une réattribution confirmée clôture le miroir à la date du jour, retire ses échéances ouvertes et garde l’historique payé ;
 - M3 : `Spending { category: 'household', label: 'Avancé pour le foyer : <libellé>', amount, date, balanceIncluded: false, linkedRecordId }` ;
 - M4 émetteur : `Spending { category: 'household', label: 'Transfert vers <prénom>', … }` dès la déclaration ;
 - M4 destinataire : à la confirmation, `Income { type: 'household_transfer', frequency: 'one_time', isConfirmed: true, expectedDate: date, linkedRecordId }` immédiatement marqué reçu (crédite le solde personnel).

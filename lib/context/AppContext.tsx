@@ -37,6 +37,7 @@ import { canAccessBudget, useBudgetAccess } from '@/lib/budget-access';
 import { readBudgetOwner, readStoredSessionUserId } from '@/lib/account-guard';
 import { deleteSpending as removeSpending, envelopesOf, spendingsOf } from '@/lib/spending';
 import { reduceBudget, type AppAction, type RuntimeState, type SpendingChanges, type SpendingInput } from '@/lib/budget-reducer';
+import type { ContributionMirrorChange } from '@/lib/household-contributions';
 
 type BudgetPersistence = {
   snapshot: BudgetStorageSnapshot;
@@ -108,7 +109,9 @@ export interface AppContextType extends AppState {
   addExpense: (expense: Omit<Expense, 'id'>) => void;
   updateExpense: (id: string, data: Partial<Expense>) => void;
   deleteExpense: (id: string) => void;
-  syncContributionMirrors: (userId: string, householdId: string, memberId: string, incomes: Income[]) => void;
+  syncContributionMirrors: (
+    userId: string, householdId: string, memberId: string, changes: ContributionMirrorChange[], today: string,
+  ) => void;
   addDebt: (debt: Omit<Debt, 'id'>) => void;
   updateDebt: (id: string, data: Partial<Debt>) => void;
   deleteDebt: (id: string) => void;
@@ -200,11 +203,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return isSavedBudgetCurrent(persistence.current);
   }
 
-  const syncContributionMirrors = useCallback<AppContextType['syncContributionMirrors']>((userId, householdId, memberId, incomes) => {
+  const syncContributionMirrors = useCallback<AppContextType['syncContributionMirrors']>((userId, householdId, memberId, changes, date) => {
     if (!canAccessBudget() || !isSavedBudgetCurrent(persistence.current)) return;
     const owner = readBudgetOwner(localStorage);
     if (owner.type !== 'account' || owner.userId !== userId || readStoredSessionUserId(localStorage) !== userId) return;
-    dispatchInternal({ type: 'SYNC_CONTRIBUTION_MIRRORS', householdId, memberId, incomes });
+    dispatchInternal({ type: 'SYNC_CONTRIBUTION_MIRRORS', householdId, memberId, changes, today: date });
   }, []);
 
   const reloadStoredBudget = useCallback(() => {

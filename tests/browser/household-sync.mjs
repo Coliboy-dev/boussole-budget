@@ -7,7 +7,9 @@ import { setTimeout } from 'node:timers/promises';
 import { test } from 'node:test';
 import { createClient } from '@supabase/supabase-js';
 import { ACCOUNT_OWNER_KEY, AUTH_STORAGE_KEY } from '../../lib/account-guard.ts';
-import { BUDGET_STORAGE_KEY, emptyBudgetState, serializeBudget } from '../../lib/budget-state.ts';
+import { BUDGET_STORAGE_KEY, deserializeStoredBudget, emptyBudgetState, serializeBudget } from '../../lib/budget-state.ts';
+import { createInvitationToken } from '../../lib/household-invitations.ts';
+import { encodeHouseholdWrites } from '../../lib/household-sync.ts';
 import { todayInBrussels } from '../../lib/local-date.ts';
 
 const require = createRequire(import.meta.url);
@@ -241,4 +243,77 @@ test('Versement du foyer · projection, réception et une seule ligne dans le Pe
   await page.reload();
   await page.getByText('Versement au compte commun', { exact: true }).waitFor();
   assert.equal(await page.getByText('Versement au compte commun', { exact: true }).count(), 1);
+});
+
+test('Versement du partenaire · accord explicite, mise à jour et clôture de la ligne miroir', { timeout: 120000, skip: !householdEnabled }, async (t) => {
+  const openOwner = await householdFixture(t);
+  const openPartner = await householdFixture(t);
+  const owner = await openOwner(privateContents);
+  const partner = await openPartner();
+  const { page } = owner;
+  const [{ household_id: householdId, member_id: memberId }] = success(await owner.api.rpc('create_household'));
+  const { token, tokenHash } = await createInvitationToken();
+  const invitation = success(await owner.api.rpc('create_invitation', { h: householdId, token_hash: tokenHash }));
+  success(await partner.api.rpc('accept_invitation', { invitation, token }));
+  const { session } = success(await partner.api.auth.getSession());
+  const response = await fetch(new URL('/api/household-key', baseURL), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ householdId }),
+  });
+  assert.equal(response.status, 200);
+  const { material } = await response.json();
+  const key = await crypto.subtle.importKey('raw', Buffer.from(material, 'base64'), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const id = `contribution|${memberId}`;
+  const date = todayInBrussels();
+  async function publish(amountCents) {
+    const record = { kind: 'income', id };
+    if (amountCents !== undefined) record.data = {
+      id, label: 'Versement au compte commun', type: 'household_contribution', contributionMemberId: memberId,
+      amount: amountCents, frequency: 'monthly', expectedDate: date, isConfirmed: false,
+    };
+    const records = await encodeHouseholdWrites(key, { householdId, keyVersion: 1 }, [record]);
+    success(await partner.api.rpc('upsert_records', { h: householdId, records }));
+  }
+  async function mirrors() {
+    const contents = await page.evaluate(storageKey => localStorage.getItem(storageKey), BUDGET_STORAGE_KEY);
+    return deserializeStoredBudget(contents).budget.expenses.filter(({ category }) => category === 'household');
+  }
+
+  await publish(60000);
+  await page.goto('/foyer');
+  await button(page, 'Ouvrir le foyer').click();
+  await page.waitForURL('**/dashboard');
+  const card = page.getByRole('complementary', { name: 'Versement dans ton budget personnel' });
+  await card.getByText(/600,00/).waitFor();
+  await page.evaluate(axeSource);
+  const audit = await card.evaluate((element) => window.axe.run(element, { runOnly: {
+    type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'],
+  } }));
+  assert.deepEqual(audit.violations.map(({ id }) => id), []);
+  assert.deepEqual(await mirrors(), []);
+  await button(card, 'Pas maintenant').click();
+  await card.waitFor({ state: 'hidden' });
+  assert.deepEqual(await mirrors(), []);
+
+  await publish(70000);
+  await page.reload();
+  await card.getByText(/700,00/).waitFor();
+  await button(card, 'Ajouter').click();
+  await waitFor(async () => assert.deepEqual((await mirrors()).map(({ amount }) => amount), [700]));
+
+  await publish(85000);
+  await page.reload();
+  await card.getByText(/850,00/).waitFor();
+  assert.deepEqual((await mirrors()).map(({ amount }) => amount), [700]);
+  await button(card, 'Mettre à jour').click();
+  await waitFor(async () => assert.deepEqual((await mirrors()).map(({ amount }) => amount), [850]));
+
+  await publish();
+  await page.reload();
+  await waitFor(async () => {
+    const [mirror] = await mirrors();
+    assert.equal(mirror?.endDate, date);
+    assert.equal(mirror.isRecurring, false);
+  });
 });

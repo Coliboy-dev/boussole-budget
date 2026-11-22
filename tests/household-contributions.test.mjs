@@ -3,7 +3,10 @@ import test from 'node:test';
 import { passedOccurrences, updateBalance } from '../lib/balance-update.ts';
 import { calculateBudgetSummary, formatCurrency } from '../lib/budget-calculations.ts';
 import { deserializeStoredBudget, emptyBudgetState, recordPayment, serializeBudget } from '../lib/budget-state.ts';
-import { contributionOccurrences, householdAttention, mirrorContributions, trustedContributionSchedules } from '../lib/household-contributions.ts';
+import {
+  applyContributionMirrorChanges, contributionMirrorNeedsUpdate, contributionMirrorPlan, contributionOccurrences,
+  householdAttention, mirrorContributions, trustedContributionSchedules,
+} from '../lib/household-contributions.ts';
 import { householdCopy } from '../lib/household-copy.ts';
 import { materializeHousehold } from '../lib/household-materialize.ts';
 import { analyzeMonth } from '../lib/spending-analysis.ts';
@@ -145,4 +148,56 @@ test('F6 · seul un versement saisi sur cet appareil ou validé sous le compte c
   assert.deepEqual(trustedContributionSchedules([own], [{ ...row, updatedBy: 'compte-sam' }], 'compte-sam', 3), [own]);
   assert.deepEqual(trustedContributionSchedules([own], [{ ...row, updatedBy: 'compte-marc' }], 'compte-sam', 3), []);
   assert.deepEqual(trustedContributionSchedules([own], [row], 'compte-sam', 2), [own]);
+});
+
+test('F6 · un versement proposé par l’autre compte attend un accord pour sa création et sa modification', () => {
+  const personal = budget(2000);
+  const income = contribution(sam, 600);
+  const row = (seq, data) => ({ seq, updatedBy: 'compte-marc', record: { kind: 'income', id: income.id, data } });
+  const first = contributionMirrorPlan([income], [row(4, income)], 'compte-sam', sam, 4);
+  assert.equal(first.automatic.length, 0);
+  const [offer] = first.proposals;
+  assert.ok(contributionMirrorNeedsUpdate(personal.expenses, 'foyer-1', offer));
+  assert.equal(applyContributionMirrorChanges(personal, 'foyer-1', sam, first.automatic, today), personal);
+
+  const accepted = applyContributionMirrorChanges(personal, 'foyer-1', sam, [offer], today);
+  assert.equal(accepted.expenses[0].amount, 600);
+  assert.equal(contributionMirrorNeedsUpdate(accepted.expenses, 'foyer-1', offer), false);
+  const proposedEdit = { ...income, amount: 700 };
+  const edit = contributionMirrorPlan([proposedEdit], [row(5, proposedEdit)], 'compte-sam', sam, 5);
+  assert.equal(edit.automatic.length, 0);
+  assert.ok(contributionMirrorNeedsUpdate(accepted.expenses, 'foyer-1', edit.proposals[0]));
+  assert.equal(applyContributionMirrorChanges(accepted, 'foyer-1', sam, edit.automatic, today), accepted);
+  assert.equal(accepted.expenses[0].amount, 600);
+  const updated = applyContributionMirrorChanges(accepted, 'foyer-1', sam, edit.proposals, today);
+  assert.equal(updated.expenses.length, 1);
+  assert.equal(updated.expenses[0].amount, 700);
+  assert.equal(applyContributionMirrorChanges(updated, 'foyer-1', sam, [offer], today), updated);
+});
+
+test('F6 · suppression ou réattribution clôture le miroir et laisse le paiement dans l’analyse', () => {
+  const income = contribution(sam, 800, '2026-10-25');
+  const record = (seq, data) => ({ seq, updatedBy: 'compte-sam', record: { kind: 'income', id: income.id, data } });
+  const first = contributionMirrorPlan([income], [record(4, income)], 'compte-sam', sam, 4);
+  const created = applyContributionMirrorChanges(budget(2000), 'foyer-1', sam, first.automatic, today);
+  const [mirror] = created.expenses;
+  const paid = recordPayment(created, { type: 'expense', id: mirror.id, dueDate: '2026-10-25', today, balanceIncludesPayment: false });
+  const reassigned = { ...income, contributionMemberId: marc };
+
+  for (const [incomes, row] of [[[], record(7)], [[reassigned], record(7, reassigned)]]) {
+    const closedPlan = contributionMirrorPlan(incomes, [row], 'compte-sam', sam, 7);
+    const closed = applyContributionMirrorChanges(paid, 'foyer-1', sam, closedPlan.automatic, today);
+    assert.equal(closed.expenses.length, 1);
+    assert.equal(closed.expenses[0].endDate, today);
+    assert.equal(closed.expenses[0].occurrenceStatuses['2026-10-25'], 'paid');
+    assert.equal(closed.currentBalance, 1200);
+    assert.equal(analyzeMonth(closed, '2026-10').transfersCents, 80000);
+    assert.equal(summary(closed).trueAvailable, 1150);
+    assert.equal(summary(closed).totalMonthlyExpenses, 0);
+    assert.equal(applyContributionMirrorChanges(closed, 'foyer-1', sam, first.automatic, today), closed);
+    assert.equal(applyContributionMirrorChanges(closed, 'foyer-1', sam, closedPlan.automatic, today), closed);
+  }
+
+  const uncached = contributionMirrorPlan([], [], 'compte-sam', sam, 0);
+  assert.equal(applyContributionMirrorChanges(paid, 'foyer-1', sam, uncached.automatic, today), paid);
 });

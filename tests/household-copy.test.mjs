@@ -12,6 +12,7 @@ const examples = {
   dependsOnContributions: [['loyer', '2026-12-01', 2], 'Le paiement du loyer du 1er dépend de 2 versements encore attendus'],
   reserveShortfall: [[2000, '2026-12-01', false], `La réserve serait entamée de ${currency(2000)} le 1 déc.`],
   transfersForHousehold: [[80000], `Virements et avances pour le foyer : ${currency(80000)}`],
+  contributionMirrorOffer: [[60000, 'monthly', false], `Versement au compte commun de ${currency(60000)} par mois. L’ajouter à ton budget personnel ?`],
 };
 
 const prohibited = /\b(te|vous|lui|me) doi(t|s|vent)\b|\bdoi(t|s|vent) (payer|verser|rembourser|ajouter)\b|n['’]a (pas|toujours pas) (payé|versé|remboursé)|\btrop dépensé\b|\brappelle[- ]lui\b|\bexclu(e)?\b|\bparticipe moins\b|\bmauvaise? gestion\b|\bà rembourser\b/iu;

@@ -1,5 +1,6 @@
 import { formatCurrency, formatShortDate } from './budget-calculations.ts';
 import { fromCents } from './money.ts';
+import type { Frequency } from './types.ts';
 
 export const householdCopy = {
   personal: 'Personnel',
@@ -43,6 +44,10 @@ export const householdCopy = {
   contributionAmountInvalid: 'Indique un montant supérieur à zéro, avec deux décimales au maximum.',
   contributionDateInvalid: 'Indique une date valide.',
   contributionSaved: 'Versement enregistré.',
+  mirrorOffer: 'Versement dans ton budget personnel',
+  mirrorAccept: 'Ajouter',
+  mirrorUpdate: 'Mettre à jour',
+  mirrorLater: 'Pas maintenant',
   contributionUnavailable: 'Le versement ne peut pas être enregistré pour le moment.',
   upcomingContributions: 'Versements attendus',
   monthlyContributions: 'Versements du mois',
@@ -64,6 +69,11 @@ function dayOfMonth(date: string): string {
   return day === 1 ? '1er' : String(day);
 }
 
+const mirrorFrequency: Record<Frequency, string> = {
+  monthly: 'par mois', weekly: 'par semaine', bi_monthly: 'tous les deux mois',
+  quarterly: 'par trimestre', annual: 'par an', one_time: '',
+};
+
 export const householdMessages = {
   contributionPending: (date: string) =>
     `Versement prévu le ${dayOfMonth(date)} — réception non confirmée`,
@@ -82,4 +92,9 @@ export const householdMessages = {
   },
   transfersForHousehold: (amountCents: number) =>
     `Virements et avances pour le foyer : ${formatCurrency(fromCents(amountCents))}`,
+  contributionMirrorOffer: (amountCents: number, frequency: Frequency, update: boolean) => {
+    const amount = [formatCurrency(fromCents(amountCents)), mirrorFrequency[frequency]].filter(Boolean).join(' ');
+    const question = update ? 'Mettre à jour ton budget personnel ?' : 'L’ajouter à ton budget personnel ?';
+    return `Versement au compte commun de ${amount}. ${question}`;
+  },
 };

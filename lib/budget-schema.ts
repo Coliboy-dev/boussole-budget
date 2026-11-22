@@ -172,6 +172,7 @@ function budgetCheck(unit: Unit): Check {
       isPaid: flag,
       isRecurring: flag,
       linkedRecordId: optional(identifier),
+      linkedRecordSeq: optional(nonNegativeInteger),
       notes: optional(text),
     }),
     debts: entities({

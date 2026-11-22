@@ -48,6 +48,7 @@ export interface Expense extends Schedule {
   isPaid: boolean;
   isRecurring: boolean;
   linkedRecordId?: string;
+  linkedRecordSeq?: number;
   notes?: string;
 }
 
