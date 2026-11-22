@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
+import { ACCOUNT_TRANSITION_LOCK, AUTH_STORAGE_KEY } from '../../lib/account-guard.ts';
 import { deserializeBudget, emptyBudgetState, serializeBudget } from '../../lib/budget-state.ts';
 import { deriveKey, encryptText, newSalt } from '../../lib/cloud-crypto.ts';
 
@@ -36,7 +37,12 @@ async function device(t, copy) {
       copy.otp.push(request.postDataJSON().create_user);
       return route.fulfill({ json: {} });
     }
-    if (path === '/auth/v1/verify') return route.fulfill({ json: session });
+    if (path === '/auth/v1/verify') {
+      if (request.postDataJSON().token !== '111111') {
+        return route.fulfill({ status: 403, json: { code: 'otp_expired', message: 'Invalid token' } });
+      }
+      return route.fulfill({ json: session });
+    }
     if (path === '/auth/v1/token') {
       const body = request.postDataJSON();
       copy.passwordLogins = (copy.passwordLogins ?? 0) + 1;
@@ -46,8 +52,13 @@ async function device(t, copy) {
       return route.fulfill({ json: session });
     }
     if (path === '/auth/v1/user' && request.method() === 'PUT') {
+      await copy.beforePasswordResponse?.();
       copy.password = request.postDataJSON().password;
       return route.fulfill({ json: session.user });
+    }
+    if (path === '/auth/v1/logout') {
+      copy.logoutRequested = true;
+      return route.fulfill({ status: 204 });
     }
     if (path === '/rest/v1/budget_vaults') {
       if (request.method() === 'GET') return route.fulfill({ json: copy.vault ? [copy.vault] : [] });
@@ -79,10 +90,12 @@ async function signUp(page) {
 }
 
 async function choosePassword(page, password = 'un mot de passe long') {
-  await heading(page, 'Choisis ton mot de passe').waitFor();
+  const formHeading = heading(page, 'Choisis ton mot de passe');
+  await formHeading.waitFor();
   await page.locator('input[name=password]').fill(password);
   await page.locator('input[name=confirmation]').fill(password);
   await button(page, 'Enregistrer mon mot de passe').click();
+  await formHeading.waitFor({ state: 'hidden' });
 }
 
 async function signIn(page, password) {
@@ -90,6 +103,19 @@ async function signIn(page, password) {
   await heading(page, 'Te connecter').waitFor();
   await page.locator('input[name=email]').fill('capiste@example.test');
   await page.locator('input[name=password]').fill(password);
+  await button(page, 'Me connecter').click();
+}
+
+async function openRecovery(page) {
+  await page.goto('/dashboard');
+  await button(page, 'J’ai déjà un compte').click();
+  await button(page, 'Mot de passe oublié ou pas encore créé ?').click();
+  await page.locator('input[name=email]').fill('capiste@example.test');
+  await button(page, 'Recevoir un code').click();
+}
+
+async function submitRecoveryCode(page, code) {
+  await page.locator('input[name=code]').fill(code);
   await button(page, 'Me connecter').click();
 }
 
@@ -167,6 +193,77 @@ test('mot de passe oublié : code e-mail sans création de compte, puis nouveau 
   assert.deepEqual(copy.otp, [false]);
   assert.equal(copy.password, 'nouveau mot de passe');
   await page.locator('input[name=balance]').waitFor();
+});
+
+test('récupération : un code refusé laisse le champ et permet de réessayer', async (t) => {
+  const copy = { otp: [], keyRequests: 0, password: 'ancien mot de passe' };
+  const page = await device(t, copy);
+  await openRecovery(page);
+  await submitRecoveryCode(page, '000000');
+  await page.getByRole('alert').filter({ hasText: 'Code incorrect ou expiré.' }).waitFor();
+  assert.equal(await page.locator('input[name=code]').isVisible(), true);
+  await submitRecoveryCode(page, '111111');
+  await heading(page, 'Choisis ton mot de passe').waitFor();
+  assert.deepEqual(copy.otp, [false]);
+});
+
+test('récupération : le choix du mot de passe survit au rechargement et à un autre onglet', async (t) => {
+  const page = await device(t, { otp: [], keyRequests: 0 });
+  await openRecovery(page);
+  await submitRecoveryCode(page, '111111');
+  await heading(page, 'Choisis ton mot de passe').waitFor();
+
+  await page.reload();
+  await heading(page, 'Choisis ton mot de passe').waitFor();
+  const other = await page.context().newPage();
+  await other.goto('/dashboard');
+  await heading(other, 'Choisis ton mot de passe').waitFor();
+
+  await choosePassword(page);
+  await page.locator('input[name=balance]').waitFor();
+  await other.locator('input[name=balance]').waitFor();
+  await page.reload();
+  await page.locator('input[name=balance]').waitFor();
+});
+
+test('une déconnexion dans un autre onglet attend le changement de mot de passe en cours', async (t) => {
+  const copy = { otp: [], keyRequests: 0, password: 'ancien mot de passe', logoutRequested: false };
+  const page = await device(t, copy);
+  await page.goto('/dashboard');
+  await signIn(page, copy.password);
+  await firstBudget(page);
+  await heading(page, 'Ton premier budget').waitFor();
+  await page.goto('/synchronisation');
+  await button(page, 'Changer mon mot de passe').click();
+  await page.locator('input[name=password]').fill('nouveau mot de passe');
+  await page.locator('input[name=confirmation]').fill('nouveau mot de passe');
+
+  const other = await page.context().newPage();
+  await other.goto('/synchronisation');
+  await button(other, 'Se déconnecter de cet appareil').waitFor();
+  const received = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  t.after(() => release.resolve());
+  copy.beforePasswordResponse = () => {
+    received.resolve();
+    return release.promise;
+  };
+
+  await button(page, 'Enregistrer mon mot de passe').click();
+  await received.promise;
+  await button(other, 'Se déconnecter de cet appareil').click();
+  await other.waitForFunction(async ({ storageKey, lockName }) => {
+    if (localStorage.getItem(storageKey) === null) return true;
+    const { pending } = await navigator.locks.query();
+    return pending.some((lock) => lock.name === lockName);
+  }, { storageKey: AUTH_STORAGE_KEY, lockName: ACCOUNT_TRANSITION_LOCK });
+  const logoutBeforePasswordResponse = copy.logoutRequested;
+  release.resolve();
+
+  assert.equal(logoutBeforePasswordResponse, false);
+  await heading(other, 'Te connecter').waitFor();
+  assert.equal(await stored(other, AUTH_STORAGE_KEY), null);
+  assert.equal(copy.password, 'nouveau mot de passe');
 });
 
 test('la connexion par mot de passe conserve la phrase de récupération d’un coffre historique', async (t) => {
