@@ -51,6 +51,7 @@ async function fixture(t, initial, { remote = null, hold = null } = {}) {
       return route.fulfill({ json: {} });
     }
     if (address.pathname === '/auth/v1/verify') return route.fulfill({ json: session(B) });
+    if (address.pathname === '/auth/v1/token') return route.fulfill({ json: session(B) });
     if (address.pathname === '/auth/v1/logout') return route.fulfill({ status: 204 });
     if (address.pathname === '/rest/v1/budget_vaults') {
       if (request.method() === 'GET') {
@@ -188,19 +189,18 @@ test('C0 — changer de compte dans un autre onglet interrompt un envoi prépar�
   assert.deepEqual(writes, []);
 });
 
-test('C0 — l’OTP connecte un compte existant et le choix précède tout envoi', async (t) => {
+test('C0 — la connexion d’un compte existant précède tout envoi et le choix d’association', async (t) => {
   const { page, writes, otp } = await fixture(t, { [budget]: localBudget });
   await page.goto('/synchronisation');
   await page.locator('input[name=email]').fill('b@example.test');
-  await button(page, 'Recevoir un code').click();
-  await page.locator('input[name=code]').fill('111111');
+  await page.locator('input[name=password]').fill('un mot de passe long');
   await button(page, 'Me connecter').click();
   await page.locator('input[name=confirmation]').fill(passphrase);
   await page.locator('input[name=passphrase]').fill(passphrase);
   await button(page, 'Activer la synchronisation').click();
   await heading(page, 'Choisir le budget de ce compte').waitFor();
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  assert.deepEqual(otp.map((request) => request.create_user), [false]);
+  assert.deepEqual(otp, []);
   assert.deepEqual(writes, []);
   assert.equal(await stored(page, budget), localBudget);
   await button(page, 'Associer ce budget à mon compte').click();

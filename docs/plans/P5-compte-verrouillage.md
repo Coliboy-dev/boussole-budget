@@ -1,4 +1,15 @@
-# P5 — Compte, sauvegarde et verrouillage de l’application (révision 6)
+# P5 — Compte, sauvegarde et verrouillage de l’application (révision 6.1)
+
+### Révision 6.1 — Mot de passe du compte, verrou proposé (22 novembre 2026)
+
+Remplace, dans la révision 6, la connexion par code e-mail à chaque appareil et le verrou local imposé.
+
+- **Connexion :** e-mail et mot de passe, sur tout appareil. Le mot de passe est géré par Supabase Auth (stocké haché, 12 à 72 caractères, même minimum côté serveur). Il authentifie le compte ; il ne chiffre pas le budget.
+- **Code e-mail :** seulement pour confirmer l’adresse à l’inscription et pour « Mot de passe oublié ou pas encore créé ? » (`shouldCreateUser: false`). Après un code, le choix du mot de passe passe avant tout autre écran.
+- **Verrou de l’appareil :** facultatif. Après une connexion, si l’appareil sait vérifier son propriétaire (Face ID, empreinte…), l’app propose une fois le code à 6 chiffres puis le déverrouillage par le téléphone ; « Plus tard » ouvre le budget. Le code reste le secours hors ligne de Face ID.
+- **Session :** conservée sur l’appareil (aucune expiration forcée côté Supabase). Le mot de passe n’est donc demandé qu’une fois par appareil et par navigateur ; une fenêtre privée le redemande à chaque ouverture.
+- **Risque écrit :** avec les clés gérées, toute personne qui connaît le mot de passe ou accède à la boîte e-mail peut ouvrir la copie en ligne. Les coffres historiques à phrase gardent leur récupération par phrase.
+- Pas de second facteur pour l’instant. Si le besoin apparaît, utiliser une application d’authentification (TOTP), gérée nativement par Supabase.
 
 ### Révision 6 — Compte obligatoire et copie récupérable par e-mail (22 novembre 2026)
 

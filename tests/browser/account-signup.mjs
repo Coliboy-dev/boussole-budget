@@ -20,6 +20,13 @@ const heading = (page, name) => page.getByRole('heading', { name, exact: true })
 const button = (page, name) => page.getByRole('button', { name, exact: true });
 const stored = (page, key) => page.evaluate((name) => localStorage.getItem(name), key);
 
+async function choosePassword(page) {
+  await heading(page, 'Choisis ton mot de passe').waitFor();
+  await page.locator('input[name=password]').fill('un mot de passe long');
+  await page.locator('input[name=confirmation]').fill('un mot de passe long');
+  await button(page, 'Enregistrer mon mot de passe').click();
+}
+
 let browser;
 before(async () => { browser = await chromium.launch({ executablePath: process.env.BOUSSOLE_CHROMIUM_PATH }); });
 after(async () => { await browser?.close(); });
@@ -79,6 +86,7 @@ test('C1 — inscription explicite puis réponse du premier coffre perdue, dépe
       return route.fulfill({ json: {} });
     }
     if (path === '/auth/v1/verify') return route.fulfill({ json: session() });
+    if (path === '/auth/v1/user' && request.method() === 'PUT') return route.fulfill({ json: session().user });
     if (path === '/rest/v1/budget_vaults') {
       if (request.method() === 'GET') {
         if (readBarrier) await readBarrier;
@@ -108,6 +116,7 @@ test('C1 — inscription explicite puis réponse du premier coffre perdue, dépe
   await button(page, 'Recevoir un code').click();
   await page.locator('input[name=code]').fill('111111');
   await button(page, 'Confirmer mon adresse').click();
+  await choosePassword(page);
   await heading(page, 'Enregistre ta phrase secrète').waitFor();
   const phrase = await page.locator('input[name=passphrase]').inputValue();
   assert.match(phrase, /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}(?:-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}){3}$/);
@@ -300,6 +309,7 @@ test('C1 — l’inscription depuis un budget existant attend une confirmation d
       return route.fulfill({ json: {} });
     }
     if (path === '/auth/v1/verify') return route.fulfill({ json: session() });
+    if (path === '/auth/v1/user' && request.method() === 'PUT') return route.fulfill({ json: session().user });
     if (path === '/rest/v1/budget_vaults' && request.method() === 'GET') {
       const [saved] = writes;
       return route.fulfill({ json: saved ? [{ ...saved, updated_at: '2026-11-21T10:00:00Z' }] : [] });
@@ -316,6 +326,7 @@ test('C1 — l’inscription depuis un budget existant attend une confirmation d
   await button(page, 'Recevoir un code').click();
   await page.locator('input[name=code]').fill('111111');
   await button(page, 'Confirmer mon adresse').click();
+  await choosePassword(page);
   await heading(page, 'Enregistre ta phrase secrète').waitFor();
   const phrase = await page.locator('input[name=passphrase]').inputValue();
   await page.getByRole('checkbox').check();

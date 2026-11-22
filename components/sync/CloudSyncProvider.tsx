@@ -22,7 +22,7 @@ import {
   serializeBudget, writeBudgetSnapshot, type BudgetStorageSnapshot,
 } from '@/lib/budget-state';
 import { useApp } from '@/lib/context/AppContext';
-import { readLockState } from '@/lib/app-lock';
+import { passwordProblem } from '@/lib/account-password';
 import { todayInBrussels } from '@/lib/local-date';
 import type { FirstBudgetInput } from '@/lib/onboarding';
 import { matchesInitialVault, PENDING_VAULT_KEY, readPendingVault, rememberVaultFingerprint } from '@/lib/vault-pending';
@@ -36,7 +36,6 @@ export type SyncPhase =
   | 'needs-passphrase'
   | 'awaiting-association'
   | 'first-budget'
-  | 'restore-after-lock'
   | 'vault-pending'
   | 'local-only'
   | 'account-mismatch'
@@ -73,6 +72,13 @@ interface CloudSyncContext {
   conflictRemoteDate: string | null;
   error: string;
   signingUp: boolean;
+  /** Connexion par code e-mail réussie dans cet onglet : le mot de passe doit être choisi. */
+  passwordRequired: boolean;
+  /** Connexion récente sur cet appareil : proposer une fois le verrou (code et Face ID). */
+  offerDeviceLock: boolean;
+  dismissDeviceLockOffer: () => void;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  setPassword: (password: string) => Promise<void>;
   firstBudgetResult: boolean;
   initialVaultConfirmed: boolean;
   beginSignIn: (createAccount: boolean) => void;
@@ -173,7 +179,6 @@ async function applyAssociation(choice: Association, action: AssociationAction, 
 
   await withAccountTransition(async () => {
     assertAssociation(choice);
-    if (managedBackupsEnabled && readLockState(localStorage).status !== 'valid') throw new Error('Configure d’abord le code de cet appareil.');
     discardStalePendingVault();
     if (readPendingVault(localStorage) !== null) throw new Error('Une création de coffre est déjà en attente.');
     const remote = await fetchVault(userId);
@@ -231,6 +236,9 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   const [ownerInitialized, setOwnerInitialized] = useState(false);
   const [otpEmail, setOtpEmail] = useState('');
   const [signingUp, setSigningUp] = useState(false);
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [offerDeviceLock, setOfferDeviceLock] = useState(false);
+  const dismissDeviceLockOffer = useCallback(() => setOfferDeviceLock(false), []);
   const [firstBudgetResult, setFirstBudgetResult] = useState(false);
   const [initialVaultConfirmed, setInitialVaultConfirmed] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
@@ -275,11 +283,6 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       if (choice.empty && choice.owner.type === 'guest') {
-        if (managedBackupsEnabled && readLockState(localStorage).status !== 'valid') {
-          setAssociation(choice);
-          setPhase(remote ? 'restore-after-lock' : 'awaiting-association');
-          return;
-        }
         await linkBudget(choice, remote ? 'restore' : 'attach');
         return;
       }
@@ -720,6 +723,8 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     signupIntent.current = Boolean(createAccount && accountSignupEnabled && canAccessBudget()
       && readBudgetOwner(localStorage).type === 'guest' && readStoredSessionUserId(localStorage) === null);
     setSigningUp(signupIntent.current);
+    setPasswordRequired(false);
+    setOfferDeviceLock(false);
     setOtpEmail('');
     setError('');
   }
@@ -753,6 +758,9 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
         if (authError) throw new Error('Code incorrect ou expiré. Demande un nouveau code.');
       });
       setOtpEmail('');
+      // Le code e-mail sert à l’inscription et à la récupération : le mot de passe est choisi juste après.
+      setPasswordRequired(true);
+      setOfferDeviceLock(true);
     } catch (caught) {
       verificationError = message(caught, 'Impossible de vérifier le code.');
     } finally {
@@ -760,6 +768,49 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     }
     await refreshAccount(true);
     if (verificationError) setError(verificationError);
+  }
+
+  async function signInWithPassword(email: string, password: string) {
+    if (authBusy.current) return;
+    refreshAttempt.current++;
+    authBusy.current = true;
+    publishBudgetAccess(undefined, null);
+    setPhase('loading');
+    setError('');
+    let failure = '';
+    try {
+      await withAccountTransition(async () => {
+        assertSession(null);
+        const { error: authError } = await cloudClient().auth.signInWithPassword({ email: email.trim(), password });
+        if (!authError) return;
+        if (authError.status === 429) throw new Error('Trop d’essais. Patiente quelques minutes avant de réessayer.');
+        if (isAuthRetryableFetchError(authError)) throw new Error('Connexion impossible. Vérifie ta connexion internet.');
+        throw new Error('E-mail ou mot de passe incorrect.');
+      });
+      setOfferDeviceLock(true);
+    } catch (caught) {
+      failure = message(caught, 'Connexion impossible.');
+    } finally {
+      authBusy.current = false;
+    }
+    await refreshAccount(true);
+    if (failure) setError(failure);
+  }
+
+  async function setPassword(password: string) {
+    const problem = passwordProblem(password);
+    if (problem) throw new Error(problem);
+    const userId = accountRef.current?.userId;
+    if (!userId) throw new Error('Connecte-toi d’abord.');
+    assertSession(userId);
+    const { error: authError } = await cloudClient().auth.updateUser({ password });
+    if (authError) {
+      throw new Error(authError.code === 'same_password' ? 'Choisis un mot de passe différent de l’ancien.'
+        : authError.code === 'weak_password' ? 'Ce mot de passe est trop facile à deviner. Choisis-en un autre.'
+          : isAuthRetryableFetchError(authError) ? 'Enregistrement impossible. Vérifie ta connexion internet.'
+            : 'Le mot de passe n’a pas pu être enregistré. Réessaie.');
+    }
+    setPasswordRequired(false);
   }
 
   async function unlock(passphrase: string, savedPassphrase = false) {
@@ -802,7 +853,6 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     const { key } = choice;
     await withAccountTransition(async () => {
       assertAssociation(choice);
-      if (managedBackupsEnabled && readLockState(localStorage).status !== 'valid') throw new Error('Configure d’abord le code de cet appareil.');
       if (readPendingVault(localStorage) !== null || await fetchVault(key.userId)) {
         throw new Error('La copie en ligne a changé. Retourne à ton compte avant de continuer.');
       }
@@ -946,6 +996,8 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     otpEmail, resetCode: () => { setOtpEmail(''); setError(''); },
     sendCode, verifyCode, refreshAccount, unlock, associate, syncNow: runSync, resolveConflict,
     signingUp, firstBudgetResult, initialVaultConfirmed, beginSignIn, finishAccountBudget, resumeVault,
+    passwordRequired: passwordRequired && account !== null, offerDeviceLock: offerDeviceLock && account !== null,
+    dismissDeviceLockOffer, signInWithPassword, setPassword,
     dismissFirstBudgetResult: () => setFirstBudgetResult(false),
     signOut, deleteAccount: () => signOut(true),
   };
