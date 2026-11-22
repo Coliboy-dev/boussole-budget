@@ -8,6 +8,7 @@ import { useApp } from '@/lib/context/AppContext';
 import { monthlySpendingTotals } from '@/lib/envelopes';
 import { fromCents, toCents } from '@/lib/money';
 import { envelopesOf, spendingsOf } from '@/lib/spending';
+import { jointAccountRoutes, useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
 
 interface Section {
   href: string;
@@ -92,6 +93,8 @@ function MonthBreakdown() {
 
 export default function BudgetPage() {
   const state = useApp();
+  const household = useHouseholdMovements();
+  const noJointAccount = !!household && state.hasJointAccount === false;
   const { summary, debts, childExpenses, goals, today } = state;
   const monthly = monthlySpendingTotals(spendingsOf(state), envelopesOf(state), today.slice(0, 7));
   const activeDebts = debts.filter((debt) => debt.status !== 'completed');
@@ -130,7 +133,7 @@ export default function BudgetPage() {
     <div className="space-y-4 px-4 py-4">
       <h1 className="text-xl font-bold text-gray-900">Budget</h1>
       <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-line bg-white">
-        {sections.map(({ href, label, icon, detail }) => (
+        {sections.filter(({ href }) => !noJointAccount || !jointAccountRoutes.has(href)).map(({ href, label, icon, detail }) => (
           <li key={href}>
             <Link href={href} className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-teal-50">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-800">
@@ -145,7 +148,7 @@ export default function BudgetPage() {
           </li>
         ))}
       </ul>
-      <MonthBreakdown />
+      {!noJointAccount && <MonthBreakdown />}
     </div>
   );
 }

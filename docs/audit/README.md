@@ -197,6 +197,16 @@ Une proposition ou modification du partenaire attend une confirmation du membre 
 
 L’accueil du Foyer affiche le disponible confirmé et le disponible avec les versements attendus. L’alerte F3 distingue une échéance dépendante d’un versement, un solde sous zéro et une réserve entamée. La recette navigateur couvre la saisie, la réception et la ligne miroir sur un écran de 390 px.
 
+## Avances et transferts du Foyer (P4, PR 4)
+
+Une dépense commune payée avec de l’argent personnel réduit ce qui reste dans l’enveloppe et compte dans l’analyse du Foyer. Elle laisse le solde commun intact. Sa ligne miroir débite le budget Personnel de son auteur et figure séparément dans l’analyse.
+
+Un transfert est composé d’une déclaration et de réponses chiffrées. Supabase fixe l’auteur par foyer et protège les éléments exclusifs. Le client vérifie l’auteur et l’empreinte de la révision avant de créditer le destinataire. Seule une confirmation déclenche un crédit. Un nouvel appareil retrouve une réponse confirmée après la suppression du compte de son auteur.
+
+Le réglage sans compte commun masque le solde, la projection et les versements au compte commun. Les dépenses saisies dans ce mode sont des avances. Les enveloppes, l’analyse, les objectifs et les transferts restent accessibles. Le récapitulatif montre les montants enregistrés par membre. Il n’affiche aucun solde entre personnes.
+
+Les tests F‑B couvrent les deux soldes personnels, la projection commune, l’analyse et l’idempotence des lignes miroir. Les tests F5 couvrent les réponses attribuées au bon membre, les révisions, l’exclusivité et l’historique local et distant. La recette Chromium utilise deux comptes fictifs à 390 px sur Supabase local.
+
 ## Hygiène technique et formulaires
 
 Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.

@@ -4,7 +4,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const kinds = [
   'settings', 'member', 'income', 'expense', 'debt', 'envelope', 'goal',
-  'spending', 'transfer', 'gap', 'occurrence', 'checkpoint', 'child-expense', 'merchant', 'debt-payment',
+  'spending', 'transfer', 'transfer-response', 'gap', 'occurrence', 'checkpoint', 'child-expense', 'merchant', 'debt-payment',
 ] as const;
 
 export type HouseholdRecordKind = (typeof kinds)[number];
@@ -23,6 +23,8 @@ export interface SequencedHouseholdRecord {
   seq: number;
   record: HouseholdRecord;
   updatedBy?: string | null;
+  authorMemberId?: string | null;
+  exclusive?: boolean;
 }
 
 export function householdOperationId({ kind, id }: RecordIdentity): string {
@@ -51,6 +53,7 @@ export interface EncryptedHouseholdRecord {
   iv: string;
   ciphertext: string;
   deleted: boolean;
+  exclusive?: boolean;
 }
 
 export async function derivedRecordId(householdId: string, key: string): Promise<string> {
@@ -63,6 +66,7 @@ export async function derivedRecordId(householdId: string, key: string): Promise
 }
 
 export function householdRecordId(householdId: string, kind: HouseholdRecordKind, engineId: string): Promise<string> {
+  if (kind === 'transfer-response') return Promise.resolve(engineId);
   return derivedRecordId(householdId, `${kind}|${engineId}`);
 }
 

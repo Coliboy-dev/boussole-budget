@@ -47,6 +47,7 @@ export default function DashboardPage() {
 function SavedBudgetDashboard() {
   const { active: household } = useHouseholdWorkspace();
   const state = useApp();
+  const joint = !household || state.hasJointAccount !== false;
   const {
     summary, advice, expenses, debts, balanceDate, storageBlocked, today, goals, lastBackupDate,
     recordScheduledPayment, undoScheduledPayment, lastAddedSpendingId,
@@ -61,7 +62,7 @@ function SavedBudgetDashboard() {
 
   const reminders = getUpcomingReminders(expenses, debts, [], today, summary.availableForecast.horizon);
   const hasAnnualProvision = summary.availableForecast.annualProvision > 0;
-  const attention = household && balanceDate ? householdAttention(state, today) : null;
+  const attention = household && joint && balanceDate ? householdAttention(state, today) : null;
 
   function pay(reminder: Reminder) {
     if ((reminder.type !== 'expense' && reminder.type !== 'debt') || !reminder.refId) return;
@@ -98,14 +99,15 @@ function SavedBudgetDashboard() {
         </AlertBanner>
       )}
 
-      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments(expenses, debts)}
+      {joint && <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments(expenses, debts)}
         hasRecordedBalance={Boolean(balanceDate)} inHousehold={household}>
         <BalanceRows />
-      </SummaryCard>
+      </SummaryCard>}
+      {!joint && <p className="text-sm text-slate-700">{householdCopy.noJointAccount}</p>}
 
       <div className="flex flex-wrap gap-2">
         <NewSpendingAction onOpen={() => { setPaymentFeedback(undefined); setPaymentError(''); }} />
-        {(!summary.emptyBudget || balanceDate) && (
+        {joint && (!summary.emptyBudget || balanceDate) && (
           <Link href="/simulation" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50">
             <Icon icon={Calculator} />
             Simuler un achat
@@ -125,8 +127,8 @@ function SavedBudgetDashboard() {
         </AlertBanner>
       )}
 
-      {household && <HouseholdContributionList />}
-      {!summary.emptyBudget && (
+      {household && joint && <HouseholdContributionList />}
+      {joint && !summary.emptyBudget && (
         <UpcomingDeadlines
           reminders={reminders}
           today={today}
@@ -136,7 +138,7 @@ function SavedBudgetDashboard() {
         />
       )}
       {!household && <BackupStatus today={today} lastBackupDate={lastBackupDate} hasBudget={!summary.emptyBudget || Boolean(balanceDate) || goals.length > 0} />}
-      {(!summary.emptyBudget || balanceDate) && (
+      {joint && (!summary.emptyBudget || balanceDate) && (
         <DailyBalanceCurve
           points={summary.availableForecast.dailyBalances}
           lowestDate={summary.availableForecast.date}

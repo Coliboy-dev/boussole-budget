@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { createClient } from '@supabase/supabase-js';
 import { POST } from '../../app/api/household-key/route.ts';
@@ -265,6 +265,115 @@ test('F-D · Deux appareils enregistrent la même échéance chiffrée et Supaba
   const cancelled = { ...paid, currentBalance: 500, expenses: [expense] };
   await send(personB, keys[1], diffHousehold(paid, cancelled, { rows: received }));
   assert.equal(materializeHousehold(await load(personA, keys[0])).currentBalance, 500);
+});
+
+test('F5 · Le serveur fixe l’auteur et garde le caractère exclusif d’origine', async () => {
+  const { household_id: h, member_id: author } = await createHousehold(personA);
+  const [{ member_id: partner }] = success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personA, h);
+  const regular = await encryptedRecord(key, h, 'spending', randomUUID(), { amount: 500 });
+  const declaration = await encryptedRecord(key, h, 'transfer', randomUUID(), { amount: 5000 });
+  const original = { ...declaration, exclusive: true, author_member_id: partner };
+  const input = { h, records: [{ ...regular, author_member_id: partner }, original] };
+  const receipts = success(await rpc(personA, 'upsert_records', input));
+  assert.deepEqual(success(await rpc(personA, 'upsert_records', input)), receipts);
+
+  const write = (actor, record, data) => rpc(actor, 'upsert_records', {
+    h, records: [{ ...record, ...data, write_id: randomUUID() }],
+  });
+  success(await write(personB, regular, { exclusive: true, author_member_id: partner }));
+  success(await write(personA, original, { exclusive: false, author_member_id: partner }));
+
+  const result = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
+  const shared = result.find(({ record_id }) => record_id === regular.record_id);
+  const exclusive = result.find(({ record_id }) => record_id === declaration.record_id);
+  assert.equal(shared.author_member_id, author);
+  assert.equal(shared.exclusive, false);
+  assert.equal(exclusive.author_member_id, author);
+  assert.equal(exclusive.exclusive, true);
+  assert.equal(Object.hasOwn(exclusive, 'amount'), false);
+  assert.equal((await decryptHouseholdRecord(key, h, exclusive)).data.amount, 5000);
+  assert.equal((await write(personB, original, { exclusive: false })).error?.code, '42501');
+});
+
+test('F5 · Une déclaration et une réponse exclusives résistent aux modifications et aux suppressions de l’autre membre', async () => {
+  const { household_id: h } = await createHousehold(personA);
+  success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personA, h);
+  const declaration = await encryptedRecord(key, h, 'transfer', randomUUID(), { amount: 5000 });
+  const reply = await encryptedRecord(key, h, 'transfer-response', randomUUID(), { status: 'confirmed' });
+  success(await rpc(personA, 'upsert_records', { h, records: [{ ...declaration, exclusive: true }] }));
+  success(await rpc(personB, 'upsert_records', { h, records: [{ ...reply, exclusive: true }] }));
+
+  for (const [actor, record] of [[personA, reply], [personB, declaration]]) {
+    for (const deleted of [false, true]) {
+      const result = await rpc(actor, 'upsert_records', {
+        h, records: [{ ...record, write_id: randomUUID(), exclusive: false, deleted }],
+      });
+      assert.equal(result.error?.code, '42501');
+    }
+  }
+  const rows = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
+  assert.deepEqual(rows.map(({ seq, deleted }) => ({ seq, deleted })), [
+    { seq: 1, deleted: false }, { seq: 2, deleted: false },
+  ]);
+});
+
+test('F5 · Un membre réinvité retrouve les droits sur son élément exclusif', async () => {
+  const { household_id: h } = await createHousehold(personA);
+  const [{ member_id: partner }] = success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personB, h);
+  const id = randomUUID();
+  const first = await encryptedRecord(key, h, 'transfer', id, { amount: 5000 });
+  success(await rpc(personB, 'upsert_records', { h, records: [{ ...first, exclusive: true }] }));
+
+  success(await rpc(personB, 'leave_household', { h }));
+  const edit = await encryptedRecord(key, h, 'transfer', id, { amount: 6000 });
+  assert.equal((await rpc(personB, 'upsert_records', { h, records: [edit] })).error?.code, '42501');
+
+  const [{ member_id: returned }] = success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  assert.equal(returned, partner);
+  success(await rpc(personB, 'upsert_records', { h, records: [edit] }));
+  const [row] = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
+  assert.equal(row.author_member_id, partner);
+  assert.equal(row.exclusive, true);
+  assert.equal((await decryptHouseholdRecord(key, h, row)).data.amount, 6000);
+});
+
+test('F5 · La réponse d’un compte supprimé reste attribuable et figée pour un nouveau lecteur', async () => {
+  const sam = await person();
+  const { household_id: h, member_id: marc } = await createHousehold(personA);
+  const [{ member_id: recipient }] = success(await rpc(sam, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(sam, h);
+  const transferId = randomUUID();
+  const declarationData = {
+    transferId, fromMemberId: marc, toMemberId: recipient, amount: 5000, date: '2026-11-21', revision: randomUUID(),
+  };
+  const declaration = await encryptedRecord(key, h, 'transfer', transferId, declarationData);
+  const declarationHash = createHash('sha256').update(JSON.stringify(declarationData)).digest('hex');
+  const reply = await encryptedRecord(key, h, 'transfer-response', randomUUID(), {
+    transferId, declarationHash, status: 'confirmed',
+  });
+  success(await rpc(personA, 'upsert_records', { h, records: [{ ...declaration, exclusive: true }] }));
+  success(await rpc(sam, 'upsert_records', { h, records: [{ ...reply, exclusive: true }] }));
+  success(await rpc(sam, 'delete_my_account'));
+
+  const fresh = client(publicKey);
+  success(await fresh.auth.setSession({
+    access_token: personA.token,
+    refresh_token: success(await personA.api.auth.getSession()).session.refresh_token,
+  }));
+  const rows = success(await fresh.rpc('pull_records', { h, after_seq: 0 }));
+  const retained = rows.find(({ record_id }) => record_id === reply.record_id);
+  assert.equal(retained.created_by, null);
+  assert.equal(retained.author_member_id, recipient);
+  assert.equal(retained.ciphertext, reply.ciphertext);
+  assert.deepEqual(success(await fresh.from('household_members').select('member_id').eq('household_id', h)), [{ member_id: marc }]);
+
+  const writing = await fresh.rpc('upsert_records', {
+    h, records: [{ ...reply, write_id: randomUUID(), deleted: true, author_member_id: marc }],
+  });
+  assert.equal(writing.error?.code, '42501');
 });
 
 test('F-E · La suppression d’un compte retire son profil et conserve le budget de l’autre membre', async () => {

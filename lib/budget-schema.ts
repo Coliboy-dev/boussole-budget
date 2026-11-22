@@ -126,6 +126,8 @@ function budgetCheck(unit: Unit): Check {
 
   return object({
     currentBalance: amount(unit, true),
+    hasJointAccount: optional(flag),
+    retiredHouseholdMovements: optional(record(nonNegativeInteger)),
     balanceDate: optional(date),
     balanceRevision: optional(nonNegativeInteger),
     envelopes: optional((value, path) => {
@@ -136,8 +138,10 @@ function budgetCheck(unit: Unit): Check {
       }
     }),
     spendings: optional(entities({
-      date, amount: spendingAmount, category: spendingCategory, label: optional(text),
+      date, amount: spendingAmount, category: oneOf('groceries', 'restaurants', 'transport', 'health', 'leisure', 'clothing', 'home', 'children', 'cash', 'other', 'household'), label: optional(text),
       balanceIncluded: flag, debited: flag, balanceRevision: nonNegativeInteger,
+      paidFrom: optional(oneOf('personal')), paidBy: optional(identifier),
+      linkedRecordId: optional(identifier), linkedRecordSeq: optional(nonNegativeInteger),
     })),
     balanceGaps: optional(entities({ fromDate: date, date, amount: amount(unit, true) })),
     merchantCategories: optional(record(spendingCategory)),
@@ -154,12 +158,15 @@ function budgetCheck(unit: Unit): Check {
     incomes: entities({
       ...schedule,
       label: text,
-      type: oneOf('mutual_insurance', 'salary', 'allocation', 'alimony', 'freelance', 'other', 'household_contribution'),
+      type: oneOf('mutual_insurance', 'salary', 'allocation', 'alimony', 'freelance', 'other', 'household_contribution', 'household_transfer'),
       amount: money,
       frequency,
       expectedDate: optional(date),
       isConfirmed: flag,
       contributionMemberId: optional(identifier),
+      linkedRecordId: optional(identifier), linkedRecordSeq: optional(nonNegativeInteger),
+      linkedRevision: optional(identifier),
+      balanceRevision: optional(nonNegativeInteger),
       notes: optional(text),
     }),
     expenses: entities({
