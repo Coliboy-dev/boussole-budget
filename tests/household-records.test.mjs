@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { buildInvitationLink, createInvitationToken } from '../lib/household-invitations.ts';
-import { decryptHouseholdRecord, derivedRecordId, encryptHouseholdRecord } from '../lib/household-records.ts';
+import { decryptHouseholdRecord, derivedRecordId, encryptHouseholdRecord, householdRecordId } from '../lib/household-records.ts';
 
 const householdId = 'af55f7be-d503-4d48-9bf3-5a251237dcd0';
 const otherId = '96eaeed9-540c-4971-9297-9d72c69a501a';
@@ -17,6 +17,20 @@ test('Les identifiants dérivés sont déterministes et propres au foyer et à l
   assert.equal(await derivedRecordId(householdId, 'settings'), 'a18aa395-3b2c-5b05-82af-84a5817336f9');
   assert.equal(await derivedRecordId(householdId, `member|${otherId}`), 'ba518c37-17ff-5a21-974f-913eb831b00e');
   assert.notEqual(await derivedRecordId(householdId, 'settings'), await derivedRecordId(otherId, 'settings'));
+});
+
+test('L’identifiant du moteur reste dans le contenu chiffré et le profil garde l’UUID attendu par SQL', async () => {
+  assert.equal(await householdRecordId(householdId, 'member', otherId), 'ba518c37-17ff-5a21-974f-913eb831b00e');
+
+  const key = await testKey();
+  const engineId = 'gap-2026-11-22';
+  const recordId = await householdRecordId(householdId, 'gap', engineId);
+  assert.equal(recordId, await derivedRecordId(householdId, `gap|${engineId}`));
+  assert.notEqual(recordId, await householdRecordId(householdId, 'expense', engineId));
+  const row = { kind: 'gap', id: engineId, data: { amount: 2000, fromDate: '2026-11-21', date: '2026-11-22' } };
+  const encrypted = await encryptHouseholdRecord(key, { ...scope, recordId }, row);
+  assert.equal(encrypted.record_id, recordId);
+  assert.deepEqual(await decryptHouseholdRecord(key, householdId, encrypted), row);
 });
 
 test('Le serveur reçoit le bloc chiffré et ses métadonnées, les éléments restent lisibles avec la clé', async () => {
@@ -52,6 +66,18 @@ test('Une suppression conserve seulement le type et l’identifiant de l’élé
   assert.equal(encrypted.deleted, true);
   assert.deepEqual(await decryptHouseholdRecord(key, householdId, encrypted), tombstone);
   await assert.rejects(decryptHouseholdRecord(key, householdId, { ...encrypted, deleted: false }));
+});
+
+test('L’effet financier voyage chiffré avec la version de l’opération', async () => {
+  const key = await testKey();
+  const operation = { ...spending, balanceEffect: { checkpointId: householdId, deltaCents: -4200 } };
+  const encrypted = await encryptHouseholdRecord(key, scope, operation);
+  assert.equal(Object.hasOwn(encrypted, 'balanceEffect'), false);
+  assert.deepEqual(await decryptHouseholdRecord(key, householdId, encrypted), operation);
+
+  const tombstone = { kind: spending.kind, id: spending.id, balanceEffect: operation.balanceEffect };
+  assert.deepEqual(await decryptHouseholdRecord(key, householdId, await encryptHouseholdRecord(key, scope, tombstone)),
+    { kind: spending.kind, id: spending.id });
 });
 
 test('Le lien ne contient que l’identifiant d’invitation et le jeton aléatoire', async () => {

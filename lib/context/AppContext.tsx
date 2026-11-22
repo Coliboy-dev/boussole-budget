@@ -12,13 +12,11 @@ import type {
   BudgetSummary,
   AdviceItem,
   Envelope,
-  Spending,
 } from '@/lib/types';
 import { calculateBudgetSummary } from '@/lib/budget-calculations';
 import { generateAdvice } from '@/lib/advice-engine';
 import {
   LEGACY_BUDGET_STORAGE_KEY,
-  cancelExpenseOccurrence,
   deserializeStoredBudget,
   emptyBudgetState,
   migrateLegacyBudget,
@@ -34,29 +32,11 @@ import {
 } from '@/lib/budget-state';
 import { todayInBrussels } from '@/lib/local-date';
 import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
-import { updateBalance, type SettledOccurrence } from '@/lib/balance-update';
+import type { SettledOccurrence } from '@/lib/balance-update';
 import { canAccessBudget, useBudgetAccess } from '@/lib/budget-access';
 import { readBudgetOwner, readStoredSessionUserId } from '@/lib/account-guard';
-import {
-  addSpending as insertSpending,
-  deleteEnvelope as removeEnvelope,
-  deleteSpending as removeSpending,
-  envelopesOf,
-  replaceExpenseWithEnvelope as replaceExpense,
-  spendingsOf,
-  updateSpending as editSpending,
-  upsertEnvelope,
-} from '@/lib/spending';
-
-type SpendingInput = Omit<Spending, 'id' | 'debited' | 'balanceRevision'>;
-type SpendingChanges = Partial<Pick<Spending, 'date' | 'amount' | 'category' | 'label'>>;
-
-type RuntimeState = AppState & {
-  lastBackupDate: string | null;
-  storageStatus: 'loading' | 'fresh' | 'ready' | 'unreadable' | 'unsaved';
-  storageRevision: number;
-  lastAddedSpendingId?: string;
-};
+import { deleteSpending as removeSpending, envelopesOf, spendingsOf } from '@/lib/spending';
+import { reduceBudget, type AppAction, type RuntimeState, type SpendingChanges, type SpendingInput } from '@/lib/budget-reducer';
 
 type BudgetPersistence = {
   snapshot: BudgetStorageSnapshot;
@@ -65,7 +45,7 @@ type BudgetPersistence = {
   needsMigration: boolean;
 };
 
-type ScheduledPayment = Pick<Payment, 'id' | 'dueDate'> & { type: 'expense' | 'debt' };
+export type ScheduledPayment = Pick<Payment, 'id' | 'dueDate'> & { type: 'expense' | 'debt' };
 
 function subscribeToCalendar(listener: () => void): () => void {
   const timer = window.setInterval(listener, 60_000);
@@ -78,163 +58,6 @@ function subscribeToCalendar(listener: () => void): () => void {
 
 function serverDate(): string {
   return '2026-05-29';
-}
-
-type AppAction =
-  | { type: 'HYDRATE'; payload: RuntimeState }
-  | { type: 'SAVE_FAILED'; revision: number }
-  | { type: 'SET_BALANCE'; payload: { amount: number; today: string; settled?: SettledOccurrence[] } }
-  | { type: 'UPDATE_PROFILE'; payload: Partial<UserProfile> }
-  | { type: 'ADD_INCOME'; payload: Omit<Income, 'id'> }
-  | { type: 'UPDATE_INCOME'; payload: { id: string; data: Partial<Income> } }
-  | { type: 'DELETE_INCOME'; payload: string }
-  | { type: 'ADD_EXPENSE'; payload: Omit<Expense, 'id'> }
-  | { type: 'UPDATE_EXPENSE'; payload: { id: string; data: Partial<Expense> } }
-  | { type: 'DELETE_EXPENSE'; payload: string }
-  | { type: 'ADD_DEBT'; payload: Omit<Debt, 'id'> }
-  | { type: 'UPDATE_DEBT'; payload: { id: string; data: Partial<Debt> } }
-  | { type: 'DELETE_DEBT'; payload: string }
-  | { type: 'ADD_CHILD_EXPENSE'; payload: Omit<ChildExpense, 'id'> }
-  | { type: 'UPDATE_CHILD_EXPENSE'; payload: { id: string; data: Partial<ChildExpense> } }
-  | { type: 'DELETE_CHILD_EXPENSE'; payload: string }
-  | { type: 'ADD_GOAL'; payload: Omit<Goal, 'id'> }
-  | { type: 'UPDATE_GOAL'; payload: { id: string; data: Partial<Goal> } }
-  | { type: 'DELETE_GOAL'; payload: string }
-  | { type: 'UPDATE_MEDIATION'; payload: Partial<MediationFile> }
-  | { type: 'ADD_SPENDING'; spending: SpendingInput & { id: string }; today: string }
-  | { type: 'UPDATE_SPENDING'; id: string; changes: SpendingChanges; today: string }
-  | { type: 'DELETE_SPENDING'; id: string }
-  | { type: 'UPSERT_ENVELOPE'; envelope: Envelope }
-  | { type: 'DELETE_ENVELOPE'; id: string }
-  | { type: 'REPLACE_EXPENSE_WITH_ENVELOPE'; expenseId: string; envelope: Envelope }
-  | { type: 'RECORD_PAYMENT'; payload: Payment }
-  | { type: 'CANCEL_EXPENSE_OCCURRENCE'; payload: { id: string; dueDate: string; today: string } };
-
-function uid(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function reduceBudget(state: RuntimeState, action: AppAction): RuntimeState {
-  if (action.type === 'HYDRATE') return action.payload;
-  if (state.storageStatus === 'loading') return state;
-
-  // Saisir des données depuis un autre écran démarre également le budget.
-  if (state.storageStatus === 'fresh') state = { ...state, storageStatus: 'ready' };
-
-  switch (action.type) {
-    case 'SAVE_FAILED':
-      return action.revision === state.storageRevision ? { ...state, storageStatus: 'unsaved' } : state;
-    case 'SET_BALANCE':
-      return { ...state, ...updateBalance(state, action.payload) };
-    case 'UPDATE_PROFILE':
-      return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
-    case 'ADD_INCOME':
-      return { ...state, incomes: [...state.incomes, { ...action.payload, id: uid() }] };
-    case 'UPDATE_INCOME':
-      return {
-        ...state,
-        incomes: state.incomes.map((i) =>
-          i.id === action.payload.id ? { ...i, ...action.payload.data } : i
-        ),
-      };
-    case 'DELETE_INCOME':
-      return { ...state, incomes: state.incomes.filter((i) => i.id !== action.payload) };
-    case 'ADD_EXPENSE':
-      return {
-        ...state,
-        expenses: [...state.expenses, { trackedFrom: action.payload.dueDate, ...action.payload, id: uid() }],
-      };
-    case 'UPDATE_EXPENSE':
-      return {
-        ...state,
-        expenses: state.expenses.map((e) =>
-          e.id === action.payload.id ? {
-            ...e,
-            ...action.payload.data,
-            trackedFrom: action.payload.data.dueDate && action.payload.data.dueDate !== e.dueDate
-              ? action.payload.data.dueDate
-              : e.trackedFrom,
-          } : e
-        ),
-      };
-    case 'DELETE_EXPENSE':
-      return { ...state, expenses: state.expenses.filter((e) => e.id !== action.payload) };
-    case 'ADD_DEBT':
-      return {
-        ...state,
-        debts: [...state.debts, { trackedFrom: action.payload.nextDueDate, ...action.payload, id: uid() }],
-      };
-    case 'UPDATE_DEBT':
-      return {
-        ...state,
-        debts: state.debts.map((d) =>
-          d.id === action.payload.id ? {
-            ...d,
-            ...action.payload.data,
-            trackedFrom: action.payload.data.nextDueDate && action.payload.data.nextDueDate !== d.nextDueDate
-              ? action.payload.data.nextDueDate
-              : d.trackedFrom,
-          } : d
-        ),
-      };
-    case 'DELETE_DEBT':
-      return { ...state, debts: state.debts.filter((d) => d.id !== action.payload) };
-    case 'ADD_CHILD_EXPENSE':
-      return { ...state, childExpenses: [...state.childExpenses, { ...action.payload, id: uid() }] };
-    case 'UPDATE_CHILD_EXPENSE':
-      return {
-        ...state,
-        childExpenses: state.childExpenses.map((c) =>
-          c.id === action.payload.id ? { ...c, ...action.payload.data } : c
-        ),
-      };
-    case 'DELETE_CHILD_EXPENSE':
-      return {
-        ...state,
-        childExpenses: state.childExpenses.filter((c) => c.id !== action.payload),
-      };
-    case 'ADD_GOAL':
-      return { ...state, goals: [...state.goals, { ...action.payload, id: uid() }] };
-    case 'UPDATE_GOAL':
-      return {
-        ...state,
-        goals: state.goals.map((g) =>
-          g.id === action.payload.id ? { ...g, ...action.payload.data } : g
-        ),
-      };
-    case 'DELETE_GOAL':
-      return { ...state, goals: state.goals.filter((g) => g.id !== action.payload) };
-    case 'UPDATE_MEDIATION':
-      return { ...state, mediationFile: { ...state.mediationFile, ...action.payload } };
-    case 'ADD_SPENDING': {
-      const next = insertSpending(state, action.spending, action.today);
-      return next === state ? state : { ...next, lastAddedSpendingId: action.spending.id };
-    }
-    case 'UPDATE_SPENDING':
-      return editSpending(state, action.id, action.changes, action.today);
-    case 'DELETE_SPENDING':
-      return removeSpending(state, action.id);
-    case 'UPSERT_ENVELOPE':
-      return upsertEnvelope(state, action.envelope);
-    case 'DELETE_ENVELOPE':
-      return removeEnvelope(state, action.id);
-    case 'REPLACE_EXPENSE_WITH_ENVELOPE': {
-      const { envelope, expenseId } = action;
-      const replaced = replaceExpense(state, expenseId, envelope.category, envelope.monthlyAmount);
-      if (replaced === state) return state;
-      const next = upsertEnvelope(replaced, envelope);
-      return next === replaced ? state : next;
-    }
-    case 'RECORD_PAYMENT':
-      return { ...state, ...recordPayment(state, action.payload) };
-    case 'CANCEL_EXPENSE_OCCURRENCE':
-      return {
-        ...state,
-        ...cancelExpenseOccurrence(state, action.payload.id, action.payload.dueDate, action.payload.today),
-      };
-    default:
-      return state;
-  }
 }
 
 function appReducer(state: RuntimeState, action: AppAction): RuntimeState {
@@ -299,7 +122,51 @@ export interface AppContextType extends AppState {
   cancelExpenseOccurrence: (id: string, dueDate: string) => void;
 }
 
-const AppContext = createContext<AppContextType | null>(null);
+type BudgetCommands = Pick<AppContextType,
+  'setBalance' | 'updateProfile' | 'addIncome' | 'updateIncome' | 'deleteIncome' | 'addExpense' | 'updateExpense' | 'deleteExpense' | 'addDebt' | 'updateDebt' | 'deleteDebt' | 'addChildExpense' | 'updateChildExpense' | 'deleteChildExpense' | 'addGoal' | 'updateGoal' | 'deleteGoal' | 'updateMediation' | 'recordPayment' | 'addSpending' | 'updateSpending' | 'deleteSpending' | 'saveEnvelope' | 'deleteEnvelope' | 'replaceExpenseWithEnvelope' | 'cancelExpenseOccurrence'
+>;
+
+export function budgetCommands(dispatch: (action: AppAction) => void, today: string): BudgetCommands {
+  return {
+    setBalance: (amount, settled) => dispatch({ type: 'SET_BALANCE', payload: { amount, today, settled } }),
+    updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
+    addIncome: (income) => dispatch({ type: 'ADD_INCOME', payload: income }),
+    updateIncome: (id, data) => dispatch({ type: 'UPDATE_INCOME', payload: { id, data } }),
+    deleteIncome: (id) => dispatch({ type: 'DELETE_INCOME', payload: id }),
+    addExpense: (expense) => dispatch({ type: 'ADD_EXPENSE', payload: expense }),
+    updateExpense: (id, data) => dispatch({ type: 'UPDATE_EXPENSE', payload: { id, data } }),
+    deleteExpense: (id) => dispatch({ type: 'DELETE_EXPENSE', payload: id }),
+    addDebt: (debt) => dispatch({ type: 'ADD_DEBT', payload: debt }),
+    updateDebt: (id, data) => dispatch({ type: 'UPDATE_DEBT', payload: { id, data } }),
+    deleteDebt: (id) => dispatch({ type: 'DELETE_DEBT', payload: id }),
+    addChildExpense: (expense) => dispatch({ type: 'ADD_CHILD_EXPENSE', payload: expense }),
+    updateChildExpense: (id, data) =>
+      dispatch({ type: 'UPDATE_CHILD_EXPENSE', payload: { id, data } }),
+    deleteChildExpense: (id) => dispatch({ type: 'DELETE_CHILD_EXPENSE', payload: id }),
+    addGoal: (goal) => dispatch({ type: 'ADD_GOAL', payload: goal }),
+    updateGoal: (id, data) => dispatch({ type: 'UPDATE_GOAL', payload: { id, data } }),
+    deleteGoal: (id) => dispatch({ type: 'DELETE_GOAL', payload: id }),
+    updateMediation: (data) => dispatch({ type: 'UPDATE_MEDIATION', payload: data }),
+    recordPayment: (payment) => dispatch({ type: 'RECORD_PAYMENT', payload: { ...payment, today } }),
+    addSpending: (spending) => {
+      const id = crypto.randomUUID();
+      dispatch({ type: 'ADD_SPENDING', spending: { ...spending, id }, today });
+      return id;
+    },
+    updateSpending: (id, changes) => dispatch({ type: 'UPDATE_SPENDING', id, changes, today }),
+    deleteSpending: (id) => dispatch({ type: 'DELETE_SPENDING', id }),
+    saveEnvelope: (envelope) => dispatch({
+      type: 'UPSERT_ENVELOPE', envelope: { ...envelope, id: envelope.id ?? crypto.randomUUID() },
+    }),
+    deleteEnvelope: (id) => dispatch({ type: 'DELETE_ENVELOPE', id }),
+    replaceExpenseWithEnvelope: (expenseId, envelope) => dispatch({
+      type: 'REPLACE_EXPENSE_WITH_ENVELOPE', expenseId, envelope: { ...envelope, id: envelope.id ?? crypto.randomUUID() },
+    }),
+    cancelExpenseOccurrence: (id, dueDate) => dispatch({ type: 'CANCEL_EXPENSE_OCCURRENCE', payload: { id, dueDate, today } }),
+  };
+}
+
+export const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatchInternal] = useReducer(appReducer, {
@@ -523,46 +390,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     finishOnboarding,
     saveProfileSettings,
     clearBudget,
-    setBalance: (amount, settled) => dispatch({ type: 'SET_BALANCE', payload: { amount, today, settled } }),
-    updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
-    addIncome: (income) => dispatch({ type: 'ADD_INCOME', payload: income }),
-    updateIncome: (id, data) => dispatch({ type: 'UPDATE_INCOME', payload: { id, data } }),
-    deleteIncome: (id) => dispatch({ type: 'DELETE_INCOME', payload: id }),
-    addExpense: (expense) => dispatch({ type: 'ADD_EXPENSE', payload: expense }),
-    updateExpense: (id, data) => dispatch({ type: 'UPDATE_EXPENSE', payload: { id, data } }),
-    deleteExpense: (id) => dispatch({ type: 'DELETE_EXPENSE', payload: id }),
-    addDebt: (debt) => dispatch({ type: 'ADD_DEBT', payload: debt }),
-    updateDebt: (id, data) => dispatch({ type: 'UPDATE_DEBT', payload: { id, data } }),
-    deleteDebt: (id) => dispatch({ type: 'DELETE_DEBT', payload: id }),
-    addChildExpense: (expense) => dispatch({ type: 'ADD_CHILD_EXPENSE', payload: expense }),
-    updateChildExpense: (id, data) =>
-      dispatch({ type: 'UPDATE_CHILD_EXPENSE', payload: { id, data } }),
-    deleteChildExpense: (id) => dispatch({ type: 'DELETE_CHILD_EXPENSE', payload: id }),
-    addGoal: (goal) => dispatch({ type: 'ADD_GOAL', payload: goal }),
-    updateGoal: (id, data) => dispatch({ type: 'UPDATE_GOAL', payload: { id, data } }),
-    deleteGoal: (id) => dispatch({ type: 'DELETE_GOAL', payload: id }),
-    updateMediation: (data) => dispatch({ type: 'UPDATE_MEDIATION', payload: data }),
-    recordPayment: (payment) => dispatch({ type: 'RECORD_PAYMENT', payload: { ...payment, today } }),
+    // eslint-disable-next-line react-hooks/refs -- Cette fonction construit uniquement les gestionnaires d’événements.
+    ...budgetCommands(dispatch, today),
     recordScheduledPayment,
     recordUnscheduledDebtPayment: saveUnscheduledDebtPayment,
     undoScheduledPayment,
     lastAddedSpendingId,
-    addSpending: (spending) => {
-      const id = crypto.randomUUID();
-      dispatch({ type: 'ADD_SPENDING', spending: { ...spending, id }, today });
-      return id;
-    },
-    updateSpending: (id, changes) => dispatch({ type: 'UPDATE_SPENDING', id, changes, today }),
-    deleteSpending: (id) => dispatch({ type: 'DELETE_SPENDING', id }),
     undoLastSpending,
-    saveEnvelope: (envelope) => dispatch({
-      type: 'UPSERT_ENVELOPE', envelope: { ...envelope, id: envelope.id ?? crypto.randomUUID() },
-    }),
-    deleteEnvelope: (id) => dispatch({ type: 'DELETE_ENVELOPE', id }),
-    replaceExpenseWithEnvelope: (expenseId, envelope) => dispatch({
-      type: 'REPLACE_EXPENSE_WITH_ENVELOPE', expenseId, envelope: { ...envelope, id: envelope.id ?? crypto.randomUUID() },
-    }),
-    cancelExpenseOccurrence: (id, dueDate) => dispatch({ type: 'CANCEL_EXPENSE_OCCURRENCE', payload: { id, dueDate, today } }),
   };
 
   return <AppContext.Provider value={ctx}>{children}</AppContext.Provider>;

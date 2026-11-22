@@ -4,7 +4,10 @@ import { after, before, test } from 'node:test';
 import { createClient } from '@supabase/supabase-js';
 import { POST } from '../../app/api/household-key/route.ts';
 import { createInvitationToken } from '../../lib/household-invitations.ts';
-import { decryptHouseholdRecord, derivedRecordId, encryptHouseholdRecord } from '../../lib/household-records.ts';
+import { decryptHouseholdRecord, encryptHouseholdRecord, householdRecordId } from '../../lib/household-records.ts';
+import { recordPayment } from '../../lib/budget-state.ts';
+import { diffHousehold } from '../../lib/household-diff.ts';
+import { materializeHousehold } from '../../lib/household-materialize.ts';
 
 const url = new URL(process.env.SUPABASE_LOCAL_URL ?? 'http://127.0.0.1:54321');
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname), 'Utilise une instance Supabase locale.');
@@ -53,6 +56,11 @@ after(async () => {
 
 const rpc = (actor, name, args) => actor.api.rpc(name, args);
 
+test('La version de synchronisation n’est disponible qu’après la migration des reçus', async () => {
+  assert.equal(success(await rpc(personA, 'household_sync_version')), 2);
+  assert.ok((await anonymous.rpc('household_sync_version')).error);
+});
+
 async function createHousehold(actor) {
   const [row] = success(await rpc(actor, 'create_household'));
   return row;
@@ -80,8 +88,11 @@ async function importKey(actor, householdId) {
   return crypto.subtle.importKey('raw', Buffer.from(material, 'base64'), 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
-async function encryptedRecord(key, householdId, kind, id, data) {
-  return encryptHouseholdRecord(key, { householdId, recordId: id, keyVersion: 1 }, { kind, id, data });
+async function encryptedRecord(key, householdId, kind, id, data, recordId = id) {
+  return {
+    ...await encryptHouseholdRecord(key, { householdId, recordId, keyVersion: 1 }, { kind, id, data }),
+    write_id: randomUUID(),
+  };
 }
 
 test('F-E · Seuls les membres actifs lisent et écrivent les éléments et obtiennent la clé', async () => {
@@ -183,6 +194,79 @@ test('Les lots suivent leur ordre, les écritures incompatibles sont annulées e
   assert.equal(edited.updated_by, personB.id);
 });
 
+test('F-D · Le renvoi de A reçoit son numéro d’origine après une modification de B', async () => {
+  const { household_id: h } = await createHousehold(personA);
+  success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personA, h);
+  const id = 'loyer-ancien-identifiant';
+  const recordId = await householdRecordId(h, 'expense', id);
+  const first = await encryptedRecord(key, h, 'expense', id, { amount: 95000 }, recordId);
+  const second = await encryptedRecord(key, h, 'expense', id, { amount: 92000 }, recordId);
+  const original = success(await rpc(personA, 'upsert_records', { h, records: [first] }));
+  assert.deepEqual(original, [{ record_id: first.record_id, seq: 1 }]);
+  assert.deepEqual(success(await rpc(personB, 'upsert_records', { h, records: [second] })), [
+    { record_id: second.record_id, seq: 2 },
+  ]);
+  assert.deepEqual(success(await rpc(personA, 'upsert_records', { h, records: [first] })), original);
+
+  const [latest] = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
+  assert.equal(latest.updated_by, personB.id);
+  assert.deepEqual(await decryptHouseholdRecord(key, h, latest), { kind: 'expense', id, data: { amount: 92000 } });
+  assert.deepEqual(success(await rpc(personA, 'pull_records', { h, after_seq: 2 })), []);
+
+  const another = await encryptedRecord(key, h, 'expense', id, { amount: 90000 }, recordId);
+  assert.deepEqual(success(await rpc(personA, 'upsert_records', { h, records: [another] })), [
+    { record_id: another.record_id, seq: 3 },
+  ]);
+  for (const api of [personA.api, anonymous, admin]) assert.ok((await api.from('household_writes').select('*')).error);
+});
+
+test('F-D · Deux appareils enregistrent la même échéance chiffrée et Supabase conserve un seul débit', async () => {
+  const { household_id: h } = await createHousehold(personA);
+  success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const keys = await Promise.all([personA, personB].map(actor => importKey(actor, h)));
+  const date = '2026-11-22';
+  const checkpointId = randomUUID();
+  const expense = {
+    id: 'loyer', label: 'Loyer', amount: 100, frequency: 'monthly', category: 'rent',
+    isPaid: false, isRecurring: true, dueDate: date,
+  };
+  const payment = { type: 'expense', id: expense.id, dueDate: date, today: date, balanceIncludesPayment: false };
+
+  async function send(actor, key, changes) {
+    const records = await Promise.all(changes.map(async record => {
+      const recordId = await householdRecordId(h, record.kind, record.id);
+      return { ...await encryptHouseholdRecord(key, { householdId: h, recordId, keyVersion: 1 }, record), write_id: randomUUID() };
+    }));
+    return success(await rpc(actor, 'upsert_records', { h, records }));
+  }
+
+  async function load(actor, key) {
+    const rows = success(await rpc(actor, 'pull_records', { h, after_seq: 0 }));
+    return Promise.all(rows.map(async row => ({ seq: row.seq, record: await decryptHouseholdRecord(key, h, row) })));
+  }
+
+  const empty = materializeHousehold([]);
+  const initial = { ...empty, currentBalance: 500, balanceDate: date, balanceRevision: 1, expenses: [expense] };
+  await send(personA, keys[0], diffHousehold(empty, initial, { rows: [], newCheckpointId: checkpointId }));
+  const offlineChanges = await Promise.all([personA, personB].map(async (actor, index) => {
+    const rows = await load(actor, keys[index]);
+    const before = materializeHousehold(rows);
+    return diffHousehold(before, recordPayment(before, payment), { rows, paymentDate: date });
+  }));
+
+  await Promise.all([personA, personB].map((actor, index) => send(actor, keys[index], offlineChanges[index])));
+  const received = await load(personB, keys[1]);
+  assert.equal(received.filter(({ record }) => record.kind === 'occurrence').length, 1);
+  assert.equal(materializeHousehold(received).currentBalance, 400);
+  assert.equal(materializeHousehold(received.toReversed()).currentBalance, 400);
+
+  const paid = materializeHousehold(received);
+  const cancelled = { ...paid, currentBalance: 500, expenses: [expense] };
+  await send(personB, keys[1], diffHousehold(paid, cancelled, { rows: received }));
+  assert.equal(materializeHousehold(await load(personA, keys[0])).currentBalance, 500);
+});
+
 test('F-E · La suppression d’un compte retire son profil et conserve le budget de l’autre membre', async () => {
   const { household_id: h, member_id: memberA } = await createHousehold(personD);
   const { household_id: onlyMember } = await createHousehold(personD);
@@ -190,10 +274,10 @@ test('F-E · La suppression d’un compte retire son profil et conserve le budge
   const key = await importKey(personD, h);
   const one = await encryptedRecord(key, h, 'spending', randomUUID(), { amount: 500 });
   const two = await encryptedRecord(key, h, 'spending', randomUUID(), { amount: 800 });
-  const profileId = await derivedRecordId(h, `member|${memberA}`);
-  const profile = await encryptedRecord(key, h, 'member', profileId, { memberId: memberA, name: 'Sam' });
+  const profileId = await householdRecordId(h, 'member', memberA);
+  const profile = await encryptedRecord(key, h, 'member', memberA, { memberId: memberA, name: 'Sam' }, profileId);
   success(await rpc(personB, 'upsert_records', { h, records: [two] }));
-  success(await rpc(personD, 'upsert_records', { h, records: [one, two, profile] }));
+  success(await rpc(personD, 'upsert_records', { h, records: [one, { ...two, write_id: randomUUID() }, profile] }));
   success(await rpc(personD, 'delete_my_account'));
   assert.equal((await requestKey(personD, h)).status, 401);
   assert.deepEqual(success(await admin.from('households').select('id').eq('id', onlyMember)), []);

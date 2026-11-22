@@ -80,7 +80,7 @@ export const emptyBudgetState: AppState = {
   documents: [],
 };
 
-function convertAmounts(state: AppState, convert: (amount: number) => number): AppState {
+export function convertAmounts(state: AppState, convert: (amount: number) => number): AppState {
   const plan = state.mediationFile.proposedPlan;
   const envelopes = envelopesOf(state);
   const spendings = spendingsOf(state);

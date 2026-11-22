@@ -4,12 +4,39 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const kinds = [
   'settings', 'member', 'income', 'expense', 'debt', 'envelope', 'goal',
-  'spending', 'transfer', 'gap', 'occurrence', 'checkpoint', 'effect',
+  'spending', 'transfer', 'gap', 'occurrence', 'checkpoint', 'child-expense', 'merchant', 'debt-payment',
 ] as const;
 
 export type HouseholdRecordKind = (typeof kinds)[number];
 type RecordIdentity = { kind: HouseholdRecordKind; id: string };
-export type HouseholdRecord = RecordIdentity & ({ data: unknown } | { data?: never });
+export interface HouseholdBalanceEffect {
+  checkpointId: string;
+  deltaCents: number;
+}
+
+export type HouseholdRecord = RecordIdentity & {
+  data?: unknown;
+  balanceEffect?: HouseholdBalanceEffect;
+};
+
+export interface SequencedHouseholdRecord {
+  seq: number;
+  record: HouseholdRecord;
+}
+
+export function householdOperationId({ kind, id }: RecordIdentity): string {
+  return `${kind}|${id}`;
+}
+
+export function latestHouseholdRecords(rows: readonly SequencedHouseholdRecord[]): SequencedHouseholdRecord[] {
+  const latest = new Map<string, SequencedHouseholdRecord>();
+  for (const row of rows) {
+    const id = householdOperationId(row.record);
+    const previous = latest.get(id);
+    if (!previous || row.seq > previous.seq) latest.set(id, row);
+  }
+  return [...latest.values()].sort((a, b) => a.seq - b.seq);
+}
 
 interface HouseholdRecordScope {
   householdId: string;
@@ -34,6 +61,10 @@ export async function derivedRecordId(householdId: string, key: string): Promise
   return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
 }
 
+export function householdRecordId(householdId: string, kind: HouseholdRecordKind, engineId: string): Promise<string> {
+  return derivedRecordId(householdId, `${kind}|${engineId}`);
+}
+
 function additionalData(householdId: string, recordId: string, keyVersion: number) {
   return encoder.encode(`${householdId}|${recordId}|${keyVersion}`);
 }
@@ -42,12 +73,13 @@ export async function encryptHouseholdRecord(
   key: CryptoKey, scope: HouseholdRecordScope, record: HouseholdRecord,
 ): Promise<EncryptedHouseholdRecord> {
   const { householdId, recordId, keyVersion } = scope;
-  const { kind, id, data } = record;
+  const { kind, id, data, balanceEffect } = record;
+  const payload = data === undefined ? { kind, id } : { kind, id, data, balanceEffect };
   const iv = randomBytes(12);
   const encrypted = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv, additionalData: additionalData(householdId, recordId, keyVersion) },
     key,
-    encoder.encode(JSON.stringify({ kind, id, data })),
+    encoder.encode(JSON.stringify(payload)),
   );
   return {
     record_id: recordId,
@@ -71,6 +103,10 @@ export async function decryptHouseholdRecord(
       Object.hasOwn(record, 'data') === encrypted.deleted) {
     throw new Error('Cet élément du foyer est illisible.');
   }
-  const { kind, id, data } = record;
-  return encrypted.deleted ? { kind, id } : { kind, id, data };
+  const { kind, id, data, balanceEffect } = record;
+  if (balanceEffect !== undefined && (!balanceEffect || typeof balanceEffect.checkpointId !== 'string' ||
+      !balanceEffect.checkpointId || !Number.isSafeInteger(balanceEffect.deltaCents) || encrypted.deleted)) {
+    throw new Error('Cet élément du foyer est illisible.');
+  }
+  return encrypted.deleted ? { kind, id } : { kind, id, data, ...(balanceEffect && { balanceEffect }) };
 }
