@@ -1,3 +1,4 @@
+// Utilise la même valeur de NEXT_PUBLIC_HOUSEHOLD_ENABLED au build et au lancement de la recette.
 // Lance le build avec l’URL et la clé publique de Supabase local, ainsi qu’un secret serveur de test.
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -21,6 +22,8 @@ assert.ok(loopback.includes(url.hostname) && loopback.includes(new URL(baseURL).
 const auth = { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false };
 const client = key => createClient(url.origin, key, { auth });
 const requestTimeout = 25000;
+const householdEnabled = process.env.NEXT_PUBLIC_HOUSEHOLD_ENABLED === 'true';
+const privateContents = serializeBudget({ ...emptyBudgetState, currentBalance: 777, balanceDate: todayInBrussels() });
 
 function success({ data, error }) {
   assert.equal(error, null, error?.message);
@@ -47,7 +50,7 @@ async function trackSpending(page, entry) {
   await button(page, 'Ajouter la dépense').click();
 }
 
-test('Foyer à un membre · synchronisation et reprise hors ligne sur deux appareils', { timeout: 120000 }, async (t) => {
+async function householdFixture(t) {
   const admin = client(adminKey);
   const email = `foyer-web-${randomUUID()}@example.test`;
   const password = randomBytes(24).toString('hex');
@@ -58,14 +61,14 @@ test('Foyer à un membre · synchronisation et reprise hors ligne sur deux appar
     success(await admin.auth.admin.deleteUser(user.id));
   });
 
-  async function openDevice(personalBudget) {
+  async function openDevice(personalBudget, previousHousehold = null) {
     const api = client(publicKey);
     const { session } = success(await api.auth.signInWithPassword({ email, password }));
     const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } });
     const page = await context.newPage();
     page.setDefaultTimeout(requestTimeout);
     await page.goto('/robots.txt');
-    await page.evaluate(async ({ session, personalBudget, authKey, ownerKey, budgetKey }) => {
+    await page.evaluate(async ({ session, personalBudget, previousHousehold, authKey, ownerKey, budgetKey }) => {
       localStorage.setItem(ownerKey, JSON.stringify(personalBudget ? { type: 'account', userId: session.user.id } : { type: 'guest' }));
       localStorage.setItem(authKey, JSON.stringify(session));
       if (!personalBudget) return;
@@ -78,18 +81,58 @@ test('Foyer à un membre · synchronisation et reprise hors ligne sur deux appar
         request.onsuccess = () => {
           const db = request.result;
           const transaction = db.transaction('keys', 'readwrite');
-          transaction.objectStore('keys').put({
+          const store = transaction.objectStore('keys');
+          store.put({
             userId: session.user.id, key, keyMode: 'legacy', salt: 'sel-fictif-appareil', kdfIterations: 600000,
           }, 'budget');
+          if (previousHousehold) {
+            store.put({
+              selected: previousHousehold,
+              households: [{ id: previousHousehold, createdAt: '2026-11-22T00:00:00Z', keyVersion: 1 }],
+            }, `household-directory:${session.user.id}`);
+          }
           transaction.oncomplete = () => { db.close(); resolve(); };
           transaction.onabort = () => { db.close(); reject(transaction.error); };
         };
       });
-    }, { session, personalBudget, authKey: AUTH_STORAGE_KEY, ownerKey: ACCOUNT_OWNER_KEY, budgetKey: BUDGET_STORAGE_KEY });
+    }, { session, personalBudget, previousHousehold, authKey: AUTH_STORAGE_KEY, ownerKey: ACCOUNT_OWNER_KEY, budgetKey: BUDGET_STORAGE_KEY });
     return { api, context, page };
   }
 
-  const privateContents = serializeBudget({ ...emptyBudgetState, currentBalance: 777, balanceDate: todayInBrussels() });
+  return openDevice;
+}
+
+test('Foyer désactivé · le budget personnel et sa protection restent actifs', { skip: householdEnabled }, async (t) => {
+  const openDevice = await householdFixture(t);
+  const { page } = await openDevice(privateContents, randomUUID());
+  const householdRequests = [];
+  page.on('request', request => {
+    const { pathname } = new URL(request.url());
+    if (/\/api\/household-key|\/rest\/v1\/(households|household_|rpc\/(household_|create_household|pull_records|upsert_records))/.test(pathname)) {
+      householdRequests.push(pathname);
+    }
+  });
+  await page.goto('/dashboard');
+  await balance(page, 777).waitFor();
+  assert.equal(await page.getByRole('group', { name: 'Espace budgétaire' }).count(), 0);
+
+  await page.getByRole('link', { name: 'Plus', exact: true }).click();
+  await page.getByRole('heading', { name: 'Plus', exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Notre foyer', exact: true }).count(), 0);
+
+  await page.goto('/foyer');
+  await page.getByText('Bientôt disponible', { exact: true }).waitFor();
+  assert.equal(await button(page, 'Créer mon foyer').count(), 0);
+  assert.deepEqual(householdRequests, []);
+
+  const unlinked = await openDevice();
+  await unlinked.page.goto('/dashboard');
+  await unlinked.page.getByRole('heading', { name: 'Compte et sécurité', exact: true }).waitFor();
+  assert.equal(await balance(unlinked.page, 777).count(), 0);
+});
+
+test('Foyer à un membre · synchronisation et reprise hors ligne sur deux appareils', { timeout: 120000, skip: !householdEnabled }, async (t) => {
+  const openDevice = await householdFixture(t);
   const first = await openDevice(privateContents);
   await first.page.goto('/dashboard');
   await balance(first.page, 777).waitFor();

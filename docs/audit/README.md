@@ -179,6 +179,8 @@ Les tests unitaires font partie de `npm test`. Pour relancer la recette d’int�
 
 Dans **Plus → Notre foyer**, un compte connecté peut créer un foyer et ouvrir son budget commun depuis le sélecteur de l’en-tête. Le même compte permet d’ouvrir le foyer sur un second appareil. Le mode Foyer utilise le réducteur et le moteur de calcul du budget, avec son propre stockage chiffré. Le budget personnel reste dans son espace.
 
+Le Foyer est désactivé par défaut. Pour la recette, définis `NEXT_PUBLIC_HOUSEHOLD_ENABLED=true` au build, puis utilise la même valeur au lancement de `tests/browser/household-sync.mjs`. Sans cette variable, la recette vérifie le masquage du lien et du sélecteur, la page « Bientôt disponible » et la protection du budget personnel. L’activation de production attend la PR 5 et les prérequis du plan P4.
+
 Le registre `household_writes` conserve les identifiants des écritures acceptées. Le renvoi d’un lot après coupure rend le numéro d’origine et préserve les modifications validées entre-temps. Chaque recopie de solde a un UUID distinct. Le calcul sélectionne la dernière recopie validée par le serveur et rattache les dépenses et leurs effets à leur recopie. L’identifiant du moteur reste dans le contenu chiffré et l’UUID de synchronisation est dérivé par foyer, type et identifiant d’origine.
 
 Le débit ou le crédit est chiffré avec l’opération qui le produit. Parmi plusieurs versions d’une échéance, seule la version retenue peut affecter le solde. Une annulation retire cet effet et un nouveau relevé repart de son montant. Le test Supabase fait enregistrer la même échéance par deux comptes et vérifie que le solde passe de 500 € à 400 €, puis revient à 500 € à l’annulation.

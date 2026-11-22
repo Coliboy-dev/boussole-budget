@@ -8,12 +8,19 @@ import { useApp } from '@/lib/context/AppContext';
 import { formatShortDate } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { householdCopy } from '@/lib/household-copy';
+import { householdEnabled } from '@/lib/household-feature';
 
 const primary = 'inline-flex min-h-11 items-center rounded-xl bg-teal-700 px-4 text-sm font-semibold text-white focus-visible:ring-2 focus-visible:ring-teal-700 disabled:opacity-50';
 
 export default function HouseholdPage() {
   const { userId, directory, active, loading, error, create, select } = useHouseholdWorkspace();
   const [busy, setBusy] = useState(false);
+  if (!householdEnabled) return (
+    <div className="space-y-4 px-4 py-4">
+      <h1 className="text-xl font-bold text-slate-900">{householdCopy.household}</h1>
+      <p>{householdCopy.comingSoon}</p>
+    </div>
+  );
   return (
     <div className="space-y-4 px-4 py-4">
       <h1 className="text-xl font-bold text-slate-900">{householdCopy.household}</h1>

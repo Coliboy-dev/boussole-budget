@@ -388,3 +388,4 @@ Sur une base de test :
 3. **Vercel Pro** pour un usage commercial, à vérifier côté équipe Start’OnLab.
 4. **Offre** : Foyer gratuit pendant le pilote ; prix test envisagé 2,99 €/mois TTC par foyer ou 29 €/an, à valider auprès des testeurs. Pas de paiement en V1.
 5. **Page Confidentialité** : gestion des clés et risque d’accès au compte, conservation des entrées partagées après suppression du compte, invitation et copie d’un ancien membre (§6.4).
+6. **Activation** — Le Foyer est désactivé par défaut. Avec `NEXT_PUBLIC_HOUSEHOLD_ENABLED=true` au build, il peut être testé en préversion après migration. L’activation en production attend la fin de la PR 5 et les prérequis d’ouverture.

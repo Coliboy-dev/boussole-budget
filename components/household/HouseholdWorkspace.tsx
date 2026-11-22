@@ -8,6 +8,7 @@ import { useCloudSync } from '@/components/sync/CloudSyncProvider';
 import { AUTH_STORAGE_KEY, readStoredSessionUserId } from '@/lib/account-guard';
 import { useBudgetAccess } from '@/lib/budget-access';
 import { householdCopy } from '@/lib/household-copy';
+import { householdEnabled } from '@/lib/household-feature';
 import { assertHouseholdAccount, createHousehold, listHouseholds } from '@/lib/household-remote';
 import { emptyDirectory, householdDirectory, type HouseholdDirectory } from '@/lib/household-storage';
 import HouseholdBudget from './HouseholdBudget';
@@ -28,7 +29,11 @@ interface Workspace {
   select: (id: string | null, navigate?: boolean) => Promise<void>;
 }
 
-const Context = createContext<Workspace | null>(null);
+const Context = createContext<Workspace>({
+  userId: null, inHouseholdShell: false, active: false, directory: emptyDirectory, loading: false, error: '',
+  create: () => Promise.resolve(),
+  select: () => Promise.resolve(),
+});
 const noStoredSession = () => null;
 const storedSession = () => readStoredSessionUserId(localStorage);
 
@@ -47,12 +52,15 @@ function subscribeSession(listener: () => void) {
 }
 
 export function useHouseholdWorkspace(): Workspace {
-  const workspace = useContext(Context);
-  if (!workspace) throw new Error('Espace budgétaire indisponible.');
-  return workspace;
+  return useContext(Context);
 }
 
 export default function HouseholdWorkspace({ children }: { children: ReactNode }) {
+  if (!householdEnabled) return <AccountGate>{children}</AccountGate>;
+  return <EnabledHouseholdWorkspace>{children}</EnabledHouseholdWorkspace>;
+}
+
+function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
   const { account, passwordRequired, offerDeviceLock } = useCloudSync();
   const personalBudgetAccessible = useBudgetAccess();
   const storedUserId = useSyncExternalStore(subscribeSession, storedSession, noStoredSession);

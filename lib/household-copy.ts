@@ -1,6 +1,7 @@
 export const householdCopy = {
   personal: 'Personnel',
   household: 'Notre foyer',
+  comingSoon: 'Bientôt disponible',
   switcher: 'Espace budgétaire',
   choose: 'Choisir un foyer',
   createdOn: 'Foyer créé le',

@@ -5,9 +5,10 @@ import { OfflineStatus } from '@/components/layout/OfflineSupport';
 import Card from '@/components/ui/Card';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 import { householdCopy } from '@/lib/household-copy';
+import { householdEnabled } from '@/lib/household-feature';
 
 const moreLinks = [
-  { href: '/foyer', label: householdCopy.household },
+  ...(householdEnabled ? [{ href: '/foyer', label: householdCopy.household }] : []),
   { href: '/reglages', label: 'Réglages' },
   { href: '/conseils', label: 'Conseils' },
   { href: '/synchronisation', label: 'Compte et sécurité' },
