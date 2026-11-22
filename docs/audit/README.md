@@ -179,6 +179,8 @@ Les tests unitaires font partie de `npm test`. Pour relancer la recette d’int�
 
 Le registre `household_writes` conserve les identifiants des écritures acceptées. Le renvoi d’un lot après coupure rend le numéro d’origine et préserve les modifications validées entre-temps. Chaque recopie de solde a un UUID distinct. Le calcul sélectionne la dernière recopie validée par le serveur et rattache les dépenses et leurs effets à leur recopie. L’identifiant du moteur reste dans le contenu chiffré et l’UUID de synchronisation est dérivé par foyer, type et identifiant d’origine.
 
+Le débit ou le crédit est chiffré avec l’opération qui le produit. Parmi plusieurs versions d’une échéance, seule la version retenue peut affecter le solde. Une annulation retire cet effet et un nouveau relevé repart de son montant. Le test Supabase fait enregistrer la même échéance par deux comptes et vérifie que le solde passe de 500 € à 400 €, puis revient à 500 € à l’annulation.
+
 ## Hygiène technique et formulaires
 
 Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.

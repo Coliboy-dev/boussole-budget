@@ -68,6 +68,18 @@ test('Une suppression conserve seulement le type et l’identifiant de l’élé
   await assert.rejects(decryptHouseholdRecord(key, householdId, { ...encrypted, deleted: false }));
 });
 
+test('L’effet financier voyage chiffré avec la version de l’opération', async () => {
+  const key = await testKey();
+  const operation = { ...spending, balanceEffect: { checkpointId: householdId, deltaCents: -4200 } };
+  const encrypted = await encryptHouseholdRecord(key, scope, operation);
+  assert.equal(Object.hasOwn(encrypted, 'balanceEffect'), false);
+  assert.deepEqual(await decryptHouseholdRecord(key, householdId, encrypted), operation);
+
+  const tombstone = { kind: spending.kind, id: spending.id, balanceEffect: operation.balanceEffect };
+  assert.deepEqual(await decryptHouseholdRecord(key, householdId, await encryptHouseholdRecord(key, scope, tombstone)),
+    { kind: spending.kind, id: spending.id });
+});
+
 test('Le lien ne contient que l’identifiant d’invitation et le jeton aléatoire', async () => {
   const { token, tokenHash } = await createInvitationToken();
   assert.match(token, /^[A-Za-z0-9_-]{43}$/);

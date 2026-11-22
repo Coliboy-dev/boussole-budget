@@ -5,6 +5,9 @@ import { createClient } from '@supabase/supabase-js';
 import { POST } from '../../app/api/household-key/route.ts';
 import { createInvitationToken } from '../../lib/household-invitations.ts';
 import { decryptHouseholdRecord, encryptHouseholdRecord, householdRecordId } from '../../lib/household-records.ts';
+import { recordPayment } from '../../lib/budget-state.ts';
+import { diffHousehold } from '../../lib/household-diff.ts';
+import { materializeHousehold } from '../../lib/household-materialize.ts';
 
 const url = new URL(process.env.SUPABASE_LOCAL_URL ?? 'http://127.0.0.1:54321');
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname), 'Utilise une instance Supabase locale.');
@@ -211,6 +214,52 @@ test('F-D · Le renvoi de A reçoit son numéro d’origine après une modificat
     { record_id: another.record_id, seq: 3 },
   ]);
   for (const api of [personA.api, anonymous, admin]) assert.ok((await api.from('household_writes').select('*')).error);
+});
+
+test('F-D · Deux appareils enregistrent la même échéance chiffrée et Supabase conserve un seul débit', async () => {
+  const { household_id: h } = await createHousehold(personA);
+  success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const keys = await Promise.all([personA, personB].map(actor => importKey(actor, h)));
+  const date = '2026-11-22';
+  const checkpointId = randomUUID();
+  const expense = {
+    id: 'loyer', label: 'Loyer', amount: 100, frequency: 'monthly', category: 'rent',
+    isPaid: false, isRecurring: true, dueDate: date,
+  };
+  const payment = { type: 'expense', id: expense.id, dueDate: date, today: date, balanceIncludesPayment: false };
+
+  async function send(actor, key, changes) {
+    const records = await Promise.all(changes.map(async record => {
+      const recordId = await householdRecordId(h, record.kind, record.id);
+      return { ...await encryptHouseholdRecord(key, { householdId: h, recordId, keyVersion: 1 }, record), write_id: randomUUID() };
+    }));
+    return success(await rpc(actor, 'upsert_records', { h, records }));
+  }
+
+  async function load(actor, key) {
+    const rows = success(await rpc(actor, 'pull_records', { h, after_seq: 0 }));
+    return Promise.all(rows.map(async row => ({ seq: row.seq, record: await decryptHouseholdRecord(key, h, row) })));
+  }
+
+  const empty = materializeHousehold([]);
+  const initial = { ...empty, currentBalance: 500, balanceDate: date, balanceRevision: 1, expenses: [expense] };
+  await send(personA, keys[0], diffHousehold(empty, initial, { rows: [], newCheckpointId: checkpointId }));
+  const offlineChanges = await Promise.all([personA, personB].map(async (actor, index) => {
+    const rows = await load(actor, keys[index]);
+    const before = materializeHousehold(rows);
+    return diffHousehold(before, recordPayment(before, payment), { rows, paymentDate: date });
+  }));
+
+  await Promise.all([personA, personB].map((actor, index) => send(actor, keys[index], offlineChanges[index])));
+  const received = await load(personB, keys[1]);
+  assert.equal(received.filter(({ record }) => record.kind === 'occurrence').length, 1);
+  assert.equal(materializeHousehold(received).currentBalance, 400);
+  assert.equal(materializeHousehold(received.toReversed()).currentBalance, 400);
+
+  const paid = materializeHousehold(received);
+  const cancelled = { ...paid, currentBalance: 500, expenses: [expense] };
+  await send(personB, keys[1], diffHousehold(paid, cancelled, { rows: received }));
+  assert.equal(materializeHousehold(await load(personA, keys[0])).currentBalance, 500);
 });
 
 test('F-E · La suppression d’un compte retire son profil et conserve le budget de l’autre membre', async () => {
