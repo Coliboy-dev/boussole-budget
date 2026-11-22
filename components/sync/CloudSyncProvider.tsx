@@ -22,7 +22,7 @@ import {
   serializeBudget, writeBudgetSnapshot, type BudgetStorageSnapshot,
 } from '@/lib/budget-state';
 import { useApp } from '@/lib/context/AppContext';
-import { passwordProblem } from '@/lib/account-password';
+import { PASSWORD_SETUP_STORAGE_KEY, passwordProblem } from '@/lib/account-password';
 import { todayInBrussels } from '@/lib/local-date';
 import type { FirstBudgetInput } from '@/lib/onboarding';
 import { matchesInitialVault, PENDING_VAULT_KEY, readPendingVault, rememberVaultFingerprint } from '@/lib/vault-pending';
@@ -72,7 +72,7 @@ interface CloudSyncContext {
   conflictRemoteDate: string | null;
   error: string;
   signingUp: boolean;
-  /** Connexion par code e-mail réussie dans cet onglet : le mot de passe doit être choisi. */
+  /** Le compte connecté par code e-mail attend le choix du mot de passe sur ce navigateur. */
   passwordRequired: boolean;
   /** Connexion récente sur cet appareil : proposer une fois le verrou (code et Face ID). */
   offerDeviceLock: boolean;
@@ -110,6 +110,12 @@ function message(error: unknown, fallback: string) {
 
 function assertSession(userId: string | null) {
   if (readStoredSessionUserId(localStorage) !== userId) throw new Error(changedAccount);
+}
+
+function clearPasswordSetup(email: string | undefined) {
+  if (email && localStorage.getItem(PASSWORD_SETUP_STORAGE_KEY) === email.trim().toLowerCase()) {
+    localStorage.removeItem(PASSWORD_SETUP_STORAGE_KEY);
+  }
 }
 
 function canAssociate(owner: OwnerStatus, userId: string) {
@@ -236,7 +242,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   const [ownerInitialized, setOwnerInitialized] = useState(false);
   const [otpEmail, setOtpEmail] = useState('');
   const [signingUp, setSigningUp] = useState(false);
-  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [pendingPasswordEmail, setPendingPasswordEmail] = useState<string | null>(null);
   const [offerDeviceLock, setOfferDeviceLock] = useState(false);
   const dismissDeviceLockOffer = useCallback(() => setOfferDeviceLock(false), []);
   const [firstBudgetResult, setFirstBudgetResult] = useState(false);
@@ -539,6 +545,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     try {
       const owner = readBudgetOwner(localStorage);
       if (!stillCurrent()) return;
+      setPendingPasswordEmail(localStorage.getItem(PASSWORD_SETUP_STORAGE_KEY));
       knownOwner.current = owner;
       if (owner.type === 'unreadable') throw new Error('Le rattachement du budget est illisible. Les données restent sur cet appareil.');
       if (owner.type !== 'guest' && owner.userId !== userId) {
@@ -704,6 +711,9 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     };
     const visible = () => { if (document.visibilityState === 'visible') check(); };
     const stored = (event: StorageEvent) => {
+      if (event.key === PASSWORD_SETUP_STORAGE_KEY || event.key === null) {
+        setPendingPasswordEmail(localStorage.getItem(PASSWORD_SETUP_STORAGE_KEY));
+      }
       if (event.key === PENDING_VAULT_KEY && event.newValue === null) void refreshAccount(true);
       else if (event.key === AUTH_STORAGE_KEY || event.key === ACCOUNT_OWNER_KEY || event.key === null) check();
     };
@@ -723,7 +733,6 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     signupIntent.current = Boolean(createAccount && accountSignupEnabled && canAccessBudget()
       && readBudgetOwner(localStorage).type === 'guest' && readStoredSessionUserId(localStorage) === null);
     setSigningUp(signupIntent.current);
-    setPasswordRequired(false);
     setOfferDeviceLock(false);
     setOtpEmail('');
     setError('');
@@ -752,14 +761,20 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     try {
       await withAccountTransition(async () => {
         assertSession(null);
-        const { error: authError } = await cloudClient().auth.verifyOtp({
-          email: email.trim(), token: code.trim(), type: 'email',
-        });
-        if (authError) throw new Error('Code incorrect ou expiré. Demande un nouveau code.');
+        const address = email.trim();
+        // Un autre onglet peut recevoir la session Supabase dès sa création.
+        localStorage.setItem(PASSWORD_SETUP_STORAGE_KEY, address.toLowerCase());
+        try {
+          const { error: authError } = await cloudClient().auth.verifyOtp({
+            email: address, token: code.trim(), type: 'email',
+          });
+          if (authError) throw new Error('Code incorrect ou expiré. Demande un nouveau code.');
+        } catch (caught) {
+          if (readStoredSessionUserId(localStorage) === null) clearPasswordSetup(address);
+          throw caught;
+        }
       });
       setOtpEmail('');
-      // Le code e-mail sert à l’inscription et à la récupération : le mot de passe est choisi juste après.
-      setPasswordRequired(true);
       setOfferDeviceLock(true);
     } catch (caught) {
       verificationError = message(caught, 'Impossible de vérifier le code.');
@@ -781,8 +796,11 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     try {
       await withAccountTransition(async () => {
         assertSession(null);
-        const { error: authError } = await cloudClient().auth.signInWithPassword({ email: email.trim(), password });
-        if (!authError) return;
+        const { data, error: authError } = await cloudClient().auth.signInWithPassword({ email: email.trim(), password });
+        if (!authError) {
+          clearPasswordSetup(data.user?.email);
+          return;
+        }
         if (authError.status === 429) throw new Error('Trop d’essais. Patiente quelques minutes avant de réessayer.');
         if (isAuthRetryableFetchError(authError)) throw new Error('Connexion impossible. Vérifie ta connexion internet.');
         throw new Error('E-mail ou mot de passe incorrect.');
@@ -800,17 +818,22 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   async function setPassword(password: string) {
     const problem = passwordProblem(password);
     if (problem) throw new Error(problem);
-    const userId = accountRef.current?.userId;
-    if (!userId) throw new Error('Connecte-toi d’abord.');
-    assertSession(userId);
-    const { error: authError } = await cloudClient().auth.updateUser({ password });
-    if (authError) {
-      throw new Error(authError.code === 'same_password' ? 'Choisis un mot de passe différent de l’ancien.'
-        : authError.code === 'weak_password' ? 'Ce mot de passe est trop facile à deviner. Choisis-en un autre.'
-          : isAuthRetryableFetchError(authError) ? 'Enregistrement impossible. Vérifie ta connexion internet.'
-            : 'Le mot de passe n’a pas pu être enregistré. Réessaie.');
-    }
-    setPasswordRequired(false);
+    const active = accountRef.current;
+    if (!active) throw new Error('Connecte-toi d’abord.');
+    await withAccountTransition(async () => {
+      assertSession(active.userId);
+      const { data, error: authError } = await cloudClient().auth.updateUser({ password });
+      if (authError) {
+        throw new Error(authError.code === 'same_password' ? 'Choisis un mot de passe différent de l’ancien.'
+          : authError.code === 'weak_password' ? 'Ce mot de passe est trop facile à deviner. Choisis-en un autre.'
+            : isAuthRetryableFetchError(authError) ? 'Enregistrement impossible. Vérifie ta connexion internet.'
+              : 'Le mot de passe n’a pas pu être enregistré. Réessaie.');
+      }
+      assertSession(active.userId);
+      if (data.user?.id !== active.userId) throw new Error(changedAccount);
+      clearPasswordSetup(active.email);
+      setPendingPasswordEmail(localStorage.getItem(PASSWORD_SETUP_STORAGE_KEY));
+    });
   }
 
   async function unlock(passphrase: string, savedPassphrase = false) {
@@ -940,8 +963,9 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut(deleteOnline = false) {
-    const userId = accountRef.current?.userId;
-    if (!userId || authBusy.current) return;
+    const active = accountRef.current;
+    if (!active || authBusy.current) return;
+    const { userId } = active;
     if (deleteOnline) {
       const key = keyRef.current;
       if (!key) return;
@@ -967,6 +991,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
           if (failure) throw failure;
         }
         assertSession(null);
+        clearPasswordSetup(active.email);
         await clearStoredKey();
         assertSession(null);
         // Le parcours existant de suppression explicite conserve le budget local en mode invité.
@@ -996,7 +1021,8 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     otpEmail, resetCode: () => { setOtpEmail(''); setError(''); },
     sendCode, verifyCode, refreshAccount, unlock, associate, syncNow: runSync, resolveConflict,
     signingUp, firstBudgetResult, initialVaultConfirmed, beginSignIn, finishAccountBudget, resumeVault,
-    passwordRequired: passwordRequired && account !== null, offerDeviceLock: offerDeviceLock && account !== null,
+    passwordRequired: account !== null && pendingPasswordEmail === account.email.trim().toLowerCase(),
+    offerDeviceLock: offerDeviceLock && account !== null,
     dismissDeviceLockOffer, signInWithPassword, setPassword,
     dismissFirstBudgetResult: () => setFirstBudgetResult(false),
     signOut, deleteAccount: () => signOut(true),

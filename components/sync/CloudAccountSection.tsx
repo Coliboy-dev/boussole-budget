@@ -154,9 +154,9 @@ export function ChoosePassword({ onDone, onCancel }: { onDone?: () => void; onCa
 }
 
 function SignIn() {
-  const { signingUp } = useCloudSync();
-  const [byCode, setByCode] = useState(false);
-  if (!signingUp && !byCode) return <PasswordSignIn onForgot={() => setByCode(true)} />;
+  const { signingUp, otpEmail } = useCloudSync();
+  const [byCode, setByCode] = useState(Boolean(otpEmail));
+  if (!signingUp && !byCode && !otpEmail) return <PasswordSignIn onForgot={() => setByCode(true)} />;
   return <CodeSignIn onPassword={signingUp ? undefined : () => setByCode(false)} />;
 }
 

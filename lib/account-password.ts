@@ -3,6 +3,7 @@
 export const MIN_PASSWORD_LENGTH = 12;
 /** Supabase refuse au-delà de 72 caractères (limite de bcrypt). */
 export const MAX_PASSWORD_LENGTH = 72;
+export const PASSWORD_SETUP_STORAGE_KEY = 'boussole-password-setup-v1';
 
 export function passwordProblem(password: string, confirmation?: string): string | undefined {
   if (password.length < MIN_PASSWORD_LENGTH) return `Choisis un mot de passe d’au moins ${MIN_PASSWORD_LENGTH} caractères.`;
