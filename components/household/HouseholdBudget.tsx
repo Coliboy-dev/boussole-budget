@@ -7,6 +7,7 @@ import { reduceBudget, type AppAction } from '@/lib/budget-reducer';
 import { emptyBudgetState, recordPayment, recordUnscheduledDebtPayment, serializeBudget, type AppState } from '@/lib/budget-state';
 import { cloudClient } from '@/lib/cloud-remote';
 import { diffHousehold } from '@/lib/household-diff';
+import { trustedContributionSchedules } from '@/lib/household-contributions';
 import { materializeHousehold } from '@/lib/household-materialize';
 import { householdCopy } from '@/lib/household-copy';
 import { fetchHouseholdKey } from '@/lib/household-key';
@@ -14,8 +15,10 @@ import { assertHouseholdAccount, HouseholdAccessRevoked, householdRemote } from 
 import { emptyHouseholdQueue, readHouseholdCache, updateHouseholdCache, type StoredHousehold } from '@/lib/household-storage';
 import { decodeHouseholdView, encodeHouseholdWrites, reconcileHouseholdSync, syncHousehold } from '@/lib/household-sync';
 import { envelopesOf, spendingsOf } from '@/lib/spending';
+import { useBudgetAccess } from '@/lib/budget-access';
+import type { Income } from '@/lib/types';
 
-type SavedView = { budget: AppState; pending: number };
+type SavedView = { budget: AppState; pending: number; mirrorIncomes: Income[] };
 type Change = (budget: AppState) => AppState;
 type Options = {
   paymentDate?: string;
@@ -24,10 +27,12 @@ type Options = {
   spendingId?: string;
 };
 
-export default function HouseholdBudget({ userId, householdId, onExit, children }: {
+export default function HouseholdBudget({ userId, householdId, memberId, onExit, children }: {
   userId: string; householdId: string; onExit: () => void; children: ReactNode;
+  memberId?: string;
 }) {
-  const { today } = useApp();
+  const { today, syncContributionMirrors, isBudgetLoading, storageBlocked } = useApp();
+  const personalBudgetAccessible = useBudgetAccess();
   const [view, setView] = useState<SavedView | null>(null);
   const [revoked, setRevoked] = useState(false);
   const [network, setNetwork] = useState<'loading' | 'syncing' | 'offline' | 'saved' | 'error'>('loading');
@@ -40,16 +45,26 @@ export default function HouseholdBudget({ userId, householdId, onExit, children 
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const undo = useRef<{ before: AppState; after: string } | null>(null);
   const spendingUndo = useRef<string | null>(null);
+  const mirrorIncomes = view?.mirrorIncomes;
+  useEffect(() => {
+    if (memberId && mirrorIncomes?.length && personalBudgetAccessible && !isBudgetLoading && !storageBlocked) {
+      syncContributionMirrors(userId, householdId, memberId, mirrorIncomes);
+    }
+  }, [householdId, isBudgetLoading, memberId, personalBudgetAccessible, mirrorIncomes, storageBlocked, syncContributionMirrors, userId]);
 
   const display = useCallback(async (cache: StoredHousehold) => {
     const version = ++renderVersion.current;
     assertHouseholdAccount(userId);
     if (cache.userId !== userId || cache.householdId !== householdId) throw new Error(householdCopy.unavailable);
-    const budget = cache.revoked ? null : materializeHousehold(await decodeHouseholdView(cache.key, householdId, cache));
+    const rows = cache.revoked ? [] : await decodeHouseholdView(cache.key, householdId, cache);
+    const budget = cache.revoked ? null : materializeHousehold(rows);
     assertHouseholdAccount(userId);
     if (!initialized.current || version !== renderVersion.current) return;
     setRevoked(!!cache.revoked);
-    setView(budget ? { budget, pending: cache.pending.length } : null);
+    setView(budget ? {
+      budget, pending: cache.pending.length,
+      mirrorIncomes: trustedContributionSchedules(budget.incomes, rows, userId, cache.cursor),
+    } : null);
   }, [householdId, userId]);
 
   const synchronize = useCallback(async function synchronize() {
@@ -196,8 +211,25 @@ export default function HouseholdBudget({ userId, householdId, onExit, children 
     finishOnboarding: unavailable,
     saveProfileSettings: ({ safetyReserve }) => dispatch({ type: 'UPDATE_PROFILE', payload: { safetyReserve } }),
     clearBudget: unavailable,
+    syncContributionMirrors: unavailable,
     // eslint-disable-next-line react-hooks/refs -- Cette fonction construit uniquement les gestionnaires d’événements.
     ...budgetCommands(dispatch, today),
+    addIncome: (income) => {
+      if (income.type !== 'household_contribution') {
+        dispatch({ type: 'ADD_INCOME', payload: income });
+        return;
+      }
+      if (!memberId || income.contributionMemberId !== memberId) throw new Error(householdCopy.contributionUnavailable);
+      const id = `contribution|${memberId}`;
+      save((previous) => {
+        const current = previous.incomes.find((item) => item.id === id);
+        const contribution = {
+          ...income, id, isConfirmed: false,
+          occurrenceStatuses: current?.occurrenceStatuses, occurrenceAmountsCents: current?.occurrenceAmountsCents,
+        };
+        return { ...previous, incomes: [...previous.incomes.filter((item) => item.id !== id), contribution] };
+      });
+    },
     recordScheduledPayment: (payment) => {
       if (!budget.balanceDate) throw new Error(householdCopy.enterBalance);
       save((previous) => {

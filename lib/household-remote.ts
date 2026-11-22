@@ -35,10 +35,15 @@ async function checkedClient(userId: string) {
 
 export async function listHouseholds(userId: string): Promise<HouseholdListing[]> {
   const client = await checkedClient(userId);
-  const { data, error } = await client.from('households').select('id,key_version,created_at').order('created_at').order('id');
+  const { data, error } = await client.from('households')
+    .select('id,key_version,created_at,household_members!inner(member_id)')
+    .eq('household_members.user_id', userId).is('household_members.removed_at', null)
+    .order('created_at').order('id');
   assertHouseholdAccount(userId);
   if (error) throw new Error(householdCopy.unavailable);
-  return data.map(row => ({ id: row.id, keyVersion: row.key_version, createdAt: row.created_at }));
+  return data.map(row => ({
+    id: row.id, keyVersion: row.key_version, createdAt: row.created_at, memberId: row.household_members[0]?.member_id,
+  }));
 }
 
 export async function createHousehold(userId: string): Promise<string> {

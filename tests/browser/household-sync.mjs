@@ -196,3 +196,49 @@ test('Foyer à un membre · synchronisation et reprise hors ligne sur deux appar
   await tab.evaluate(key => localStorage.removeItem(key), AUTH_STORAGE_KEY);
   await balance(second.page, 405).waitFor({ state: 'hidden' });
 });
+
+test('Versement du foyer · projection, réception et une seule ligne dans le Personnel', { timeout: 120000, skip: !householdEnabled }, async (t) => {
+  const openDevice = await householdFixture(t);
+  const { page } = await openDevice(privateContents);
+  async function checkAccessibility() {
+    await page.evaluate(axeSource);
+    const audit = await page.evaluate(() => window.axe.run({ runOnly: {
+      type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'],
+    } }));
+    assert.deepEqual(audit.violations.map(({ id }) => id), []);
+  }
+  await page.goto('/dashboard');
+  await balance(page, 777).waitFor();
+  await button(page, 'Notre foyer').click();
+  await button(page, 'Créer mon foyer').click();
+  await page.waitForURL('**/dashboard');
+
+  await button(page, 'Modifier le solde bancaire').click();
+  await page.getByLabel('Solde bancaire actuel').fill('500');
+  await button(page, 'OK').click();
+  await balance(page, 500).waitFor();
+  await page.goto('/foyer');
+  await page.getByLabel('Montant du versement (€)').waitFor();
+  await checkAccessibility();
+  await page.getByLabel('Montant du versement (€)').fill('300');
+  await page.getByLabel('Première date prévue').fill(todayInBrussels());
+  await page.getByRole('region', { name: 'Mon versement' }).getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await page.getByText('Versement enregistré.', { exact: true }).waitFor();
+
+  await page.goto('/dashboard');
+  await page.getByRole('heading', { name: 'Disponible confirmé', exact: true }).waitFor();
+  await page.getByText('Avec les versements attendus', { exact: true }).waitFor();
+  await button(page, 'Marquer comme reçu').first().click();
+  await balance(page, 800).waitFor();
+  await page.goto('/foyer/mouvements');
+  await page.getByText('Reçu', { exact: true }).waitFor();
+  await checkAccessibility();
+
+  await button(page, 'Personnel').click();
+  await page.goto('/charges');
+  await page.getByText('Versement au compte commun', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Versement au compte commun', { exact: true }).count(), 1);
+  await page.reload();
+  await page.getByText('Versement au compte commun', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Versement au compte commun', { exact: true }).count(), 1);
+});

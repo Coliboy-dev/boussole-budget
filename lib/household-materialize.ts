@@ -17,6 +17,7 @@ export type HouseholdOccurrence = {
   dueDate: string;
   status: NonNullable<Schedule['occurrenceStatuses']>[string];
   paymentDate?: string;
+  amountCents?: number;
 };
 
 export function materializeHousehold(rows: readonly SequencedHouseholdRecord[]): AppState {
@@ -32,6 +33,10 @@ export function materializeHousehold(rows: readonly SequencedHouseholdRecord[]):
       if (record.data === undefined) continue;
       const item = { ...record.data as object, id: record.id } as { id: string } & Schedule;
       delete item.occurrenceStatuses;
+      delete item.occurrenceAmountsCents;
+      if (record.kind === 'income' && 'type' in item && item.type === 'household_contribution') {
+        Object.assign(item, { isConfirmed: false });
+      }
       items.push(item);
       schedules.set(`${record.kind}|${record.id}`, item);
     } else if (record.data === undefined) {
@@ -46,9 +51,11 @@ export function materializeHousehold(rows: readonly SequencedHouseholdRecord[]):
     }
   }
 
-  for (const { entityKind, entityId, dueDate, status } of occurrences) {
+  for (const { entityKind, entityId, dueDate, status, amountCents } of occurrences) {
     const schedule = schedules.get(`${entityKind}|${entityId}`);
-    if (schedule) (schedule.occurrenceStatuses ??= {})[dueDate] = status;
+    if (!schedule) continue;
+    (schedule.occurrenceStatuses ??= {})[dueDate] = status;
+    if (status === 'paid' && amountCents !== undefined) (schedule.occurrenceAmountsCents ??= {})[dueDate] = amountCents;
   }
 
   assertBudgetState(state, 'cents');

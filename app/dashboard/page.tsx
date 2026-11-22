@@ -21,6 +21,9 @@ import { Icon } from '@/components/ui/icons';
 import { getUpcomingReminders, formatDate, hasUndatedPayments } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
+import { HouseholdContributionList } from '@/components/household/HouseholdContributions';
+import { householdAttention } from '@/lib/household-contributions';
+import { householdCopy } from '@/lib/household-copy';
 
 export default function DashboardPage() {
   const { isBudgetLoading, needsOnboarding } = useApp();
@@ -43,10 +46,11 @@ export default function DashboardPage() {
 
 function SavedBudgetDashboard() {
   const { active: household } = useHouseholdWorkspace();
+  const state = useApp();
   const {
     summary, advice, expenses, debts, balanceDate, storageBlocked, today, goals, lastBackupDate,
     recordScheduledPayment, undoScheduledPayment, lastAddedSpendingId,
-  } = useApp();
+  } = state;
   const [paymentFeedback, setPaymentFeedback] = useState<{ reminder: Reminder; paid: boolean }>();
   const [paymentError, setPaymentError] = useState('');
   const undoButton = useRef<HTMLButtonElement>(null);
@@ -57,6 +61,7 @@ function SavedBudgetDashboard() {
 
   const reminders = getUpcomingReminders(expenses, debts, [], today, summary.availableForecast.horizon);
   const hasAnnualProvision = summary.availableForecast.annualProvision > 0;
+  const attention = household && balanceDate ? householdAttention(state, today) : null;
 
   function pay(reminder: Reminder) {
     if ((reminder.type !== 'expense' && reminder.type !== 'debt') || !reminder.refId) return;
@@ -93,7 +98,8 @@ function SavedBudgetDashboard() {
         </AlertBanner>
       )}
 
-      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments(expenses, debts)} hasRecordedBalance={Boolean(balanceDate)}>
+      <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments(expenses, debts)}
+        hasRecordedBalance={Boolean(balanceDate)} inHousehold={household}>
         <BalanceRows />
       </SummaryCard>
 
@@ -107,17 +113,19 @@ function SavedBudgetDashboard() {
         )}
       </div>
 
-      {summary.riskLevel === 'danger' && (
+      {attention && <AlertBanner variant="warning" title={householdCopy.attention}>{attention}</AlertBanner>}
+      {!household && summary.riskLevel === 'danger' && (
         <AlertBanner variant="danger" title="Découvert prévu">
           Le solde prévisionnel passe sous zéro sur la période.
         </AlertBanner>
       )}
-      {summary.riskLevel === 'fragile' && (
+      {!household && summary.riskLevel === 'fragile' && (
         <AlertBanner variant="warning" title={hasAnnualProvision ? 'Sous le montant à garder' : 'Sous la réserve de sécurité'}>
           Ton solde prévu descend sous ta réserve{hasAnnualProvision && ' et tes provisions'}. Évite les dépenses imprévues.
         </AlertBanner>
       )}
 
+      {household && <HouseholdContributionList />}
       {!summary.emptyBudget && (
         <UpcomingDeadlines
           reminders={reminders}

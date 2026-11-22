@@ -14,9 +14,10 @@ export default function RevenusPage() {
   const { incomes, addIncome, updateIncome, deleteIncome } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Income | null>(null);
+  const regularIncomes = incomes.filter(({ type }) => type !== 'household_contribution');
 
-  const totalMonthly = calculateTotalMonthlyIncome(incomes);
-  const confirmedTotal = calculateTotalMonthlyIncome(incomes.filter((i) => i.isConfirmed));
+  const totalMonthly = calculateTotalMonthlyIncome(regularIncomes);
+  const confirmedTotal = calculateTotalMonthlyIncome(regularIncomes.filter((i) => i.isConfirmed));
   const unconfirmedTotal = totalMonthly - confirmedTotal;
 
   function handleEdit(income: Income) {
@@ -92,12 +93,12 @@ export default function RevenusPage() {
         )}
 
         <IncomeList
-          incomes={incomes}
+          incomes={regularIncomes}
           onEdit={handleEdit}
           onDelete={deleteIncome}
         />
 
-        {incomes.length === 0 && (
+        {regularIncomes.length === 0 && (
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
             className="w-full border-2 border-dashed border-teal-200 rounded-2xl py-6 text-center text-teal-800 font-semibold hover:bg-teal-50 transition-colors"

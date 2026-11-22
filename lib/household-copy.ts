@@ -1,3 +1,6 @@
+import { formatCurrency, formatShortDate } from './budget-calculations.ts';
+import { fromCents } from './money.ts';
+
 export const householdCopy = {
   personal: 'Personnel',
   household: 'Notre foyer',
@@ -28,4 +31,55 @@ export const householdCopy = {
   reserveInvalid: 'Indique une réserve en euros supérieure ou égale à zéro.',
   save: 'Enregistrer',
   advicePersonal: 'Les conseils sont disponibles dans ton espace Personnel.',
+  confirmedAvailable: 'Disponible confirmé',
+  expectedAvailable: 'Avec les versements attendus',
+  alreadyBelowZero: 'Le solde du compte commun est déjà sous zéro.',
+  attention: 'Point d’attention',
+  contribution: 'Versement au compte commun',
+  myContribution: 'Mon versement',
+  contributionAmount: 'Montant du versement (€)',
+  contributionFrequency: 'Fréquence',
+  contributionDate: 'Première date prévue',
+  contributionAmountInvalid: 'Indique un montant supérieur à zéro, avec deux décimales au maximum.',
+  contributionDateInvalid: 'Indique une date valide.',
+  contributionSaved: 'Versement enregistré.',
+  contributionUnavailable: 'Le versement ne peut pas être enregistré pour le moment.',
+  upcomingContributions: 'Versements attendus',
+  monthlyContributions: 'Versements du mois',
+  contributionReceived: 'Reçu',
+  recordContribution: 'Marquer comme reçu',
+  ownContribution: 'Ton versement',
+  otherContribution: 'Autre versement',
+  noMonthlyContribution: 'Aucun versement enregistré pour ce mois.',
+  transfers: 'Virements vers le compte commun',
+  weekly: 'Chaque semaine',
+  monthly: 'Chaque mois',
+  biMonthly: 'Tous les deux mois',
+  quarterly: 'Chaque trimestre',
+  annual: 'Chaque année',
+};
+
+function dayOfMonth(date: string): string {
+  const day = Number(date.slice(-2));
+  return day === 1 ? '1er' : String(day);
+}
+
+export const householdMessages = {
+  contributionPending: (date: string) =>
+    `Versement prévu le ${dayOfMonth(date)} — réception non confirmée`,
+  shortfallBefore: (amountCents: number, date: string) =>
+    `${formatCurrency(fromCents(amountCents))} supplémentaires sont nécessaires avant le ${formatShortDate(date)} pour couvrir les échéances prévues`,
+  dependsOnContributions: (label: string, date: string, count: number) => {
+    const payment = label.toLowerCase() === 'loyer' ? 'du loyer' : `de l’échéance « ${label} »`;
+    const expected = count === 1 ? 'd’un versement encore attendu' : `de ${count} versements encore attendus`;
+    return `Le paiement ${payment} du ${dayOfMonth(date)} dépend ${expected}`;
+  },
+  reserveShortfall: (amountCents: number, date: string, alreadyBelow: boolean) => {
+    const amount = formatCurrency(fromCents(amountCents));
+    return alreadyBelow
+      ? `Le solde est déjà sous la réserve de ${amount}.`
+      : `La réserve serait entamée de ${amount} le ${formatShortDate(date).replace(/\.$/, '')}.`;
+  },
+  transfersForHousehold: (amountCents: number) =>
+    `Virements et avances pour le foyer : ${formatCurrency(fromCents(amountCents))}`,
 };

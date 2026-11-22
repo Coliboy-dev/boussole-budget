@@ -5,7 +5,7 @@ const cacheName = cachePrefix + version;
 const pages = new Set([
   '/dashboard', '/projection', '/budget', '/plus', '/reglages', '/revenus', '/charges',
   '/depenses', '/analyse', '/dettes', '/enfants', '/objectifs', '/conseils', '/sauvegarde', '/demo',
-  '/confidentialite', '/mentions-legales', '/simulation', '/synchronisation', '/foyer',
+  '/confidentialite', '/mentions-legales', '/simulation', '/synchronisation', '/foyer', '/foyer/mouvements',
 ]);
 
 const appAssets = [

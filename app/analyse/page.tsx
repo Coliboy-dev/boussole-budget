@@ -18,6 +18,7 @@ import { addMonths, isLocalDate, parseLocalDate } from '@/lib/local-date';
 import { fromCents } from '@/lib/money';
 import { envelopesOf, spendingCategoryLabels } from '@/lib/spending';
 import { analyzeMonth, envelopeSuggestion, isSpendingCategory, monthItems, type AnalysisCategory } from '@/lib/spending-analysis';
+import { householdMessages } from '@/lib/household-copy';
 
 const percentFormatter = new Intl.NumberFormat('fr-BE', { style: 'percent', maximumFractionDigits: 1 });
 const monthFormatter = new Intl.DateTimeFormat('fr-BE', { month: 'long' });
@@ -104,6 +105,9 @@ export default function AnalysisPage() {
       {rows.length > 0
         ? <CompactRows rows={rows} onOpen={(id) => setSelectedCategory(rows.find((row) => row.id === id)?.id)} />
         : <p className="text-sm text-slate-600">Aucune dépense à analyser pour ce mois.</p>}
+      {!!analysis.transfersCents && (
+        <p className="px-1 text-sm text-slate-700">{householdMessages.transfersForHousehold(analysis.transfersCents)}</p>
+      )}
 
       {selectedCategory && (
         <DetailSheet title={categoryPresentation(selectedCategory).title} onClose={close}>

@@ -45,6 +45,17 @@ type BudgetPersistence = {
   needsMigration: boolean;
 };
 
+function isSavedBudgetCurrent(saved: BudgetPersistence | null): boolean {
+  if (!saved) return false;
+  try {
+    const current = readBudgetSnapshot(localStorage);
+    return current.current === saved.snapshot.current && current.legacy === saved.snapshot.legacy
+      && saved.owner === JSON.stringify(readBudgetOwner(localStorage));
+  } catch {
+    return false;
+  }
+}
+
 export type ScheduledPayment = Pick<Payment, 'id' | 'dueDate'> & { type: 'expense' | 'debt' };
 
 function subscribeToCalendar(listener: () => void): () => void {
@@ -97,6 +108,7 @@ export interface AppContextType extends AppState {
   addExpense: (expense: Omit<Expense, 'id'>) => void;
   updateExpense: (id: string, data: Partial<Expense>) => void;
   deleteExpense: (id: string) => void;
+  syncContributionMirrors: (userId: string, householdId: string, memberId: string, incomes: Income[]) => void;
   addDebt: (debt: Omit<Debt, 'id'>) => void;
   updateDebt: (id: string, data: Partial<Debt>) => void;
   deleteDebt: (id: string) => void;
@@ -184,17 +196,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (canAccessBudget() && isCurrentBudget()) dispatchInternal(action);
   }
 
-  function isCurrentBudget(): boolean {
-    const saved = persistence.current;
-    if (!saved) return false;
-    try {
-      const current = readBudgetSnapshot(localStorage);
-      return current.current === saved.snapshot.current && current.legacy === saved.snapshot.legacy
-        && saved.owner === JSON.stringify(readBudgetOwner(localStorage));
-    } catch {
-      return false;
-    }
+  function isCurrentBudget() {
+    return isSavedBudgetCurrent(persistence.current);
   }
+
+  const syncContributionMirrors = useCallback<AppContextType['syncContributionMirrors']>((userId, householdId, memberId, incomes) => {
+    if (!canAccessBudget() || !isSavedBudgetCurrent(persistence.current)) return;
+    const owner = readBudgetOwner(localStorage);
+    if (owner.type !== 'account' || owner.userId !== userId || readStoredSessionUserId(localStorage) !== userId) return;
+    dispatchInternal({ type: 'SYNC_CONTRIBUTION_MIRRORS', householdId, memberId, incomes });
+  }, []);
 
   const reloadStoredBudget = useCallback(() => {
     scheduledPaymentUndo.current = null;
@@ -390,6 +401,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     finishOnboarding,
     saveProfileSettings,
     clearBudget,
+    syncContributionMirrors,
     // eslint-disable-next-line react-hooks/refs -- Cette fonction construit uniquement les gestionnaires d’événements.
     ...budgetCommands(dispatch, today),
     recordScheduledPayment,

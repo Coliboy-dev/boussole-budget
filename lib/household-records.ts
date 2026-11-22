@@ -22,6 +22,7 @@ export type HouseholdRecord = RecordIdentity & {
 export interface SequencedHouseholdRecord {
   seq: number;
   record: HouseholdRecord;
+  updatedBy?: string | null;
 }
 
 export function householdOperationId({ kind, id }: RecordIdentity): string {

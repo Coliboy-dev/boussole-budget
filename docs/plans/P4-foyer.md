@@ -129,7 +129,14 @@ Réglage du foyer `hasJointAccount: false`. Le solde, le vrai disponible, les ve
 
 **F2 — Versement reçu.** Un membre marque l’échéance du versement comme reçue (`recordPayment` type `income`, `balanceIncludesPayment: false`) : le solde commun augmente du montant ; l’échéance sort des versements attendus. Si le solde est recopié de la banque, le versement figure dans la liste « déjà passé » de `passedOccurrences` comme toute rentrée.
 
-**F3 — Alerte de dépendance.** Si le point bas prudent est sous la réserve **et** qu’au moins un versement attendu tombe avant la date du point bas, afficher `dependsOnContributions(premièreCause, date, n)` avec `n` = nombre de versements attendus dont la date est `<=` la date du point bas. Sinon, si le point bas prudent est sous zéro : `shortfallBefore(−pointBas, date)`.
+**F3 — Point d’attention.** Les projections prudente et optimiste de F1 viennent du moteur, qui reste inchangé. Afficher uniquement le premier message applicable :
+
+1. `dependsOnContributions(échéance, date, n)` pour la première échéance identifiée qui fait passer le solde prudent sous zéro alors que le solde optimiste la couvre. Au moins un versement doit être attendu au plus tard à cette date. `n` compte ces versements attendus. Le seuil de couverture est zéro.
+2. `shortfallBefore(−pointBas, date)` si le point bas prudent est sous zéro. Si le point bas est aujourd’hui et que le solde enregistré est déjà négatif, afficher « Le solde du compte commun est déjà sous zéro. »
+3. « La réserve serait entamée de X € le <date>. » si le point bas prudent est positif ou nul et inférieur à la réserve. Si le point bas est aujourd’hui et que le solde enregistré est déjà sous la réserve, afficher « Le solde est déjà sous la réserve de X €. »
+4. Aucun message si le point bas prudent atteint ou dépasse la réserve.
+
+Tous les textes viennent de `household-copy.ts`, énoncent un fait financier vérifié et ne nomment aucun membre.
 
 **F4 — Avance (M3).** `Spending` du foyer avec `paidFrom: 'personal'` et `paidBy: memberId`. `addSpending` ne débite **pas** le solde commun pour `paidFrom: 'personal'` (même si `balanceIncluded` est faux). La dépense compte dans `spentInMonth` (donc réduit la réservation d’enveloppe) et dans `analyzeMonth`. Elle est **exclue** du calcul « Non encodé » (R5 de P3) : elle n’a jamais touché le compte commun.
 
@@ -338,6 +345,8 @@ Le 25/11/2026, compte commun 500 € (recopié le 25/11). Loyer 900 €/mois dû
 - Versements attendus dans l’horizon : **4**, total **1 200 €** (28/11 et 28/12).
 - Alerte F3 : « Le paiement du loyer du 1er dépend de 2 versements encore attendus » (versements du 28/11 seulement, avant le point bas).
 - Le versement de Sam du 28/11 marqué reçu : solde **800 €**, disponible confirmé **−150 €**, avec versements attendus **150 €**, versements attendus **3** pour **900 €**.
+
+Variantes F3 : 1 000 €, loyer de 970 € et réserve de 50 € → réserve entamée de **20 €**. Depuis 500 €, loyer de 970 € le 5 et versement attendu de 600 € le 3 → dépendance à **1** versement. Avec un versement de 300 € → solde prévu sous zéro de **470 €**. Vérifier aussi un solde sous zéro ou sous la réserve dès aujourd’hui, le seuil exact de la réserve et un point bas au-dessus de la réserve.
 
 **F-B. Avances et transferts (corrections A, B, D) — vérifié pour le foyer.**
 Le 20/11/2026, compte commun 1 000 € (recopié le 10/11), enveloppe Courses du foyer 400 €/mois. Sam avance 135 € (12/11), Marc avance 40 € (15/11), toutes deux `paidFrom: 'personal'`. Le 20/11, Marc déclare un transfert de 50 € à Sam ; Sam le confirme le 21/11.
