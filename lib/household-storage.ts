@@ -5,6 +5,7 @@ export interface HouseholdListing {
   id: string;
   keyVersion: number;
   createdAt: string;
+  memberId?: string;
 }
 
 export interface HouseholdDirectory {

@@ -2,20 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppContext, budgetCommands, useApp, type AppContextType } from '@/lib/context/AppContext';
-import { calculateBudgetSummary } from '@/lib/budget-calculations';
+import { calculateBudgetSummary, formatDate } from '@/lib/budget-calculations';
 import { reduceBudget, type AppAction } from '@/lib/budget-reducer';
 import { emptyBudgetState, recordPayment, recordUnscheduledDebtPayment, serializeBudget, type AppState } from '@/lib/budget-state';
 import { cloudClient } from '@/lib/cloud-remote';
 import { diffHousehold } from '@/lib/household-diff';
+import {
+  contributionMirrorNeedsUpdate, contributionMirrorPlan, findContributionMirror, type ContributionMirrorPlan,
+} from '@/lib/household-contributions';
 import { materializeHousehold } from '@/lib/household-materialize';
-import { householdCopy } from '@/lib/household-copy';
+import { householdCopy, householdMessages } from '@/lib/household-copy';
 import { fetchHouseholdKey } from '@/lib/household-key';
 import { assertHouseholdAccount, HouseholdAccessRevoked, householdRemote } from '@/lib/household-remote';
 import { emptyHouseholdQueue, readHouseholdCache, updateHouseholdCache, type StoredHousehold } from '@/lib/household-storage';
 import { decodeHouseholdView, encodeHouseholdWrites, reconcileHouseholdSync, syncHousehold } from '@/lib/household-sync';
 import { envelopesOf, spendingsOf } from '@/lib/spending';
+import { useBudgetAccess } from '@/lib/budget-access';
+import { toCents } from '@/lib/money';
+import Card from '@/components/ui/Card';
 
-type SavedView = { budget: AppState; pending: number };
+type SavedView = { budget: AppState; pending: number; mirrors?: ContributionMirrorPlan };
 type Change = (budget: AppState) => AppState;
 type Options = {
   paymentDate?: string;
@@ -24,15 +30,18 @@ type Options = {
   spendingId?: string;
 };
 
-export default function HouseholdBudget({ userId, householdId, onExit, children }: {
+export default function HouseholdBudget({ userId, householdId, memberId, onExit, children }: {
   userId: string; householdId: string; onExit: () => void; children: ReactNode;
+  memberId?: string;
 }) {
-  const { today } = useApp();
+  const { today, syncContributionMirrors, isBudgetLoading, storageBlocked, expenses: personalExpenses } = useApp();
+  const personalBudgetAccessible = useBudgetAccess();
   const [view, setView] = useState<SavedView | null>(null);
   const [revoked, setRevoked] = useState(false);
   const [network, setNetwork] = useState<'loading' | 'syncing' | 'offline' | 'saved' | 'error'>('loading');
   const [failure, setFailure] = useState('');
   const [lastSpending, setLastSpending] = useState<string>();
+  const [dismissedOffers, setDismissedOffers] = useState<ReadonlySet<number>>(() => new Set());
   const initialized = useRef(false);
   const inProgress = useRef(false);
   const retrySync = useRef(false);
@@ -40,17 +49,28 @@ export default function HouseholdBudget({ userId, householdId, onExit, children 
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const undo = useRef<{ before: AppState; after: string } | null>(null);
   const spendingUndo = useRef<string | null>(null);
+  const automaticMirrors = view?.mirrors?.automatic;
+  const canWriteMirrors = personalBudgetAccessible && !isBudgetLoading && !storageBlocked;
+  useEffect(() => {
+    if (memberId && automaticMirrors?.length && canWriteMirrors) {
+      syncContributionMirrors(userId, householdId, memberId, automaticMirrors, today);
+    }
+  }, [automaticMirrors, canWriteMirrors, householdId, memberId, syncContributionMirrors, today, userId]);
 
   const display = useCallback(async (cache: StoredHousehold) => {
     const version = ++renderVersion.current;
     assertHouseholdAccount(userId);
     if (cache.userId !== userId || cache.householdId !== householdId) throw new Error(householdCopy.unavailable);
-    const budget = cache.revoked ? null : materializeHousehold(await decodeHouseholdView(cache.key, householdId, cache));
+    const rows = cache.revoked ? [] : await decodeHouseholdView(cache.key, householdId, cache);
+    const budget = cache.revoked ? null : materializeHousehold(rows);
     assertHouseholdAccount(userId);
     if (!initialized.current || version !== renderVersion.current) return;
     setRevoked(!!cache.revoked);
-    setView(budget ? { budget, pending: cache.pending.length } : null);
-  }, [householdId, userId]);
+    setView(budget ? {
+      budget, pending: cache.pending.length,
+      mirrors: memberId ? contributionMirrorPlan(budget.incomes, rows, userId, memberId, cache.cursor) : undefined,
+    } : null);
+  }, [householdId, memberId, userId]);
 
   const synchronize = useCallback(async function synchronize() {
     if (!initialized.current) return;
@@ -196,8 +216,25 @@ export default function HouseholdBudget({ userId, householdId, onExit, children 
     finishOnboarding: unavailable,
     saveProfileSettings: ({ safetyReserve }) => dispatch({ type: 'UPDATE_PROFILE', payload: { safetyReserve } }),
     clearBudget: unavailable,
+    syncContributionMirrors: unavailable,
     // eslint-disable-next-line react-hooks/refs -- Cette fonction construit uniquement les gestionnaires d’événements.
     ...budgetCommands(dispatch, today),
+    addIncome: (income) => {
+      if (income.type !== 'household_contribution') {
+        dispatch({ type: 'ADD_INCOME', payload: income });
+        return;
+      }
+      if (!memberId || income.contributionMemberId !== memberId) throw new Error(householdCopy.contributionUnavailable);
+      const id = `contribution|${memberId}`;
+      save((previous) => {
+        const current = previous.incomes.find((item) => item.id === id);
+        const contribution = {
+          ...income, id, isConfirmed: false,
+          occurrenceStatuses: current?.occurrenceStatuses, occurrenceAmountsCents: current?.occurrenceAmountsCents,
+        };
+        return { ...previous, incomes: [...previous.incomes.filter((item) => item.id !== id), contribution] };
+      });
+    },
     recordScheduledPayment: (payment) => {
       if (!budget.balanceDate) throw new Error(householdCopy.enterBalance);
       save((previous) => {
@@ -248,6 +285,32 @@ export default function HouseholdBudget({ userId, householdId, onExit, children 
             onClick={() => { void synchronize(); }}>{householdCopy.retry}</button>}
         </div>
       )}
+      {canWriteMirrors && memberId && view?.mirrors?.proposals
+        .filter((offer) => !dismissedOffers.has(offer.seq) && contributionMirrorNeedsUpdate(personalExpenses, householdId, offer))
+        .map((offer) => {
+          const { income } = offer;
+          const updating = Boolean(findContributionMirror(personalExpenses, householdId, income.id));
+          return (
+            <aside key={offer.seq} aria-label={householdCopy.mirrorOffer} className="mx-auto max-w-2xl px-4 pt-3">
+              <Card className="space-y-2">
+                <p className="text-sm font-medium">{householdMessages.contributionMirrorOffer(toCents(income.amount), income.frequency, updating)}</p>
+                {income.expectedDate && <p className="text-sm text-slate-700">
+                  {householdCopy.contributionDate}{' '}<time dateTime={income.expectedDate}>{formatDate(income.expectedDate)}</time>
+                </p>}
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="min-h-11 rounded-xl bg-teal-700 px-4 text-sm font-semibold text-white"
+                    onClick={() => syncContributionMirrors(userId, householdId, memberId, [offer], today)}>
+                    {updating ? householdCopy.mirrorUpdate : householdCopy.mirrorAccept}
+                  </button>
+                  <button type="button" className="min-h-11 px-3 text-sm font-semibold text-teal-800 underline"
+                    onClick={() => setDismissedOffers((dismissed) => new Set(dismissed).add(offer.seq))}>
+                    {householdCopy.mirrorLater}
+                  </button>
+                </div>
+              </Card>
+            </aside>
+          );
+        })}
       {view ? children : <main id="contenu" className="mx-auto max-w-2xl px-4 py-3">
         <button type="button" onClick={onExit} className="min-h-11 font-semibold text-teal-800 underline">{householdCopy.personal}</button>
       </main>}

@@ -4,7 +4,7 @@ import {
 } from './household-records.ts';
 
 export type HouseholdWrite = EncryptedHouseholdRecord & { write_id: string };
-export type ConfirmedHouseholdRecord = EncryptedHouseholdRecord & { seq: number };
+export type ConfirmedHouseholdRecord = EncryptedHouseholdRecord & { seq: number; updated_by?: string | null };
 
 export interface HouseholdQueue {
   cursor: number;
@@ -46,6 +46,7 @@ export function decodeHouseholdView(
   pending.forEach((row, index) => visible.set(row.record_id, { ...row, seq: cursor + index + 1 }));
   return Promise.all([...visible.values()].map(async (row) => ({
     seq: row.seq, record: await decryptHouseholdRecord(key, householdId, row),
+    ...(row.updated_by !== undefined && { updatedBy: row.updated_by }),
   })));
 }
 

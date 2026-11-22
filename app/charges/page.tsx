@@ -8,6 +8,7 @@ import ExpenseList from '@/components/budget/ExpenseList';
 import Card from '@/components/ui/Card';
 import { calculateTotalMonthlyExpenses, calculateTotalMonthlyIncome, formatCurrency } from '@/lib/budget-calculations';
 import type { Expense, ExpenseCategory } from '@/lib/types';
+import { householdCopy } from '@/lib/household-copy';
 
 const categoryNames: Record<ExpenseCategory, string> = {
   rent: 'Logement',
@@ -20,6 +21,7 @@ const categoryNames: Record<ExpenseCategory, string> = {
   school: 'Scolarité',
   subscriptions: 'Abonnements',
   other: 'Autre',
+  household: householdCopy.transfers,
 };
 
 export default function ChargesPage() {

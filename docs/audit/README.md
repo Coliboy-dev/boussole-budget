@@ -187,6 +187,16 @@ Le débit ou le crédit est chiffré avec l’opération qui le produit. Parmi p
 
 Sur l’appareil, les modifications hors ligne restent chiffrées dans la file IndexedDB. Le client les envoie à la reconnexion après avoir vérifié la version de synchronisation dans Supabase. La recette `tests/browser/household-sync.mjs` vérifie le parcours sur deux navigateurs en largeur 390 px avec Supabase local. Lance le build avec l’URL et la clé publique locales dans les variables publiques Supabase et une valeur de test pour `BUDGET_VAULT_MANAGED_KEY_V1`. Renseigne ensuite les variables de la recette d’intégration et `BOUSSOLE_TEST_URL`, puis lance `node --experimental-strip-types --test tests/browser/household-sync.mjs`.
 
+## Versements au compte commun (P4, PR 3)
+
+Chaque membre peut programmer son versement depuis « Notre foyer ». Un versement attendu alimente uniquement la projection optimiste. La réception crédite le solde commun et retire cette échéance de la liste des versements attendus. Une même échéance reçue sur deux appareils n’est créditée qu’une fois.
+
+Le budget Personnel du membre concerné reprend le versement comme charge certaine. Après paiement, son montant figure séparément dans l’analyse et reste exclu du total des dépenses. Les scénarios F-A et F-C vérifient les montants, la réception et l’idempotence de la ligne miroir.
+
+Une proposition ou modification du partenaire attend une confirmation du membre concerné. La suppression ou la réattribution confirmée clôture la ligne miroir et conserve ses paiements. Une version plus ancienne du Foyer ne peut pas réactiver une ligne déjà clôturée.
+
+L’accueil du Foyer affiche le disponible confirmé et le disponible avec les versements attendus. L’alerte F3 distingue une échéance dépendante d’un versement, un solde sous zéro et une réserve entamée. La recette navigateur couvre la saisie, la réception et la ligne miroir sur un écran de 390 px.
+
 ## Hygiène technique et formulaires
 
 Next.js et sa configuration ESLint utilisent la version 16.4.6. La politique de sécurité du contenu (CSP) donne un nonce distinct aux scripts de chaque page. Les pages sont rendues à la demande pour que ce nonce corresponde à la réponse HTTP. L'évaluation dynamique des scripts est permise en développement pour le rechargement à chaud. Les barres de progression utilisent des styles en ligne.

@@ -18,11 +18,14 @@ function householdView(state: AppState): Map<string, HouseholdRecord> {
   const add = (record: HouseholdRecord) => records.set(householdOperationId(record), record);
   for (const kind of Object.keys(sharedCollections) as (keyof typeof sharedCollections)[]) {
     const items: ({ id: string } & Schedule)[] = cents[sharedCollections[kind]] ?? [];
-    for (const { occurrenceStatuses, ...data } of items) {
+    for (const { occurrenceStatuses, occurrenceAmountsCents, ...data } of items) {
       add({ kind, id: data.id, data });
       if (!Object.hasOwn(occurrenceCollections, kind)) continue;
       for (const [dueDate, status] of Object.entries(occurrenceStatuses ?? {})) {
         const occurrence: HouseholdOccurrence = { entityKind: kind as HouseholdOccurrence['entityKind'], entityId: data.id, dueDate, status };
+        if (status === 'paid' && occurrenceAmountsCents?.[dueDate] !== undefined) {
+          occurrence.amountCents = occurrenceAmountsCents[dueDate];
+        }
         add({ kind: 'occurrence', id: `${kind}|${data.id}|${dueDate}`, data: occurrence });
       }
     }

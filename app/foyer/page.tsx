@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
+import { HouseholdContributionEditor } from '@/components/household/HouseholdContributions';
 import Card from '@/components/ui/Card';
 import { useApp } from '@/lib/context/AppContext';
 import { formatShortDate } from '@/lib/budget-calculations';
@@ -53,7 +54,13 @@ export default function HouseholdPage() {
               ))}
             </div>
           </Card>}
-          {active && <HouseholdReserve key={directory.selected} />}
+          {active && (
+            <>
+              <HouseholdContributionEditor key={directory.selected} />
+              <Link href="/foyer/mouvements" className={primary}>{householdCopy.monthlyContributions}</Link>
+              <HouseholdReserve key={directory.selected} />
+            </>
+          )}
         </>
       )}
     </div>

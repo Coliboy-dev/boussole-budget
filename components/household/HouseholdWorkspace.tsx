@@ -15,13 +15,14 @@ import HouseholdBudget from './HouseholdBudget';
 
 const sharedRoutes = new Set([
   '/', '/dashboard', '/projection', '/budget', '/revenus', '/charges', '/depenses', '/analyse',
-  '/dettes', '/enfants', '/objectifs', '/simulation', '/plus', '/foyer', '/conseils',
+  '/dettes', '/enfants', '/objectifs', '/simulation', '/plus', '/foyer', '/foyer/mouvements', '/conseils',
 ]);
 
 interface Workspace {
   userId: string | null;
   inHouseholdShell: boolean;
   active: boolean;
+  memberId?: string;
   directory: HouseholdDirectory;
   loading: boolean;
   error: string;
@@ -107,6 +108,7 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
 
   const directory = userId && directoryView?.userId === userId ? directoryView.directory : emptyDirectory;
   const selected = directory.selected;
+  const memberId = directory.households.find(({ id }) => id === selected)?.memberId;
   const active = !!(userId && selected && sharedRoutes.has(pathname));
   const inHouseholdShell = !!(userId && (active || pathname === '/foyer'));
 
@@ -119,7 +121,7 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
         return { ...current, selected: id };
       });
       readDirectory(userId, next);
-      if (navigate && (id || pathname === '/foyer')) router.push('/dashboard');
+      if (navigate && (id || pathname === '/foyer' || pathname === '/foyer/mouvements')) router.push('/dashboard');
     } catch (error) {
       setError({ userId, message: error instanceof Error ? error.message : householdCopy.unavailable });
     }
@@ -139,13 +141,14 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
 
   return (
     <Context.Provider value={{
-      userId, inHouseholdShell, active, directory,
+      userId, inHouseholdShell, active, memberId, directory,
       loading: !!userId && directoryView?.userId !== userId && errorView?.userId !== userId,
       error: userId && errorView?.userId === userId ? errorView.message : '',
       create, select,
     }}>
       {active && userId && selected ? (
-        <HouseholdBudget key={`${userId}:${selected}`} userId={userId} householdId={selected} onExit={() => { void select(null); }}>
+        <HouseholdBudget key={`${userId}:${selected}`} userId={userId} householdId={selected}
+          memberId={memberId} onExit={() => { void select(null); }}>
           {pathname === '/conseils' ? (
             <main id="contenu" className="mx-auto max-w-2xl px-4 py-6">
               <p>{householdCopy.advicePersonal}</p>

@@ -11,7 +11,7 @@ export interface UserProfile {
 }
 
 // Income types
-export type IncomeType = 'mutual_insurance' | 'allocation' | 'alimony' | 'salary' | 'freelance' | 'other';
+export type IncomeType = 'mutual_insurance' | 'allocation' | 'alimony' | 'salary' | 'freelance' | 'other' | 'household_contribution';
 export type Frequency = 'monthly' | 'weekly' | 'bi_monthly' | 'quarterly' | 'annual' | 'one_time';
 
 export type OccurrenceStatus = 'planned' | 'paid' | 'late' | 'cancelled';
@@ -20,6 +20,7 @@ export interface Schedule {
   endDate?: string;
   trackedFrom?: string;
   occurrenceStatuses?: Record<string, 'paid' | 'cancelled'>;
+  occurrenceAmountsCents?: Record<string, number>;
 }
 
 export interface Income extends Schedule {
@@ -30,11 +31,12 @@ export interface Income extends Schedule {
   frequency: Frequency;
   expectedDate?: string; // ISO date
   isConfirmed: boolean;
+  contributionMemberId?: string;
   notes?: string;
 }
 
 // Expense types
-export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions' | 'other';
+export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions' | 'other' | 'household';
 
 export interface Expense extends Schedule {
   id: string;
@@ -45,6 +47,8 @@ export interface Expense extends Schedule {
   dueDate?: string; // ISO date for next occurrence
   isPaid: boolean;
   isRecurring: boolean;
+  linkedRecordId?: string;
+  linkedRecordSeq?: number;
   notes?: string;
 }
 
