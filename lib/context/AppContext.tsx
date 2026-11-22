@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, useEffect, useRef, useSyncExternalStore } from 'react';
+import React, { createContext, useCallback, useContext, useReducer, useEffect, useRef, useSyncExternalStore } from 'react';
 import type {
   Income,
   Expense,
@@ -257,6 +257,7 @@ export interface AppContextType extends AppState {
   needsOnboarding: boolean;
   canExportBudget: boolean;
   isCurrentBudget: () => boolean;
+  reloadStoredBudget: () => void;
   lastBackupDate: string | null;
   exportBudget: () => string;
   recordBackupExport: (date: string) => void;
@@ -328,7 +329,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  useEffect(() => {
+  const reloadStoredBudget = useCallback(() => {
+    scheduledPaymentUndo.current = null;
     let snapshot: BudgetStorageSnapshot | undefined;
     let owner = '';
     try {
@@ -355,6 +357,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatchInternal({ type: 'HYDRATE', payload: unavailable });
     }
   }, []);
+
+  useEffect(reloadStoredBudget, [reloadStoredBudget]);
 
   useEffect(() => {
     const { storageStatus, storageRevision, lastBackupDate, budget } = splitRuntimeState(state);
@@ -511,6 +515,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     needsOnboarding: storageStatus === 'fresh',
     canExportBudget,
     isCurrentBudget,
+    reloadStoredBudget,
     lastBackupDate,
     exportBudget,
     recordBackupExport,

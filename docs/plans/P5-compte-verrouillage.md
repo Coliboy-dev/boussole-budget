@@ -1,4 +1,38 @@
-# P5 — Compte facultatif et verrouillage de l’application (révision 5.3)
+# P5 — Compte, sauvegarde et verrouillage de l’application (révision 6)
+
+### Révision 6 — Compte obligatoire et copie récupérable par e-mail (22 novembre 2026)
+
+Ce lot part de `main` (`499b754`, C0 et C1 livrés). Il remplace le parcours d’inscription de la PR #23 et les règles de la révision 5.3 relatives au compte facultatif et à la phrase des nouveaux coffres. Les sections historiques documentent aussi les coffres existants, dont la clé reste dérivée de la phrase choisie à leur création.
+
+#### Premier accès
+
+- Après l’ouverture des inscriptions, une personne qui démarre sans budget crée son compte ou se connecte par code e-mail. Elle configure le code de l’appareil et peut activer le déverrouillage par le téléphone si le navigateur le permet. Le code reste utilisable en cas d’annulation ou d’échec de la méthode du téléphone. Appliquer ce passage avant l’affichage du budget sur les routes privées, y compris lors d’un accès direct à une route.
+- Une fois le premier budget enregistré, créer automatiquement sa copie en ligne. À la connexion sur un autre appareil, récupérer la copie de ce compte après configuration du verrou local. Les nouveaux coffres s’ouvrent sans phrase secrète.
+- Un budget invité déjà présent reste accessible et exportable. Son envoi exige une confirmation qui désigne le compte et le budget concerné. Si un budget local et une copie distante diffèrent, conserver les deux jusqu’à la décision de la personne. Une lecture distante en échec reste distincte d’un coffre absent.
+- La vérification du compte reste nécessaire au premier accès. Après un accès vérifié, le mode hors ligne de C1 continue à servir le budget du même compte. Garder les inscriptions fermées en production pendant la recette.
+
+#### Clé gérée par Capiste
+
+- Ajouter par migration un mode de clé explicite sur `budget_vaults`. Attribuer le mode historique aux lignes existantes et préserver les politiques RLS de propriétaire. Les nouveaux coffres gérés gardent le chiffrement AES-GCM et le contrôle de version des écritures.
+- La route serveur `/api/budget-key` vérifie le jeton auprès de Supabase et fournit le matériel de clé du compte authentifié. Elle le dérive par HMAC-SHA-256 avec `BUDGET_VAULT_MANAGED_KEY_V1`, un secret de 32 octets aléatoires encodé en base64. Le navigateur réutilise la dérivation et le chiffrement du coffre. La réponse est exclue du cache. Le secret serveur reste dans l’environnement serveur.
+- Préserver la reprise C1 du premier envoi et les contrôles au changement de compte. Une panne du service de clé suspend les opérations qui en dépendent. La reprise conserve l’instantané local et respecte les confirmations de remplacement.
+- Préserver les anciens coffres et leur mécanisme de lecture. Une éventuelle conversion fera l’objet d’un changement séparé. Elle devra pouvoir ouvrir le coffre avec la clé historique ou la phrase d’origine avant de le réchiffrer à la version lue.
+- Mettre à jour la politique de confidentialité à la livraison. Elle annonce la sauvegarde automatique et le fait que Start’OnLab gère les clés des nouveaux coffres. Les copies stockées restent chiffrées. Le service peut les déchiffrer pour les restituer après la connexion.
+
+#### Recette avant ouverture
+
+- Inscription, validation par e-mail, création du code, déverrouillage par le téléphone si disponible, premier budget sauvegardé sans phrase et récupération sur un deuxième navigateur par e-mail.
+- Annulation de Face ID, démarrage sans réseau, expiration de session hors ligne, changement de compte dans un autre onglet, jeton absent ou invalide et séparation des clés de deux comptes.
+- Budget invité existant, coffre historique, perte de la réponse du premier envoi, écritures concurrentes et refus du remplacement sans choix explicite.
+- `npm test`, `npx tsc --noEmit`, `npm run lint` et `npm run build`. Tester les migrations et les écritures sur des données fictives avant d’appliquer quoi que ce soit en production.
+
+#### Activation après validation
+
+Appliquer la migration en premier. Configurer le secret serveur `BUDGET_VAULT_MANAGED_KEY_V1` séparément pour chaque environnement. Conserver une copie protégée de chaque secret et garder le même pour les redéploiements de l’environnement qui l’utilise. Une rotation devra versionner et migrer les coffres avant de retirer un secret encore utilisé.
+
+Activer `NEXT_PUBLIC_MANAGED_BUDGET_BACKUPS=true` pour utiliser les clés gérées. `NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED=true` et l’ouverture des inscriptions côté Supabase activent ensuite le parcours obligatoire pour les nouveaux comptes. L’environnement de recette utilise son propre secret, sa propre base et des adresses fictives.
+
+---
 
 Plan revu contre **`main` au commit `cfd94c9`**, qui intègre les lots A et B. La révision 4 a cadré WebAuthn et la révision 5 a précisé les lots C et D. La révision 5.1 rend C0 livrable seul et fixe les conditions d’ouverture de C1.
 

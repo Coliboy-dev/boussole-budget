@@ -5,7 +5,7 @@ import { LockKeyhole } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import { Icon } from '@/components/ui/icons';
 import { useCloudSync } from '@/components/sync/CloudSyncProvider';
-import { LOCK_DELAYS, PIN_LENGTH, isValidPin, type LockDelay } from '@/lib/app-lock';
+import { LOCK_DELAYS, PIN_LENGTH, isValidPin, readLockState, type LockDelay } from '@/lib/app-lock';
 import { useLock } from './LockProvider';
 import { deviceAuthenticatorAvailable } from '@/lib/webauthn-lock';
 
@@ -29,6 +29,79 @@ function PinField({ id, label, value, onChange }: { id: string; label: string; v
         value={value} onChange={(event) => onChange(event.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
         className={fieldClass} />
     </div>
+  );
+}
+
+function newPinProblem(pin: string, confirmation: string): string {
+  if (!isValidPin(pin)) return `Le code doit contenir ${PIN_LENGTH} chiffres.`;
+  if (pin !== confirmation) return 'Les deux codes ne correspondent pas.';
+  return '';
+}
+
+export function InitialLockSetup({ onComplete }: { onComplete: () => void }) {
+  const lock = useLock();
+  const [pin, setPin] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [phoneStep, setPhoneStep] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+
+  async function saveCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const problem = newPinProblem(pin, confirmation);
+    setError(problem);
+    if (problem) return;
+    setPending(true);
+    try {
+      await lock.enable(pin, 0);
+      if (readLockState(localStorage).status !== 'valid') throw new Error('Le code n’a pas pu être enregistré sur cet appareil.');
+      if (lock.deviceStatus !== 'valid' && await deviceAuthenticatorAvailable() && await lock.authorizeDeviceEnrollment(pin)) {
+        setPin('');
+        setConfirmation('');
+        setPhoneStep(true);
+      } else onComplete();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Le code n’a pas pu être enregistré.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function activatePhone() {
+    setPending(true);
+    setError('');
+    try {
+      if (await lock.enrollDevice()) onComplete();
+      else setError('Le téléphone n’a pas confirmé. Tu peux continuer avec ton code.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-3">
+      <h2 className="text-base font-semibold text-slate-900">Protège ton budget</h2>
+      {phoneStep ? (
+        <>
+          <p className="text-sm text-slate-700">Tu peux ouvrir l’app avec Face ID, ton empreinte ou le code de ton téléphone, selon ton appareil. Le code de l’app sert de secours.</p>
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={pending || Boolean(error)} className={primaryButton} onClick={() => void activatePhone()}>
+              {pending ? 'Vérification sur le téléphone…' : 'Activer le déverrouillage avec le téléphone'}
+            </button>
+            <button type="button" disabled={pending} className={secondaryButton} onClick={onComplete}>Continuer avec mon code</button>
+          </div>
+        </>
+      ) : (
+        <form onSubmit={(event) => void saveCode(event)} noValidate className="space-y-3">
+          <p className="text-sm text-slate-700">Choisis le code qui te permettra d’ouvrir l’app sur cet appareil.</p>
+          <PinField id="first-pin" label={`Code à ${PIN_LENGTH} chiffres`} value={pin} onChange={setPin} />
+          <PinField id="first-pin-confirm" label="Confirme le code" value={confirmation} onChange={setConfirmation} />
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+          <button type="submit" disabled={pending} className={primaryButton}>Enregistrer mon code</button>
+        </form>
+      )}
+    </Card>
   );
 }
 
@@ -123,16 +196,10 @@ export default function LockSettings() {
     setNotice('');
   }
 
-  function newPinProblem(): string {
-    if (!isValidPin(pin)) return `Le code doit contenir ${PIN_LENGTH} chiffres.`;
-    if (pin !== confirmation) return 'Les deux codes ne correspondent pas.';
-    return '';
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
-    const problem = mode === 'disable' ? '' : newPinProblem();
+    const problem = mode === 'disable' ? '' : newPinProblem(pin, confirmation);
     if (problem) {
       setError(problem);
       return;

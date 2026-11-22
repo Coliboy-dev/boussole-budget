@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { Compass, LockKeyhole } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
 import { PIN_LENGTH, VEIL_CLASS } from '@/lib/app-lock';
+import { managedBackupsEnabled } from '@/lib/cloud-remote';
 import { deviceAuthenticatorAvailable } from '@/lib/webauthn-lock';
 import { useLock } from './LockProvider';
 
@@ -208,7 +209,9 @@ function ForgotPin({ onCancel }: { onCancel?: () => void }) {
       <p>Sans le code, la seule issue est d’effacer Boussole sur ce téléphone : budget, réglages et verrou.</p>
       {account ? (
         <p>
-          Tu as un compte : après l’effacement, reconnecte-toi avec ton e-mail et ta phrase secrète pour récupérer ta copie en ligne.
+          {managedBackupsEnabled
+            ? 'Après l’effacement, reconnecte-toi par e-mail pour récupérer ta copie en ligne. Une ancienne copie peut encore demander sa phrase secrète.'
+            : 'Tu as un compte : après l’effacement, reconnecte-toi avec ton e-mail et ta phrase secrète pour récupérer ta copie en ligne.'}{' '}
           Les modifications faites sur ce téléphone et pas encore synchronisées seront perdues.
         </p>
       ) : (

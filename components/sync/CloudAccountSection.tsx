@@ -8,6 +8,7 @@ import FormField from '@/components/forms/FormField';
 import { Icon } from '@/components/ui/icons';
 import { accountSignupEnabled, useCloudSync } from '@/components/sync/CloudSyncProvider';
 import { MIN_PASSPHRASE_LENGTH } from '@/lib/cloud-crypto';
+import { managedBackupsEnabled } from '@/lib/cloud-remote';
 import { generatePassphrase } from '@/lib/passphrase';
 
 const fieldClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
@@ -42,9 +43,15 @@ function Explanation() {
         <Icon icon={ShieldCheck} className="size-5 text-teal-700" />
         Comment tes données sont protégées
       </h2>
-      <p>La copie de ton budget envoyée en ligne est chiffrée sur ton appareil, avec une phrase secrète que toi seul connais, avant d’être envoyée.</p>
-      <p>Le serveur, hébergé dans l’Union européenne, ne reçoit qu’un bloc illisible : ni montant, ni créancier, ni date. Personne chez Start’OnLab ne peut le lire.</p>
-      <p>Si tu oublies ta phrase secrète, la copie en ligne est perdue. Le budget de ton téléphone, lui, reste intact.</p>
+      {managedBackupsEnabled ? (
+        <p>Les nouvelles copies en ligne sont chiffrées avec une clé gérée par Start’OnLab. Ton code reçu par e-mail permet de les ouvrir sur un autre appareil. Les anciennes copies protégées par une phrase gardent leur mode de récupération.</p>
+      ) : (
+        <>
+          <p>La copie de ton budget envoyée en ligne est chiffrée sur ton appareil, avec une phrase secrète que toi seul connais, avant d’être envoyée.</p>
+          <p>Le serveur, hébergé dans l’Union européenne, ne reçoit qu’un bloc illisible : ni montant, ni créancier, ni date. Personne chez Start’OnLab ne peut le lire.</p>
+          <p>Si tu oublies ta phrase secrète, la copie en ligne est perdue. Le budget de ton téléphone, lui, reste intact.</p>
+        </>
+      )}
     </Card>
   );
 }
@@ -86,7 +93,7 @@ function SignIn() {
         </form>
       ) : (
         <form onSubmit={submitCode} noValidate className="space-y-3">
-          <p className="text-sm text-slate-700">Code envoyé à <strong>{otpEmail}</strong>. Il est valable une heure.</p>
+          <p className="text-sm text-slate-700">Code envoyé à <strong>{otpEmail}</strong>. Utilise le dernier code reçu.</p>
           <FormField label="Code reçu par e-mail" required>
             <input name="code" type="text" inputMode="numeric" autoComplete="one-time-code" required
               className={`${fieldClass} tracking-widest`} />
@@ -403,7 +410,10 @@ function Active() {
   );
 }
 
-export default function CloudAccountSection({ protectedBudget = false }: { protectedBudget?: boolean }) {
+export default function CloudAccountSection({ protectedBudget = false, startingAccount = false }: {
+  protectedBudget?: boolean;
+  startingAccount?: boolean;
+}) {
   const { phase, beginSignIn, signingUp, otpEmail } = useCloudSync();
 
   return (
@@ -416,13 +426,13 @@ export default function CloudAccountSection({ protectedBudget = false }: { prote
       )}
       {phase === 'loading' && <p role="status" className="text-sm text-slate-600">Chargement…</p>}
       {!protectedBudget && phase !== 'off' && phase !== 'loading' && <Explanation />}
-      {protectedBudget && phase === 'signed-out' && (
+      {protectedBudget && !startingAccount && phase === 'signed-out' && (
         <p className="text-sm text-slate-700">Reconnecte-toi au compte de ce budget pour y accéder.</p>
       )}
       {phase === 'signed-out' && <SignIn />}
-      {phase === 'signed-out' && accountSignupEnabled && !protectedBudget && !otpEmail && (
+      {phase === 'signed-out' && accountSignupEnabled && (!protectedBudget || startingAccount) && !otpEmail && (
         <button type="button" className={secondaryButton} onClick={() => beginSignIn(!signingUp)}>
-          {signingUp ? 'J’ai déjà un compte' : 'Créer un compte pour ce budget'}
+          {signingUp ? 'J’ai déjà un compte' : startingAccount ? 'Créer mon compte' : 'Créer un compte pour ce budget'}
         </button>
       )}
       {phase === 'needs-passphrase' && <Passphrase />}

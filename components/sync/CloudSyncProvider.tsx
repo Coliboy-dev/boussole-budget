@@ -5,14 +5,15 @@ import { useRouter } from 'next/navigation';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import {
   ACCOUNT_OWNER_KEY, ACCOUNT_TRANSITION_LOCK, AUTH_STORAGE_KEY, accountGuard, isPristineBudget,
-  readBudgetOwner, readExpiredSession, readStoredSessionUserId, type OwnerStatus,
+  readBudgetOwner, readExpiredSession, readStoredSessionUserId, type BudgetOwner, type OwnerStatus,
 } from '@/lib/account-guard';
 import { canAccessBudget, publishBudgetAccess } from '@/lib/budget-access';
 import {
   decryptText, deriveKey, encryptText, fingerprint, KDF_ITERATIONS, newSalt, passphraseProblem, WrongPassphraseError,
 } from '@/lib/cloud-crypto';
 import {
-  clearStoredKey, cloudClient, cloudConfigured, createVault, deleteCloudAccount, fetchVault, loadStoredKey,
+  clearStoredKey, cloudClient, cloudConfigured, createVault, deleteCloudAccount, fetchManagedVaultKey, fetchVault, loadStoredKey,
+  managedBackupsEnabled,
   saveStoredKey, updateVault, type RemoteVault, type StoredKey,
 } from '@/lib/cloud-remote';
 import { clearSyncMemory, decideSync, readSyncMemory, writeSyncMemory } from '@/lib/cloud-sync';
@@ -21,6 +22,7 @@ import {
   serializeBudget, writeBudgetSnapshot, type BudgetStorageSnapshot,
 } from '@/lib/budget-state';
 import { useApp } from '@/lib/context/AppContext';
+import { readLockState } from '@/lib/app-lock';
 import { todayInBrussels } from '@/lib/local-date';
 import type { FirstBudgetInput } from '@/lib/onboarding';
 import { matchesInitialVault, PENDING_VAULT_KEY, readPendingVault, rememberVaultFingerprint } from '@/lib/vault-pending';
@@ -34,6 +36,7 @@ export type SyncPhase =
   | 'needs-passphrase'
   | 'awaiting-association'
   | 'first-budget'
+  | 'restore-after-lock'
   | 'vault-pending'
   | 'local-only'
   | 'account-mismatch'
@@ -92,6 +95,7 @@ const Context = createContext<CloudSyncContext | null>(null);
 const PUSH_DELAY_MS = 1500;
 const changedAccount = 'Le compte actif a changé. Vérifie ta connexion et réessaie.';
 const changedBudget = 'Le budget a changé depuis l’affichage de ce choix. Vérifie de nouveau avant de continuer.';
+const unreadableVault = 'La copie en ligne n’a pas pu être ouverte.';
 const vaultFromAnotherDevice = 'Ton compte a déjà une copie en ligne créée sur un autre appareil. Saisis ta phrase secrète pour la comparer.';
 
 function message(error: unknown, fallback: string) {
@@ -108,6 +112,10 @@ function canAssociate(owner: OwnerStatus, userId: string) {
 
 function sameOwner(a: OwnerStatus, b: OwnerStatus) {
   return a.type === b.type && ('userId' in a ? 'userId' in b && a.userId === b.userId : true);
+}
+
+function matchesVaultKey(key: StoredKey, remote: RemoteVault) {
+  return (key.keyMode ?? 'legacy') === remote.keyMode && key.salt === remote.salt && key.kdfIterations === remote.kdfIterations;
 }
 
 async function withAccountTransition<T>(action: () => T | Promise<T>): Promise<T> {
@@ -159,16 +167,19 @@ function assertAssociation(choice: Association) {
     || localStorage.getItem(LEGACY_BUDGET_STORAGE_KEY) !== choice.legacy) throw new Error(changedBudget);
 }
 
-async function applyAssociation(choice: Association, action: AssociationAction) {
+async function applyAssociation(choice: Association, action: AssociationAction, onLinked: (owner: BudgetOwner) => void) {
   const { userId } = choice.key;
   if ((action === 'restore') !== (choice.version !== null)) throw new Error(changedBudget);
 
   await withAccountTransition(async () => {
     assertAssociation(choice);
+    if (managedBackupsEnabled && readLockState(localStorage).status !== 'valid') throw new Error('Configure d’abord le code de cet appareil.');
     discardStalePendingVault();
     if (readPendingVault(localStorage) !== null) throw new Error('Une création de coffre est déjà en attente.');
     const remote = await fetchVault(userId);
-    if ((remote?.version ?? null) !== choice.version) throw new Error('La copie en ligne a changé. Relance le choix d’association.');
+    if ((remote?.version ?? null) !== choice.version || (remote && !matchesVaultKey(choice.key, remote))) {
+      throw new Error('La copie en ligne a changé. Relance le choix d’association.');
+    }
     const contents = remote ? serializeBudget(deserializeStoredBudget(await decryptText(choice.key.key, remote)).budget) : null;
     const restoredHash = contents === null ? null : await fingerprint(contents);
     const initialHash = action === 'attach' && !choice.empty ? await fingerprint(choice.contents) : null;
@@ -194,7 +205,7 @@ async function applyAssociation(choice: Association, action: AssociationAction) 
       localStorage.setItem(PENDING_VAULT_KEY, JSON.stringify({ userId, fingerprints: [initialHash] }));
     }
     localStorage.setItem(ACCOUNT_OWNER_KEY, JSON.stringify(owner));
-    window.location.reload();
+    onLinked(owner);
   });
 }
 
@@ -229,10 +240,63 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { appRef.current = app; });
 
-  function publishKey(key: StoredKey) {
+  const publishKey = useCallback((key: StoredKey) => {
     keyRef.current = key;
     publishBudgetAccess(key.userId, key.userId);
-  }
+  }, []);
+
+  const linkBudget = useCallback((choice: Association, action: AssociationAction) => applyAssociation(choice, action, (owner) => {
+    if (!managedBackupsEnabled) {
+      window.location.reload();
+      return;
+    }
+    knownOwner.current = owner;
+    appRef.current.reloadStoredBudget();
+    setAssociation(undefined);
+    publishKey(choice.key);
+    setPhase(readPendingVault(localStorage) !== null ? 'vault-pending' : 'syncing');
+  }), [publishKey]);
+
+  const openAccountBudget = useCallback(async (owner: OwnerStatus, key: StoredKey, remote: RemoteVault | null, stillCurrent: () => boolean) => {
+    const { userId } = key;
+    const check = () => {
+      if (!stillCurrent() || !sameOwner(readBudgetOwner(localStorage), owner)) throw new Error(changedAccount);
+    };
+    if (remote) await decryptText(key.key, remote);
+    check();
+    setRemoteExists(Boolean(remote));
+
+    if (owner.type !== 'account') {
+      const choice = prepareAssociation(key, remote);
+      const fresh = choice.empty && choice.snapshot.current === null && choice.snapshot.legacy === null;
+      if (!remote && fresh && (managedBackupsEnabled || accountSignupEnabled)) {
+        setAssociation(choice);
+        setPhase('first-budget');
+        return;
+      }
+      if (choice.empty && choice.owner.type === 'guest') {
+        if (managedBackupsEnabled && readLockState(localStorage).status !== 'valid') {
+          setAssociation(choice);
+          setPhase(remote ? 'restore-after-lock' : 'awaiting-association');
+          return;
+        }
+        await linkBudget(choice, remote ? 'restore' : 'attach');
+        return;
+      }
+      setAssociation(choice);
+      setPhase('awaiting-association');
+      return;
+    }
+
+    await withAccountTransition(async () => {
+      check();
+      if (!accountGuard({ owner, sessionUserId: readStoredSessionUserId(localStorage), keyUserId: userId })) throw new Error(changedAccount);
+      await saveStoredKey(key);
+      check();
+      publishKey(key);
+      setPhase(readPendingVault(localStorage) !== null ? 'vault-pending' : 'syncing');
+    });
+  }, [linkBudget, publishKey]);
 
   const remoteAllowed = useCallback((key: StoredKey) =>
     keyRef.current === key && !authBusy.current && onlineAccount.current
@@ -245,6 +309,18 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     if (!syncAllowed(key)) throw new Error(changedAccount);
   }, [syncAllowed]);
 
+  // À exécuter sous le verrou de transition quand un autre appareil a créé le coffre.
+  const alignVaultKey = useCallback(async (key: StoredKey, remote: RemoteVault, check: () => void) => {
+    if (remote.keyMode === 'legacy') throw new WrongPassphraseError();
+    const next = await fetchManagedVaultKey(key.userId, remote);
+    await decryptText(next.key, remote).catch(() => { throw new Error(unreadableVault); });
+    check();
+    await saveStoredKey(next);
+    check();
+    keyRef.current = next;
+    return next;
+  }, []);
+
   const pull = useCallback(async (key: StoredKey, remote: RemoteVault, expected: string, check = () => assertSync(key)) => {
     const { budget } = deserializeStoredBudget(await decryptText(key.key, remote));
     const restoredHash = await fingerprint(serializeBudget(budget));
@@ -256,8 +332,9 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   }, [assertSync]);
 
   const runSync = useCallback(async () => {
-    const key = keyRef.current;
-    if (!key || !syncAllowed(key)) return;
+    const initialKey = keyRef.current;
+    if (!initialKey || !syncAllowed(initialKey)) return;
+    let key = initialKey;
     const current = appRef.current;
     if (current.isBudgetLoading || current.storageBlocked || !current.canExportBudget || !current.isCurrentBudget()) return;
     if (busy.current) { again.current = true; return; }
@@ -265,6 +342,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     setPhase('syncing');
     setError('');
     const { userId } = key;
+    let managedRemote = false;
 
     try {
       const local = current.exportBudget();
@@ -274,6 +352,10 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
       const remote = await fetchVault(userId);
       assertSync(key);
       setRemoteExists(Boolean(remote));
+      managedRemote = remote?.keyMode === 'managed_v1';
+      if (remote && !matchesVaultKey(key, remote)) {
+        key = await withAccountTransition(() => alignVaultKey(key, remote, () => assertSync(key)));
+      }
       const memory = readSyncMemory(localStorage, userId);
       const decision = decideSync({ remoteVersion: remote?.version ?? null, memory, localFingerprint, localIsEmpty });
 
@@ -289,7 +371,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
             break;
           }
           const version = decision.action === 'create'
-            ? await createVault(userId, encrypted, key.salt, key.kdfIterations)
+            ? await createVault(userId, encrypted, key.salt, key.kdfIterations, key.keyMode)
             : await updateVault(userId, encrypted, decision.expectedVersion);
           assertSync(key);
           if (version === null) {
@@ -316,14 +398,14 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
       setPhase('synced');
     } catch (caught) {
       if (!syncAllowed(key)) return;
-      if (caught instanceof WrongPassphraseError) {
+      if (caught instanceof WrongPassphraseError && !managedRemote) {
         keyRef.current = null;
         publishBudgetAccess(userId, null);
         setPhase('needs-passphrase');
         setError('La copie en ligne utilise une autre phrase secrète. Saisis-la pour continuer.');
       } else {
         setPhase('error');
-        setError(message(caught, 'La synchronisation a échoué.'));
+        setError(caught instanceof WrongPassphraseError ? unreadableVault : message(caught, 'La synchronisation a échoué.'));
       }
     } finally {
       busy.current = false;
@@ -332,12 +414,13 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
         window.setTimeout(() => retrySync.current(), 300);
       }
     }
-  }, [assertSync, pull, syncAllowed]);
+  }, [alignVaultKey, assertSync, pull, syncAllowed]);
 
   const resumeVault = useCallback(async () => {
-    const key = keyRef.current;
-    if (!key || !remoteAllowed(key) || busy.current || !appRef.current.canExportBudget
+    const initialKey = keyRef.current;
+    if (!initialKey || !remoteAllowed(initialKey) || busy.current || !appRef.current.canExportBudget
       || appRef.current.isBudgetLoading || !appRef.current.isCurrentBudget()) return;
+    let key = initialKey;
     const initialMarker = localStorage.getItem(PENDING_VAULT_KEY);
     const pending = readPendingVault(localStorage);
     if (pending === null) return;
@@ -376,7 +459,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
           if (appRef.current.exportBudget() !== local) throw new Error(changedBudget);
           expected = rememberVaultFingerprint(expected, confirmedHash);
           writePending();
-          version = await createVault(key.userId, encrypted, key.salt, key.kdfIterations);
+          version = await createVault(key.userId, encrypted, key.salt, key.kdfIterations, key.keyMode);
           checkPending();
           if (version === null) {
             remote = await fetchVault(key.userId);
@@ -385,13 +468,16 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
           }
         }
         if (remote) {
-          if (remote.salt !== key.salt || remote.kdfIterations !== key.kdfIterations) {
-            keyRef.current = null;
-            publishBudgetAccess(key.userId, null);
-            setRemoteExists(true);
-            setError(vaultFromAnotherDevice);
-            setPhase('needs-passphrase');
-            return;
+          if (!matchesVaultKey(key, remote)) {
+            if (remote.keyMode === 'legacy') {
+              keyRef.current = null;
+              publishBudgetAccess(key.userId, null);
+              setRemoteExists(true);
+              setError(vaultFromAnotherDevice);
+              setPhase('needs-passphrase');
+              return;
+            }
+            key = await alignVaultKey(key, remote, checkPending);
           }
           const { budget } = deserializeStoredBudget(await decryptText(key.key, remote));
           confirmedHash = await fingerprint(serializeBudget(budget));
@@ -414,12 +500,13 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
         confirmed = true;
       });
     } catch (caught) {
-      if (remoteAllowed(key)) setError(message(caught, 'Le coffre est encore en attente.'));
+      if (remoteAllowed(key)) setError(caught instanceof WrongPassphraseError && key.keyMode === 'managed_v1'
+        ? unreadableVault : message(caught, 'Le coffre est encore en attente.'));
     } finally {
       busy.current = false;
     }
     if (confirmed) await runSync();
-  }, [remoteAllowed, runSync]);
+  }, [alignVaultKey, remoteAllowed, runSync]);
 
   useEffect(() => { retrySync.current = () => void runSync(); }, [runSync]);
 
@@ -494,16 +581,22 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
         setPhase('account-error');
         return;
       }
-      setPhase('needs-passphrase');
+      if (!managedBackupsEnabled) setPhase('needs-passphrase');
       const remote = await fetchVault(userId);
       if (!stillCurrent()) return;
       setRemoteExists(Boolean(remote));
+      if (managedBackupsEnabled && (!remote || remote.keyMode === 'managed_v1')) {
+        const key = await fetchManagedVaultKey(userId, remote);
+        await openAccountBudget(owner, key, remote, stillCurrent);
+      } else {
+        setPhase('needs-passphrase');
+      }
     } catch (caught) {
       if (!stillCurrent()) return;
-      setError(message(caught, 'Impossible de vérifier le compte.'));
+      setError(caught instanceof WrongPassphraseError ? unreadableVault : message(caught, 'Impossible de vérifier le compte.'));
       setPhase((current) => current === 'needs-passphrase' ? current : 'account-error');
     }
-  }, []);
+  }, [openAccountBudget]);
 
   const refreshAccount = useCallback(async (force = true) => {
     if (authBusy.current) return;
@@ -670,14 +763,19 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function unlock(passphrase: string, savedPassphrase = false) {
-    const userId = account?.userId;
-    if (!userId || authBusy.current) throw new Error('Connecte-toi d’abord.');
+    const active = accountRef.current;
+    if (!active || authBusy.current) throw new Error('Connecte-toi d’abord.');
+    const { userId } = active;
     assertSession(userId);
     const owner = readBudgetOwner(localStorage);
     if (!canAssociate(owner, userId) && !(owner.type === 'account' && owner.userId === userId)) throw new Error(changedAccount);
     setError('');
     const remote = await fetchVault(userId);
     assertSession(userId);
+    if (managedBackupsEnabled && (!remote || remote.keyMode === 'managed_v1')) {
+      await refreshAccount(true);
+      return;
+    }
     if (!remote) {
       const problem = passphraseProblem(passphrase);
       if (problem) throw new Error(problem);
@@ -686,45 +784,15 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     const salt = remote?.salt ?? newSalt();
     const kdfIterations = remote?.kdfIterations ?? KDF_ITERATIONS;
     const key = await deriveKey(passphrase, salt, kdfIterations);
-    if (remote) await decryptText(key, remote);
-    assertSession(userId);
-    if (!sameOwner(readBudgetOwner(localStorage), owner)) throw new Error(changedAccount);
     const stored: StoredKey = { userId, key, salt, kdfIterations };
-    setRemoteExists(Boolean(remote));
-
-    if (owner.type !== 'account') {
-      const choice = prepareAssociation(stored, remote);
-      if (accountSignupEnabled && !remote && choice.empty && choice.snapshot.current === null && choice.snapshot.legacy === null) {
-        setAssociation(choice);
-        setPhase('first-budget');
-        return;
-      }
-      if (choice.empty && choice.owner.type === 'guest') {
-        await applyAssociation(choice, remote ? 'restore' : 'attach');
-        return;
-      }
-      setAssociation(choice);
-      setPhase('awaiting-association');
-      return;
-    }
-
-    await withAccountTransition(async () => {
-      assertSession(userId);
-      if (!accountGuard({ owner: readBudgetOwner(localStorage), sessionUserId: userId, keyUserId: stored.userId })) {
-        throw new Error(changedAccount);
-      }
-      await saveStoredKey(stored);
-      assertSession(userId);
-      if (!sameOwner(readBudgetOwner(localStorage), owner)) throw new Error(changedAccount);
-      publishKey(stored);
-      setPhase(readPendingVault(localStorage) !== null ? 'vault-pending' : 'syncing');
-    });
+    await openAccountBudget(owner, stored, remote, () => accountRef.current === active
+      && readStoredSessionUserId(localStorage) === userId && !authBusy.current);
   }
 
   async function associate(action: AssociationAction) {
     if (!association || authBusy.current) throw new Error('Relance le choix d’association.');
     setError('');
-    await applyAssociation(association, action);
+    await linkBudget(association, action);
   }
 
   async function finishAccountBudget(input: FirstBudgetInput) {
@@ -734,6 +802,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
     const { key } = choice;
     await withAccountTransition(async () => {
       assertAssociation(choice);
+      if (managedBackupsEnabled && readLockState(localStorage).status !== 'valid') throw new Error('Configure d’abord le code de cet appareil.');
       if (readPendingVault(localStorage) !== null || await fetchVault(key.userId)) {
         throw new Error('La copie en ligne a changé. Retourne à ton compte avant de continuer.');
       }
@@ -779,7 +848,7 @@ export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
         const local = appRef.current.exportBudget();
         const remote = await fetchVault(key.userId);
         check();
-        if (!remote || remote.version !== conflictVersion.current) {
+        if (!remote || remote.version !== conflictVersion.current || !matchesVaultKey(key, remote)) {
           throw new Error('La copie en ligne a changé. Synchronise de nouveau avant de choisir.');
         }
         if (keep === 'cloud') {

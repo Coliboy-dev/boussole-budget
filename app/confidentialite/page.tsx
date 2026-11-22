@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { managedBackupsEnabled } from '@/lib/cloud-remote';
 
 export const metadata: Metadata = { title: 'Confidentialité · Boussole Budget' };
 
@@ -12,32 +13,43 @@ export default function PrivacyPage() {
         <p>
           Le prénom, le solde, les revenus, les charges et les autres données que tu saisis sont enregistrés
           dans ton navigateur ou dans l’application installée. Le calcul et la restauration de sauvegarde se
-          font sur ton appareil. Sans synchronisation, Boussole Budget ne transmet pas ton budget à un serveur.
+          font sur ton appareil.
+          {!managedBackupsEnabled && ' Sans synchronisation, Boussole Budget ne transmet pas ton budget à un serveur.'}
         </p>
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold text-gray-900">Synchronisation entre appareils (facultative)</h2>
+        <h2 className="font-semibold text-gray-900">{managedBackupsEnabled ? 'Sauvegarde en ligne et synchronisation' : 'Synchronisation entre appareils (facultative)'}</h2>
+        {managedBackupsEnabled ? (
+          <>
+            <p>Quand tu crées ton budget avec un compte, une copie chiffrée est sauvegardée automatiquement chez Supabase, notre sous-traitant d’hébergement de base de données en Irlande. Tes modifications sont envoyées à chaque synchronisation.</p>
+            <p>Start’OnLab gère les clés des nouvelles copies. Le service peut déchiffrer ta copie pour te la restituer après que tu t’es connecté avec le code reçu par e-mail. Les anciennes copies protégées par une phrase secrète gardent ce mode de récupération.</p>
+            <p>Ton compte utilise ton adresse e-mail. La copie en ligne contient tes données de budget sous forme chiffrée, avec un numéro de version et la date de la dernière mise à jour.</p>
+          </>
+        ) : (
+          <>
+            <p>
+              Si tu l’actives dans Plus → Synchroniser mes appareils, ton budget est chiffré sur ton appareil avec une
+              phrase secrète que toi seul connais (AES-256, clé dérivée par PBKDF2), puis envoyé à Supabase, notre
+              sous-traitant d’hébergement de base de données, sur des serveurs situés en Irlande, dans l’Union européenne.
+            </p>
+            <p>
+              Le serveur conserve uniquement : ton adresse e-mail (pour t’envoyer un code de connexion), le bloc chiffré
+              de ton budget, un numéro de version et la date de la dernière mise à jour. Ni Start’OnLab ni Supabase ne
+              peuvent lire le contenu de ton budget. La phrase secrète n’est jamais transmise : si tu l’oublies, la copie
+              en ligne ne peut pas être récupérée.
+            </p>
+          </>
+        )}
         <p>
-          Si tu l’actives dans Plus → Synchroniser mes appareils, ton budget est chiffré sur ton appareil avec une
-          phrase secrète que toi seul connais (AES-256, clé dérivée par PBKDF2), puis envoyé à Supabase, notre
-          sous-traitant d’hébergement de base de données, sur des serveurs situés en Irlande, dans l’Union européenne.
-        </p>
-        <p>
-          Le serveur conserve uniquement : ton adresse e-mail (pour t’envoyer un code de connexion), le bloc chiffré
-          de ton budget, un numéro de version et la date de la dernière mise à jour. Ni Start’OnLab ni Supabase ne
-          peuvent lire le contenu de ton budget. La phrase secrète n’est jamais transmise : si tu l’oublies, la copie
-          en ligne ne peut pas être récupérée.
-        </p>
-        <p>
-          Base légale : l’exécution du service que tu demandes en activant la synchronisation. Ces données sont
+          La base légale est l’exécution du service de synchronisation associé à ton compte. Ces données sont
           conservées tant que ton compte existe. Tu peux supprimer à tout moment ton compte et sa copie chiffrée dans
           Synchroniser mes appareils : la suppression est immédiate et définitive sur le serveur.
         </p>
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold text-gray-900">Verrouillage de l’application (facultatif)</h2>
+        <h2 className="font-semibold text-gray-900">{managedBackupsEnabled ? 'Verrouillage de l’application' : 'Verrouillage de l’application (facultatif)'}</h2>
         <p>Le verrou empêche une personne qui a ton téléphone en main de voir tes finances dans Boussole. Le code n’est jamais enregistré en clair : seule une empreinte calculée sur le téléphone est gardée.</p>
         <p>Il ne chiffre pas les données enregistrées sur ce téléphone et ne remplace pas le code du téléphone. Une personne capable de lire les données du navigateur, une extension malveillante ou une version modifiée de l’application ne sont pas arrêtées par ce verrou.</p>
         <p>Boussole masque son interface dès qu’elle perd le focus ou passe en arrière-plan. <strong>Sur iPhone, ce masquage n’atteint pas l’aperçu du sélecteur d’applications</strong> : iOS photographie l’écran avant que Boussole puisse le cacher. Essai du 21 novembre 2026 : l’aperçu montre les montants dans Chrome et dans Boussole installée sur l’écran d’accueil. Safari utilise le même moteur et devrait se comporter de la même façon.</p>
@@ -70,6 +82,7 @@ export default function PrivacyPage() {
           Vercel traite ton adresse IP et les données techniques nécessaires pour servir et sécuriser le site.
           Ces données peuvent être transférées vers les États-Unis.
         </p>
+        {managedBackupsEnabled && <p>Le service qui restitue les clés des nouvelles copies est hébergé chez Vercel. Il vérifie le jeton de connexion et traite l’identifiant du compte pour fournir sa clé.</p>}
       </section>
 
       <section className="space-y-2">
