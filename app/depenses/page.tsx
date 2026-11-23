@@ -15,7 +15,7 @@ import { formatCurrency, formatDate } from '@/lib/budget-calculations';
 import { useApp } from '@/lib/context/AppContext';
 import { spentInMonth } from '@/lib/envelopes';
 import { fromCents, toCents } from '@/lib/money';
-import { envelopesOf, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
+import { envelopesOf, selectableSpendingCategories, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
 import type { Envelope, Spending } from '@/lib/types';
 import { householdCopy, householdMessages } from '@/lib/household-copy';
 import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
@@ -107,7 +107,7 @@ export default function SpendingPage() {
       <section aria-labelledby="enveloppes" className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="enveloppes" className="font-semibold text-slate-900">Enveloppes</h2>
-          <button type="button" disabled={storageBlocked || envelopes.length >= Object.keys(spendingCategoryLabels).length}
+          <button type="button" disabled={storageBlocked || envelopes.length >= selectableSpendingCategories.length}
             onClick={() => setPanel({ type: 'new-envelope' })}
             className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-50">
             <Icon icon={Plus} /> Créer une enveloppe

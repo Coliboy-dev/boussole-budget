@@ -98,7 +98,11 @@ function amount(unit: Unit, allowNegative = false): Check {
 
 const frequency = oneOf('monthly', 'weekly', 'bi_monthly', 'quarterly', 'annual', 'one_time');
 const status = oneOf('paid', 'cancelled');
-const spendingCategory = oneOf('groceries', 'restaurants', 'transport', 'health', 'leisure', 'clothing', 'home', 'children', 'cash', 'other');
+// Toute nouvelle catégorie est d'abord LUE (cette liste) avant d'être PROPOSÉE à la saisie (lib/spending.ts) :
+// une version plus ancienne de l'app refuserait un budget contenant une catégorie inconnue.
+const spendingCategoryValues = ['groceries', 'restaurants', 'transport', 'health', 'leisure', 'clothing', 'home', 'children', 'cash',
+  'pets', 'gifts', 'beauty', 'travel', 'other'] as const;
+const spendingCategory = oneOf(...spendingCategoryValues);
 
 const schedule = {
   endDate: optional(date),
@@ -138,7 +142,7 @@ function budgetCheck(unit: Unit): Check {
       }
     }),
     spendings: optional(entities({
-      date, amount: spendingAmount, category: oneOf('groceries', 'restaurants', 'transport', 'health', 'leisure', 'clothing', 'home', 'children', 'cash', 'other', 'household'), label: optional(text),
+      date, amount: spendingAmount, category: oneOf(...spendingCategoryValues, 'household'), label: optional(text),
       balanceIncluded: flag, debited: flag, balanceRevision: nonNegativeInteger,
       paidFrom: optional(oneOf('personal')), paidBy: optional(identifier),
       linkedRecordId: optional(identifier), linkedRecordSeq: optional(nonNegativeInteger),
@@ -172,7 +176,8 @@ function budgetCheck(unit: Unit): Check {
     expenses: entities({
       ...schedule,
       label: text,
-      category: oneOf('rent', 'energy', 'phone', 'insurance', 'groceries', 'transport', 'health', 'school', 'subscriptions', 'other', 'household'),
+      category: oneOf('rent', 'energy', 'phone', 'insurance', 'groceries', 'transport', 'health', 'school', 'subscriptions',
+        'alimony', 'taxes', 'childcare', 'other', 'household'),
       amount: money,
       frequency,
       dueDate: optional(date),
