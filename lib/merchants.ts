@@ -13,7 +13,10 @@ const dictionary: Partial<Record<SpendingCategory, string[]>> = {
   health: ['pharmacie', 'multipharma', 'apotheek'],
   clothing: ['primark', 'zara', 'kiabi', 'c a', 'h m', 'jbc', 'zeeman'],
   home: ['ikea', 'brico', 'hubo', 'gamma', 'action', 'hema', 'blokker', 'leroy'],
-  leisure: ['kinepolis', 'decathlon', 'fnac', 'netflix', 'spotify'],
+  leisure: ['kinepolis', 'decathlon', 'fnac', 'netflix', 'spotify', 'basic fit', 'jims'],
+  pets: ['zooplus', 'tom co', 'maxi zoo', 'animalis', 'veterinaire', 'dierenarts'],
+  beauty: ['ici paris', 'coiffeur', 'kapper', 'yves rocher', 'rituals'],
+  travel: ['ryanair', 'brussels airlines', 'booking', 'airbnb', 'tui', 'flixbus'],
   cash: ['retrait', 'bancontact retrait', 'atm'],
 };
 

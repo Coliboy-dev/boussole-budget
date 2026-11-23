@@ -1,4 +1,4 @@
-// Nouvelles catégories, première mise en ligne : lues et affichées, jamais modifiées en silence, pas encore proposées.
+// Nouvelles catégories : lues et affichées, jamais modifiées en silence, proposées à la saisie (deuxième mise en ligne).
 // BOUSSOLE_TEST_URL=http://localhost:3000 node --experimental-strip-types --test tests/browser/categories.mjs
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -76,17 +76,25 @@ test('Modifier une charge « Impôts et taxes » garde sa catégorie', async (t)
   assert.deepEqual([tax.amount, tax.category], [50000, 'taxes']);
 });
 
-test('Nouvelle dépense ou charge : les nouvelles catégories ne sont pas encore proposées', async (t) => {
+test('Nouvelle dépense ou charge : les nouvelles catégories sont proposées', async (t) => {
   const page = await open(t, '/budget');
   await page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: 'Ajouter une dépense' }).click();
   const sheet = page.getByRole('dialog', { name: 'Nouvelle dépense' });
   await sheet.getByRole('button', { name: 'Autres catégories' }).click();
-  for (const name of ['Animaux', 'Cadeaux et fêtes', 'Soins et beauté', 'Vacances et voyages']) {
-    assert.equal(await sheet.getByRole('radio', { name, exact: true }).count(), 0, name);
+  for (const name of ['Animaux', 'Cadeaux et fêtes', 'Soins et beauté', 'Vacances et voyages', 'Loisirs, sport et sorties']) {
+    await sheet.getByRole('radio', { name, exact: true }).waitFor();
   }
-  await sheet.getByRole('radio', { name: 'Loisirs, sport et sorties', exact: true }).waitFor();
+  // Un commerce connu suggère la bonne catégorie.
+  await sheet.getByLabel('Saisie rapide').fill('12 Zooplus');
+  assert.equal(await sheet.getByRole('radio', { name: 'Animaux', exact: true }).isChecked(), true);
+  await sheet.getByRole('button', { name: 'Ajouter la dépense' }).click();
+  await sheet.waitFor({ state: 'detached' });
+  const zoo = (await stored(page)).spendings.find(({ label }) => label === 'Zooplus');
+  assert.deepEqual([zoo.amount, zoo.category], [1200, 'pets']);
+
   const charges = await open(t, '/charges');
   await charges.getByRole('button', { name: /Ajouter/ }).first().click();
   const options = await charges.getByRole('dialog').locator('select').first().locator('option').allInnerTexts();
-  for (const name of ['Contribution alimentaire', 'Impôts et taxes', 'Garde d’enfants', 'Courses alimentaires']) assert.ok(!options.includes(name), name);
+  for (const name of ['Contribution alimentaire', 'Impôts et taxes', 'Garde d’enfants']) assert.ok(options.includes(name), name);
+  assert.ok(!options.includes('Courses alimentaires'), 'Courses reste réservé aux charges déjà encodées');
 });
