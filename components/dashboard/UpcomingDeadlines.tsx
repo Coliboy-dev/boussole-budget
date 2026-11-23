@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { Check } from 'lucide-react';
-import Card from '@/components/ui/Card';
+import { Baby, CalendarDays, Check, ChevronRight, Landmark, Scale, TriangleAlert, Wallet, type LucideIcon } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
 import { formatShortDate, formatCurrency } from '@/lib/budget-calculations';
 import { selectUpcomingPaymentReminders } from '@/lib/payment-reminders';
@@ -18,64 +17,82 @@ interface UpcomingDeadlinesProps {
 
 const payable = (reminder: Reminder) => (reminder.type === 'expense' || reminder.type === 'debt') && Boolean(reminder.refId);
 
+// Même code couleur que l'écran Échéances : charge en ambre, mensualité en mauve, entrée en teal.
+const kinds: Record<Reminder['type'], { label: string; icon: LucideIcon; tile: string }> = {
+  expense: { label: 'Charge', icon: CalendarDays, tile: 'bg-cap-warning-soft text-cap-warning-text' },
+  debt: { label: 'Mensualité', icon: Landmark, tile: 'bg-cap-secondary-soft text-cap-secondary-text' },
+  mediation: { label: 'Médiation', icon: Scale, tile: 'bg-cap-secondary-soft text-cap-secondary-text' },
+  child: { label: 'Enfant', icon: Baby, tile: 'bg-cap-surface-soft text-cap-primary-text' },
+  income: { label: 'Revenu', icon: Wallet, tile: 'bg-cap-surface-soft text-cap-primary-text' },
+};
+
 export default function UpcomingDeadlines({ reminders, today, horizon, onPay, payDisabled = false }: UpcomingDeadlinesProps) {
   const remindersEnabled = usePaymentReminders();
   const upcoming = selectUpcomingPaymentReminders(reminders, today, remindersEnabled);
   const lateCount = reminders.filter(({ isLate }) => isLate).length;
 
   return (
-    <Card>
+    <section aria-labelledby="home-upcoming-heading" className="rounded-[19px] border border-cap-border bg-cap-surface px-4 pt-4 pb-2 shadow-[0_1px_2px_rgba(23,44,55,0.04)]">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-gray-900">Prochaines échéances</h2>
-        <Link href="/projection" className="inline-flex min-h-11 items-center text-xs font-medium text-teal-800 underline">Voir l’échéancier</Link>
+        <h2 id="home-upcoming-heading" className="text-sm font-bold text-cap-text">Prochaines échéances</h2>
+        <Link href="/projection" className="inline-flex min-h-11 items-center gap-0.5 text-xs font-semibold text-cap-primary-text underline">
+          Voir l’échéancier
+          <Icon icon={ChevronRight} className="size-3.5" />
+        </Link>
       </div>
-      {upcoming.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-600">Aucune échéance prévue dans les {horizon} prochains jours.</p>
-      ) : (
-        <ul className="mt-1 divide-y divide-gray-100">
-          {upcoming.map(({ reminder, remindTomorrow }) => (
-            <li key={reminder.id} className="flex items-center justify-between gap-3 py-2">
-              <div className="min-w-0">
-                <p className="wrap-break-word text-sm font-medium text-gray-800">{reminder.label}</p>
-                <time
-                  dateTime={reminder.dueDate}
-                  className={remindTomorrow ? 'text-xs font-semibold text-amber-800' : 'text-xs text-gray-600'}
-                >
-                  {remindTomorrow ? 'À payer demain' : formatShortDate(reminder.dueDate)}
-                </time>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {reminder.amount !== undefined && (
-                  <span className="text-sm font-semibold text-gray-800 tabular-nums">
-                    {formatCurrency(reminder.amount)}
-                  </span>
-                )}
-                {onPay && payable(reminder) && (
-                  <button
-                    type="button"
-                    id={`pay-home-${reminder.id}`}
-                    disabled={payDisabled}
-                    onClick={() => onPay(reminder)}
-                    aria-label={`Marquer ${reminder.label} du ${formatShortDate(reminder.dueDate)} comme payé`}
-                    className="inline-flex items-center gap-1 rounded-xl border border-teal-700 px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-500"
-                  >
-                    <Icon icon={Check} className="size-4" />
-                    Payé
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {onPay && upcoming.some(({ reminder }) => payable(reminder)) && (
-        <p className="mt-1 text-xs text-gray-600">« Payé » déduit le montant de ton solde.</p>
-      )}
       {lateCount > 0 && (
-        <Link href="/projection#en-retard" className="inline-flex min-h-11 items-center text-xs font-medium text-red-800 underline">
+        <Link href="/projection#en-retard"
+          className="mb-1 flex min-h-11 items-center gap-2 rounded-xl bg-cap-warning-soft px-3 text-xs font-semibold text-cap-warning-text underline">
+          <Icon icon={TriangleAlert} className="size-4 shrink-0" />
           {lateCount} {lateCount === 1 ? 'échéance en retard' : 'échéances en retard'}
         </Link>
       )}
-    </Card>
+      {upcoming.length === 0 ? (
+        <p className="py-3 text-sm text-cap-text-muted">Aucune échéance prévue dans les {horizon} prochains jours.</p>
+      ) : (
+        <ul className="divide-y divide-cap-border">
+          {upcoming.map(({ reminder, remindTomorrow }) => {
+            const kind = kinds[reminder.type];
+            return (
+              <li key={reminder.id} className="flex items-center gap-3 py-3">
+                <span aria-hidden="true" className={`grid size-10 shrink-0 place-items-center rounded-xl ${kind.tile}`}>
+                  <Icon icon={kind.icon} className="size-[18px]" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="wrap-break-word text-sm font-semibold text-cap-text">{reminder.label}</p>
+                  <p className="text-xs text-cap-text-muted">
+                    <time dateTime={reminder.dueDate} className={remindTomorrow ? 'font-semibold text-cap-warning-text' : undefined}>
+                      {remindTomorrow ? 'À payer demain' : formatShortDate(reminder.dueDate)}
+                    </time>
+                    {' · '}{kind.label}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                  {reminder.amount !== undefined && (
+                    <span className="text-sm font-bold tabular-nums text-cap-text">{formatCurrency(reminder.amount)}</span>
+                  )}
+                  {onPay && payable(reminder) && (
+                    <button
+                      type="button"
+                      id={`pay-home-${reminder.id}`}
+                      disabled={payDisabled}
+                      onClick={() => onPay(reminder)}
+                      aria-label={`Marquer ${reminder.label} du ${formatShortDate(reminder.dueDate)} comme payé`}
+                      className="inline-flex items-center gap-1 rounded-xl border border-cap-primary px-3 text-sm font-semibold text-cap-primary-text hover:bg-cap-surface-soft disabled:cursor-not-allowed disabled:border-cap-border disabled:text-cap-text-muted"
+                    >
+                      <Icon icon={Check} className="size-4" />
+                      Payé
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {onPay && upcoming.some(({ reminder }) => payable(reminder)) && (
+        <p className="pb-2 text-xs text-cap-text-muted">« Payé » déduit le montant de ton solde.</p>
+      )}
+    </section>
   );
 }
