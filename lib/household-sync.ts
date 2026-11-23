@@ -5,7 +5,7 @@ import {
 
 export type HouseholdWrite = EncryptedHouseholdRecord & { write_id: string };
 export type ConfirmedHouseholdRecord = EncryptedHouseholdRecord & {
-  seq: number; updated_by?: string | null; author_member_id?: string | null;
+  seq: number; updated_by?: string | null; author_member_id?: string | null; editor_member_id?: string | null;
 };
 
 export interface HouseholdQueue {
@@ -53,7 +53,8 @@ export async function decodeHouseholdView(
       && await householdRecordId(householdId, record.kind, record.id) !== row.record_id) return undefined;
     return {
       seq: row.seq, record,
-      ...(row.updated_by !== undefined && { updatedBy: row.updated_by }),
+      ...(row.editor_member_id !== undefined ? { editorMemberId: row.editor_member_id }
+        : row.updated_by !== undefined && { updatedBy: row.updated_by }),
       ...(row.author_member_id !== undefined && { authorMemberId: row.author_member_id }),
       ...(row.exclusive === true && { exclusive: true }),
     };

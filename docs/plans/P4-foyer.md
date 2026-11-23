@@ -229,7 +229,7 @@ La migration `20261122212700_household_record_authors.sql` de la PR 4 ajoute deu
 - Sous le verrou du foyer, seul le membre dont le `member_id` correspond à `author_member_id` peut modifier ou supprimer un élément exclusif. Un membre réinvité retrouve ses droits grâce à son identifiant d’adhésion conservé. Après suppression de son compte, ses éléments exclusifs restent figés.
 - Les écritures ordinaires restent partagées et les reçus idempotents sont conservés. Le serveur contrôle les métadonnées d’accès. Le montant, la date du transfert, l’état de la réponse et l’empreinte de déclaration restent chiffrés.
 
-Les lectures actuelles exposent encore `created_by` et `updated_by`. Le miroir M2 s’appuie sur `updated_by` pour reconnaître une modification du membre concerné. Pour retirer les identifiants Supabase des éléments lus par le partenaire, le client doit d’abord disposer d’une attribution par membre pour le dernier auteur également, puis les lectures doivent être adaptées. Cette transition précède l’activation du Foyer.
+`20261123003000_household_member_reads.sql` ajoute `editor_member_id`. Le serveur le déduit de l’adhésion du dernier compte ayant écrit l’élément et le conserve après une suppression de compte. Les miroirs M2 et M3 s’appuient sur cette attribution. Les identifiants Supabase `created_by`, `updated_by` et `household_members.user_id` restent au serveur. La lecture directe est limitée aux colonnes autorisées. `pull_records` renvoie une projection sans ces identifiants. `list_my_households` renvoie au compte connecté ses foyers, sa propre adhésion et les identifiants des membres actifs. Les politiques RLS et la vérification d’adhésion active continuent de s’appliquer.
 
 Fonctions (`security definer`, `search_path = ''`, `revoke` à `public`/`anon`, `grant execute` à `authenticated`) :
 - `create_household() returns table(household_id uuid, member_id uuid)` — crée le foyer et le premier membre dans la même transaction.
@@ -387,6 +387,7 @@ Tests de confirmation F5 sur une base de test.
 - Une réponse « confirmed » signée par le compte de l’émetteur est ignorée par l’appareil.
 - L’émetteur ne peut ni modifier ni supprimer la réponse du destinataire. Le destinataire ne peut ni modifier ni supprimer la déclaration.
 - Le drapeau est immuable sur un élément existant. Les écritures ordinaires restent partagées. Le montant, la date, le statut et l’empreinte ne sont présents que dans le contenu chiffré.
+- Les deux membres peuvent lire les identifiants de foyer de l’auteur et du dernier membre ayant modifié un élément. Les lectures authentifiées sur les tables et les fonctions ne révèlent aucune correspondance vers les identifiants Supabase.
 - Toute tentative de fournir `author_member_id` depuis l’appareil est ignorée sur les éléments exclusifs et ordinaires.
 - Un membre réinvité avec le même compte peut de nouveau modifier ses propres éléments exclusifs.
 - Sam confirme puis supprime son compte. Sur un nouvel appareil, Marc voit « Confirmé par Ancien membre ». La réponse conserve son auteur de foyer et aucun membre actif ne peut la modifier ou la supprimer.

@@ -1,6 +1,6 @@
 import type { AppState } from './budget-state.ts';
 import { householdCopy, householdMessages } from './household-copy.ts';
-import { latestHouseholdRecords, type SequencedHouseholdRecord } from './household-records.ts';
+import { isHouseholdEditByMember, latestHouseholdRecords, type SequencedHouseholdRecord } from './household-records.ts';
 import { isLocalDate } from './local-date.ts';
 import { fromCents, toCents } from './money.ts';
 import { addSpending, balanceRevisionOf, deleteSpending, spendingsOf, updateSpending } from './spending.ts';
@@ -77,8 +77,9 @@ export function movementMirrors(
   householdId: string, userId: string, memberId: string, cursor: number,
 ): MovementMirror[] {
   const changes: MovementMirror[] = [];
-  for (const { record, seq, updatedBy, authorMemberId, exclusive } of latestHouseholdRecords(rows)) {
-    const own = seq > cursor || updatedBy === userId;
+  for (const row of latestHouseholdRecords(rows)) {
+    const { record, seq, authorMemberId, exclusive } = row;
+    const own = isHouseholdEditByMember(row, userId, memberId, cursor);
     const version = Math.min(seq, cursor);
     if (record.kind === 'spending' && own && (seq > cursor || authorMemberId === memberId)) {
       const data = recordObject(record.data);

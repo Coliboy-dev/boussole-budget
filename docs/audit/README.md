@@ -203,6 +203,8 @@ Une dépense commune payée avec de l’argent personnel réduit ce qui reste da
 
 Un transfert est composé d’une déclaration et de réponses chiffrées. Supabase fixe l’auteur par foyer et protège les éléments exclusifs. Le client vérifie l’auteur et l’empreinte de la révision avant de créditer le destinataire. Seule une confirmation déclenche un crédit. Un nouvel appareil retrouve une réponse confirmée après la suppression du compte de son auteur.
 
+Les lectures du Foyer utilisent les identifiants propres au foyer pour attribuer les créations et les modifications. Les tests vérifient les droits de lecture sur les tables et les fonctions. Les assertions d’attribution interne restent vérifiées avec le rôle serveur.
+
 Le réglage sans compte commun masque le solde, la projection et les versements au compte commun. Les dépenses saisies dans ce mode sont des avances. Les enveloppes, l’analyse, les objectifs et les transferts restent accessibles. Le récapitulatif montre les montants enregistrés par membre. Il n’affiche aucun solde entre personnes.
 
 Les tests F‑B couvrent les deux soldes personnels, la projection commune, l’analyse et l’idempotence des lignes miroir. Les tests F5 couvrent les réponses attribuées au bon membre, les révisions, l’exclusivité et l’historique local et distant. La recette Chromium utilise deux comptes fictifs à 390 px sur Supabase local.

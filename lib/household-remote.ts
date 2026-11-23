@@ -13,6 +13,14 @@ export class HouseholdAccessRevoked extends Error {
   constructor() { super(householdCopy.revoked); }
 }
 
+interface HouseholdMembershipRow {
+  household_id: string;
+  key_version: number;
+  created_at: string;
+  member_id: string;
+  active_member_ids: string[];
+}
+
 async function authorizedClient(userId: string) {
   assertHouseholdAccount(userId);
   const { data, error } = await cloudClient().auth.getSession();
@@ -35,15 +43,12 @@ async function checkedClient(userId: string) {
 
 export async function listHouseholds(userId: string): Promise<HouseholdListing[]> {
   const client = await checkedClient(userId);
-  const { data, error } = await client.from('households')
-    .select('id,key_version,created_at,own:household_members!inner(member_id),members:household_members(member_id)')
-    .eq('own.user_id', userId).is('own.removed_at', null).is('members.removed_at', null)
-    .order('created_at').order('id');
+  const { data, error } = await client.rpc('list_my_households');
   assertHouseholdAccount(userId);
   if (error) throw new Error(householdCopy.unavailable);
-  return data.map(row => ({
-    id: row.id, keyVersion: row.key_version, createdAt: row.created_at, memberId: row.own[0]?.member_id,
-    activeMemberIds: row.members.map(({ member_id }) => member_id),
+  return data.map((row: HouseholdMembershipRow) => ({
+    id: row.household_id, keyVersion: row.key_version, createdAt: row.created_at, memberId: row.member_id,
+    activeMemberIds: row.active_member_ids,
   }));
 }
 
@@ -61,7 +66,7 @@ export async function householdRemote(userId: string, householdId: string): Prom
   return {
     async push(records) {
       assertHouseholdAccount(userId);
-      const capability = await client.from('household_records').select('exclusive,author_member_id').eq('household_id', householdId).limit(0);
+      const capability = await client.from('household_records').select('exclusive,author_member_id,editor_member_id').eq('household_id', householdId).limit(0);
       assertHouseholdAccount(userId);
       if (capability.error) throw new Error(householdCopy.notReady);
       const { data, error } = await client.rpc('upsert_records', { h: householdId, records });

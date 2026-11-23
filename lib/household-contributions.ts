@@ -1,6 +1,6 @@
 import type { AppState } from './budget-state.ts';
 import { householdCopy, householdMessages } from './household-copy.ts';
-import { latestHouseholdRecords, type SequencedHouseholdRecord } from './household-records.ts';
+import { isHouseholdEditByMember, latestHouseholdRecords, type SequencedHouseholdRecord } from './household-records.ts';
 import { toCents } from './money.ts';
 import { expenseOccurrences, incomeOccurrences, isOpenOccurrence, type Occurrence } from './occurrences.ts';
 import { AVAILABLE_HORIZON, buildProjection } from './projection.ts';
@@ -101,11 +101,10 @@ export function mirrorContributions<T extends AppState>(
 }
 
 export function trustedContributionSchedules(
-  incomes: Income[], rows: readonly SequencedHouseholdRecord[], userId: string, cursor: number,
+  incomes: Income[], rows: readonly SequencedHouseholdRecord[], userId: string, cursor: number, memberId?: string,
 ): Income[] {
-  // Les numéros supérieurs au curseur sont réservés à la file locale de ce compte.
   const authored = new Set(latestHouseholdRecords(rows)
-    .filter(({ record, seq, updatedBy }) => record.kind === 'income' && (seq > cursor || updatedBy === userId))
+    .filter((row) => row.record.kind === 'income' && isHouseholdEditByMember(row, userId, memberId, cursor))
     .map(({ record }) => record.id));
   return incomes.filter(({ type, id }) => type === 'household_contribution' && authored.has(id));
 }
@@ -132,7 +131,7 @@ export function contributionMirrorPlan(
   incomes: Income[], rows: readonly SequencedHouseholdRecord[], userId: string, memberId: string, cursor: number,
 ): ContributionMirrorPlan {
   const plan: ContributionMirrorPlan = { automatic: [], proposals: [] };
-  const trusted = new Set(trustedContributionSchedules(incomes, rows, userId, cursor).map(({ id }) => id));
+  const trusted = new Set(trustedContributionSchedules(incomes, rows, userId, cursor, memberId).map(({ id }) => id));
   const byId = new Map(incomes.map((income) => [income.id, income]));
 
   for (const { seq, record } of latestHouseholdRecords(rows)) {

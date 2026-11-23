@@ -24,7 +24,18 @@ export interface SequencedHouseholdRecord {
   record: HouseholdRecord;
   updatedBy?: string | null;
   authorMemberId?: string | null;
+  editorMemberId?: string | null;
   exclusive?: boolean;
+}
+
+export function isHouseholdEditByMember(
+  row: SequencedHouseholdRecord, userId: string, memberId: string | undefined, cursor: number,
+): boolean {
+  // Un numéro local au-delà du curseur appartient à la file de cet appareil.
+  if (row.seq > cursor) return true;
+  if (row.editorMemberId !== undefined) return row.editorMemberId === memberId;
+  // Compatibilité avec les lignes déjà présentes dans le trousseau avant la migration.
+  return row.updatedBy === userId;
 }
 
 export function householdOperationId({ kind, id }: RecordIdentity): string {
