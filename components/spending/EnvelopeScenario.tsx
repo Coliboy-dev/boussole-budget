@@ -1,19 +1,19 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import FormField from '@/components/forms/FormField';
+import FormField, { amountField } from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Card from '@/components/ui/Card';
 import { calculateBudgetSummary, formatCurrency } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { useApp } from '@/lib/context/AppContext';
-import { parseAmountInput } from '@/lib/money';
+import { amountInputValue, parseAmountInput } from '@/lib/money';
 import { envelopesOf, spendingsOf, upsertEnvelope } from '@/lib/spending';
 import type { Envelope } from '@/lib/types';
 
 export default function EnvelopeScenario({ envelope, onApplied }: { envelope: Envelope; onApplied: () => void }) {
   const state = useApp();
-  const [amount, setAmount] = useState(String(envelope.monthlyAmount));
+  const [amount, setAmount] = useState(amountInputValue(envelope.monthlyAmount) ?? '');
   const { errors, validate, clearFieldError } = useFormValidation();
   const monthlyAmount = parseAmountInput(amount);
   const validAmount = isNonNegativeBudgetAmount(monthlyAmount);
@@ -39,7 +39,7 @@ export default function EnvelopeScenario({ envelope, onApplied }: { envelope: En
       <h3 className="mb-3 text-sm font-semibold text-slate-900">Et si tu ajustais ton enveloppe ?</h3>
       <form onSubmit={apply} onChange={clearFieldError} noValidate>
         <FormField label="Nouveau montant mensuel (€)" required error={errors.amount}>
-          <input name="amount" type="number" inputMode="decimal" min="0" step="0.01" required
+          <input name="amount" {...amountField} required
             className="w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base"
             value={amount} onChange={(event) => setAmount(event.target.value)} />
         </FormField>

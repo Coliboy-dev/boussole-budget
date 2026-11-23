@@ -94,3 +94,20 @@ test('le solde est signalé comme ancien après trois jours ou dès qu’une éc
   assert.equal(balanceFreshness({ ...budget, expenses: [phone], debts: [], balanceDate: '2026-11-30' }, today).stale, true);
   assert.deepEqual(balanceFreshness({ ...budget, balanceDate: undefined }, today), { days: null, passedSince: 0, stale: false });
 });
+
+test('B01 · « Payé » ne déduit pas deux fois une charge déjà comprise dans le solde recopié', async () => {
+  const { emptyBudgetState, paymentMayBeInBalance, recordPayment } = await import('../lib/budget-state.ts');
+  const rent = { id: 'r', label: 'Loyer', category: 'rent', amount: 800, frequency: 'monthly', dueDate: '2026-05-05', isRecurring: true, isPaid: false };
+  const state = { ...emptyBudgetState, currentBalance: 1200, balanceDate: '2026-05-10', expenses: [rent] };
+  // Loyer dû le 5, solde recopié le 10 : il y figure peut-être, on demande.
+  assert.equal(paymentMayBeInBalance('2026-05-05', '2026-05-10'), true);
+  assert.equal(paymentMayBeInBalance('2026-05-10', '2026-05-10'), true);
+  assert.equal(paymentMayBeInBalance('2026-05-11', '2026-05-10'), false);
+  assert.equal(paymentMayBeInBalance('2026-05-05', undefined), false);
+  // « Oui, déjà débité » : marqué payé, solde inchangé.
+  const included = recordPayment(state, { type: 'expense', id: 'r', dueDate: '2026-05-05', today: '2026-05-12', balanceIncludesPayment: true });
+  assert.deepEqual([included.currentBalance, included.balanceDate, included.expenses[0].occurrenceStatuses], [1200, '2026-05-10', { '2026-05-05': 'paid' }]);
+  // « Non, déduis-le » : déduit une seule fois.
+  const deducted = recordPayment(state, { type: 'expense', id: 'r', dueDate: '2026-05-05', today: '2026-05-12', balanceIncludesPayment: false });
+  assert.deepEqual([deducted.currentBalance, deducted.balanceDate], [400, '2026-05-12']);
+});

@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import type { Income, IncomeType, Frequency } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { amountInputValue, parseAmountInput } from '@/lib/money';
 import { isLocalDate } from '@/lib/local-date';
-import FormField from './FormField';
+import FormField, { amountField } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -21,7 +22,7 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
   const [form, setForm] = useState({
     label: initial?.label ?? '',
     type: (initial?.type ?? 'other') as IncomeType,
-    amount: initial?.amount?.toString() ?? '',
+    amount: amountInputValue(initial?.amount) ?? '',
     frequency: (initial?.frequency ?? 'monthly') as Frequency,
     expectedDate: initial?.expectedDate ?? '',
     endDate: initial?.endDate ?? '',
@@ -34,7 +35,7 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const amount = parseFloat(form.amount);
+    const amount = parseAmountInput(form.amount);
     if (!validate(e.currentTarget, {
       label: form.label.trim() ? undefined : 'Renseigne l’intitulé du revenu.',
       amount: isNonNegativeBudgetAmount(amount) && amount > 0 ? undefined : 'Saisis un montant valide supérieur à zéro.',
@@ -85,9 +86,7 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
         <FormField label="Montant (€)" required error={errors.amount}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="amount"
             value={form.amount}
             onChange={(e) => set('amount', e.target.value)}

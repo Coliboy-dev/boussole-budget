@@ -202,6 +202,15 @@ export interface Payment {
   balanceIncludesPayment: boolean;
 }
 
+/**
+ * Un paiement dû au plus tard le jour du solde recopié a pu être débité avant que tu le recopies :
+ * on te le demande au lieu de le déduire d'office (sinon il serait compté deux fois).
+ * Pas de solde recopié, ou paiement dû après : il ne peut pas y figurer, on le déduit.
+ */
+export function paymentMayBeInBalance(dueDate: string, balanceDate: string | undefined): boolean {
+  return balanceDate !== undefined && dueDate <= balanceDate;
+}
+
 export function openPaymentOccurrence(state: AppState, { type, id, dueDate, today }: Omit<Payment, 'balanceIncludesPayment'>) {
   const through = dueDate > today ? dueDate : today;
   const income = type === 'income' ? state.incomes.find((item) => item.id === id) : undefined;

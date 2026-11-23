@@ -1,6 +1,7 @@
 import type { ChildExpense, Debt, Envelope, Expense, Goal, Income, MediationFile, Spending, UserProfile } from './types.ts';
 import { updateBalance, type SettledOccurrence } from './balance-update.ts';
 import { cancelExpenseOccurrence, recordPayment, type AppState, type Payment } from './budget-state.ts';
+import { contributeToGoal } from './goals.ts';
 import { applyContributionMirrorChanges, type ContributionMirrorChange } from './household-contributions.ts';
 import { applyMovementMirrors, type MovementMirror } from './household-movements.ts';
 import {
@@ -40,6 +41,7 @@ export type AppAction =
   | { type: 'ADD_GOAL'; payload: Omit<Goal, 'id'> }
   | { type: 'UPDATE_GOAL'; payload: { id: string; data: Partial<Goal> } }
   | { type: 'DELETE_GOAL'; payload: string }
+  | { type: 'CONTRIBUTE_GOAL'; payload: { id: string; today: string; balanceIncludesTransfer: boolean } }
   | { type: 'UPDATE_MEDIATION'; payload: Partial<MediationFile> }
   | { type: 'ADD_SPENDING'; spending: SpendingInput & { id: string }; today: string }
   | { type: 'UPDATE_SPENDING'; id: string; changes: SpendingChanges; today: string }
@@ -152,6 +154,8 @@ export function reduceBudget(state: RuntimeState, action: AppAction): RuntimeSta
           g.id === action.payload.id ? { ...g, ...action.payload.data } : g
         ),
       };
+    case 'CONTRIBUTE_GOAL':
+      return { ...state, ...contributeToGoal(state, action.payload.id, action.payload.today, action.payload.balanceIncludesTransfer) };
     case 'DELETE_GOAL':
       return { ...state, goals: state.goals.filter((g) => g.id !== action.payload) };
     case 'UPDATE_MEDIATION':

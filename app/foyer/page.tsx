@@ -11,6 +11,7 @@ import Card from '@/components/ui/Card';
 import { useApp } from '@/lib/context/AppContext';
 import { formatShortDate } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { amountInputValue, parseAmountInput } from '@/lib/money';
 import { householdCopy } from '@/lib/household-copy';
 import { householdEnabled } from '@/lib/household-feature';
 
@@ -93,7 +94,7 @@ function HouseholdReserve() {
   const [expected, setExpected] = useState<number>();
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const amount = reserve === undefined ? userProfile.safetyReserve : Number(reserve.replace(',', '.'));
+    const amount = reserve === undefined ? userProfile.safetyReserve : parseAmountInput(reserve);
     if (reserve?.trim() === '' || !isNonNegativeBudgetAmount(amount)) {
       setError(householdCopy.reserveInvalid);
       return;
@@ -108,7 +109,7 @@ function HouseholdReserve() {
     <form onSubmit={submit} noValidate className="space-y-2">
       <label htmlFor="household-reserve" className="block text-sm font-semibold">{householdCopy.reserve}</label>
       <div className="flex flex-wrap gap-2">
-        <input id="household-reserve" inputMode="decimal" value={reserve ?? userProfile.safetyReserve}
+        <input id="household-reserve" inputMode="decimal" value={reserve ?? amountInputValue(userProfile.safetyReserve)}
           aria-invalid={!!error} aria-describedby={error ? 'household-reserve-error' : undefined}
           onChange={event => { setReserve(event.target.value); setExpected(undefined); }}
           className="min-h-11 w-32 rounded-xl border border-slate-300 px-3" />

@@ -58,7 +58,11 @@ function isSavedBudgetCurrent(saved: BudgetPersistence | null): boolean {
   }
 }
 
-export type ScheduledPayment = Pick<Payment, 'id' | 'dueDate'> & { type: 'expense' | 'debt' };
+export type ScheduledPayment = Pick<Payment, 'id' | 'dueDate'> & {
+  type: 'expense' | 'debt';
+  /** Réponse à « Ton solde comprend-il déjà ce paiement ? » ; sans question posée, le paiement est déduit. */
+  balanceIncludesPayment?: boolean;
+};
 
 function subscribeToCalendar(listener: () => void): () => void {
   const timer = window.setInterval(listener, 60_000);
@@ -122,6 +126,8 @@ export interface AppContextType extends AppState {
   deleteChildExpense: (id: string) => void;
   addGoal: (goal: Omit<Goal, 'id'>) => void;
   updateGoal: (id: string, data: Partial<Goal>) => void;
+  /** « J'ai mis de côté » : épargne augmentée et, sur un compte à part, virement déduit du solde. */
+  contributeToGoal: (id: string, balanceIncludesTransfer: boolean) => void;
   deleteGoal: (id: string) => void;
   updateMediation: (data: Partial<MediationFile>) => void;
   recordPayment: (payment: Omit<Payment, 'today'>) => void;
@@ -140,7 +146,7 @@ export interface AppContextType extends AppState {
 }
 
 type BudgetCommands = Pick<AppContextType,
-  'setBalance' | 'updateProfile' | 'addIncome' | 'updateIncome' | 'deleteIncome' | 'addExpense' | 'updateExpense' | 'deleteExpense' | 'addDebt' | 'updateDebt' | 'deleteDebt' | 'addChildExpense' | 'updateChildExpense' | 'deleteChildExpense' | 'addGoal' | 'updateGoal' | 'deleteGoal' | 'updateMediation' | 'recordPayment' | 'addSpending' | 'updateSpending' | 'deleteSpending' | 'saveEnvelope' | 'deleteEnvelope' | 'replaceExpenseWithEnvelope' | 'cancelExpenseOccurrence'
+  'setBalance' | 'updateProfile' | 'addIncome' | 'updateIncome' | 'deleteIncome' | 'addExpense' | 'updateExpense' | 'deleteExpense' | 'addDebt' | 'updateDebt' | 'deleteDebt' | 'addChildExpense' | 'updateChildExpense' | 'deleteChildExpense' | 'addGoal' | 'updateGoal' | 'contributeToGoal' | 'deleteGoal' | 'updateMediation' | 'recordPayment' | 'addSpending' | 'updateSpending' | 'deleteSpending' | 'saveEnvelope' | 'deleteEnvelope' | 'replaceExpenseWithEnvelope' | 'cancelExpenseOccurrence'
 >;
 
 export function budgetCommands(dispatch: (action: AppAction) => void, today: string): BudgetCommands {
@@ -162,6 +168,7 @@ export function budgetCommands(dispatch: (action: AppAction) => void, today: str
     deleteChildExpense: (id) => dispatch({ type: 'DELETE_CHILD_EXPENSE', payload: id }),
     addGoal: (goal) => dispatch({ type: 'ADD_GOAL', payload: goal }),
     updateGoal: (id, data) => dispatch({ type: 'UPDATE_GOAL', payload: { id, data } }),
+    contributeToGoal: (id, balanceIncludesTransfer) => dispatch({ type: 'CONTRIBUTE_GOAL', payload: { id, today, balanceIncludesTransfer } }),
     deleteGoal: (id) => dispatch({ type: 'DELETE_GOAL', payload: id }),
     updateMediation: (data) => dispatch({ type: 'UPDATE_MEDIATION', payload: data }),
     recordPayment: (payment) => dispatch({ type: 'RECORD_PAYMENT', payload: { ...payment, today } }),
@@ -353,7 +360,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   function recordScheduledPayment(payment: ScheduledPayment): void {
     ensureSavedForPayment();
-    const paid = recordPayment(budget, { ...payment, today, balanceIncludesPayment: false });
+    const paid = recordPayment(budget, { ...payment, today, balanceIncludesPayment: payment.balanceIncludesPayment ?? false });
     if (paid === budget) throw new Error('Cette échéance ne peut plus être marquée comme payée.');
 
     scheduledPaymentUndo.current = { before: budget, after: saveBudget(paid) };
@@ -392,7 +399,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     state.userProfile.safetyReserve,
     state.goals,
     today,
-    { envelopes: envelopesOf(state), spendings: spendingsOf(state) },
+    { envelopes: envelopesOf(state), spendings: spendingsOf(state), balanceDate: state.balanceDate },
   );
 
   const ctx: AppContextType = {

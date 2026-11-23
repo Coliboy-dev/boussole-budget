@@ -16,11 +16,13 @@ import BackupStatus from '@/components/dashboard/BackupStatus';
 import BalanceRows from '@/components/dashboard/BalanceRows';
 import SavingsTipCard from '@/components/dashboard/SavingsTipCard';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
+import PaymentBalanceQuestion from '@/components/budget/PaymentBalanceQuestion';
 import { NEW_SPENDING_EVENT, quickActionTile, UNDO_TOAST_MS } from '@/components/spending/NewSpendingAction';
 import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
 import { reserveExtras } from '@/lib/goals';
-import { getUpcomingReminders, formatCurrency, formatDate, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
+import { paymentMayBeInBalance } from '@/lib/budget-state';
+import { endOfSentence, getUpcomingReminders, formatCurrency, formatDate, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 import { HouseholdContributionList } from '@/components/household/HouseholdContributions';
@@ -56,6 +58,7 @@ function SavedBudgetDashboard() {
   } = state;
   const [paymentFeedback, setPaymentFeedback] = useState<{ reminder: Reminder; paid: boolean }>();
   const [paymentError, setPaymentError] = useState('');
+  const [asking, setAsking] = useState<Reminder>();
   const undoButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -84,10 +87,16 @@ function SavedBudgetDashboard() {
   const hasProjection = !summary.emptyBudget || Boolean(balanceDate);
   const attention = household && joint && balanceDate ? householdAttention(state, today) : null;
 
-  function pay(reminder: Reminder) {
+  function pay(reminder: Reminder, balanceIncludesPayment?: boolean) {
     if ((reminder.type !== 'expense' && reminder.type !== 'debt') || !reminder.refId) return;
+    setAsking(undefined);
+    // Échéance due au plus tard le jour du solde recopié : peut-être déjà débitée, on demande avant de déduire.
+    if (balanceIncludesPayment === undefined && paymentMayBeInBalance(reminder.dueDate, balanceDate)) {
+      setAsking(reminder);
+      return;
+    }
     try {
-      recordScheduledPayment({ type: reminder.type, id: reminder.refId, dueDate: reminder.dueDate });
+      recordScheduledPayment({ type: reminder.type, id: reminder.refId, dueDate: reminder.dueDate, balanceIncludesPayment });
       setPaymentFeedback({ reminder, paid: true });
       setPaymentError('');
     } catch (error) {
@@ -197,6 +206,10 @@ function SavedBudgetDashboard() {
 
       {advice.length > 0 && <AdviceWidget advice={advice} />}
 
+      {asking && balanceDate && (
+        <PaymentBalanceQuestion label={asking.label} amount={asking.amount} balanceDate={balanceDate}
+          onAnswer={(included) => pay(asking, included)} onClose={() => setAsking(undefined)} />
+      )}
       <PaymentUndoToast
         label={paymentFeedback?.reminder.label}
         paid={Boolean(paymentFeedback?.paid)}
@@ -221,7 +234,7 @@ function RiskNotice({ danger, lowest, date, causes, reserve, withProvision, extr
       <p className="mt-1 pl-6">
         Ton solde descendrait à <strong className="tabular-nums">{formatCurrency(lowest)}</strong> le{' '}
         <time dateTime={date}>{formatShortDate(date)}</time>{causes && <>, après {causes}</>}
-        {danger ? '.' : <>, sous ta réserve{extras} ({formatCurrency(reserve)}). Évite les dépenses imprévues.</>}
+        {danger ? (causes ? '.' : endOfSentence(formatShortDate(date))) : <>, sous ta réserve{extras} ({formatCurrency(reserve)}). Évite les dépenses imprévues.</>}
       </p>
       <p className="mt-2 pl-6">
         <Link href="/projection" className="font-semibold text-cap-primary-text underline">Voir le détail et quoi vérifier</Link>

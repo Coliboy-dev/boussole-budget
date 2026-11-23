@@ -9,12 +9,15 @@ import {
 } from '../../lib/budget-calculations.ts';
 import { selectUpcomingPaymentReminders } from '../../lib/payment-reminders.ts';
 import { scenarios, today } from './projection-scenarios.mjs';
+import { GENERIC_INCOME_LABEL } from '../../lib/onboarding.ts';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const baseURL = process.env.BOUSSOLE_TEST_URL ?? 'http://localhost:3000';
 const clean = (text) => text.replace(/[  ]/g, ' ').replace(/\s+/g, ' ').trim();
 const euro = (amount) => clean(formatCurrency(amount));
 const status = { safe: 'Stable', fragile: 'Fragile', danger: 'Critique' };
+/** « 1 déc. » termine déjà la phrase ; « 20 juin » prend un point. */
+const sentence = (date) => { const text = clean(date); return text.endsWith('.') ? text : `${text}.`; };
 
 let browser;
 before(async () => { browser = await chromium.launch({ executablePath: process.env.BOUSSOLE_CHROMIUM_PATH }); });
@@ -66,8 +69,9 @@ for (const [name, state] of Object.entries(scenarios)) {
       // Prochaine rentrée certaine : le repère de chacun, quel que soit son jour de paie.
       const next = forecast.nextIncome;
       assert.ok(card.includes(next
-        ? `Prochaine rentrée : ${next.label}, ${euro(next.amount)} le ${clean(formatShortDate(next.date))}.`
-        : `Aucune rentrée certaine prévue d’ici le ${clean(formatShortDate(forecast.dailyBalances.at(-1).date))}.`), `rentrée — « ${card} »`);
+        ? `Prochaine rentrée : ${next.label === GENERIC_INCOME_LABEL ? '' : `${next.label}, `}${euro(next.amount)} le ${sentence(formatShortDate(next.date))}`
+        : `Aucune rentrée certaine prévue d’ici le ${sentence(formatShortDate(forecast.dailyBalances.at(-1).date))}`), `rentrée — « ${card} »`);
+      assert.doesNotMatch(card, /[^.]\.\.(?!\.)/, 'jamais « déc.. »');
       // L'escalier, replié par défaut sur l'accueil : chaque ligne affichée vient du moteur.
       await cardLocator.getByText('Comment c’est calculé').click();
       const steps = cardLocator.locator('dl > div');
@@ -158,4 +162,76 @@ test('Aujourd\'hui · Payé puis Annuler rétablissent le solde', async (t) => {
   await page.getByRole('button', { name: 'Annuler' }).click();
   await page.locator(`[id="pay-home-${target.id}"]`).waitFor();
   assert.equal(clean(await card.innerText()), before);
+});
+
+test('B01 · « Payé » sur une échéance due au plus tard le jour du solde recopié : question, jamais de double déduction', async (t) => {
+  const stored = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('boussole-budget-v2')).state);
+  // Accueil : loyer dû aujourd'hui, solde recopié aujourd'hui (peut-être après le débit).
+  const rent = { id: 'loyer', label: 'Loyer', category: 'rent', amount: 300, frequency: 'monthly', dueDate: today, isRecurring: true, isPaid: false };
+  const dueToday = { ...scenarios['sans-echeance'], expenses: [rent] };
+  const home = engine(dueToday).reminders.find(({ refId }) => refId === 'loyer');
+  let page = await open(t, dueToday);
+  await page.locator(`[id="pay-home-${home.id}"]`).click();
+  let question = page.getByRole('dialog', { name: 'Déjà débité ?' });
+  assert.ok(clean(await question.innerText()).includes(`Ton solde du ${clean(formatShortDate(today))} comprend-il déjà ce paiement : Loyer, ${euro(300)} ?`));
+  // Fermer la question n'enregistre rien.
+  await question.getByRole('button', { name: 'Fermer' }).click();
+  assert.equal((await stored(page)).expenses[0].occurrenceStatuses?.[today], undefined);
+  // « Oui, déjà débité » : marqué payé, solde inchangé.
+  await page.locator(`[id="pay-home-${home.id}"]`).click();
+  await question.getByRole('button', { name: 'Oui, déjà débité' }).click();
+  await page.getByRole('button', { name: 'Annuler' }).waitFor();
+  let state = await stored(page);
+  assert.deepEqual([state.currentBalance, state.expenses[0].occurrenceStatuses[today]], [dueToday.currentBalance * 100, 'paid']);
+
+  // Échéances, charge en retard : « Non, déduis-le » déduit une seule fois.
+  const { retard } = scenarios;
+  const late = engine(retard).reminders.find((reminder) => reminder.isLate && reminder.type === 'expense' && reminder.refId);
+  assert.ok(late && retard.balanceDate >= late.dueDate, 'échéance due avant le solde recopié');
+  page = await open(t, retard);
+  await page.goto('/projection');
+  await page.locator(`[id="pay-${late.id.replace(/^rem-/, '')}"]`).click();
+  question = page.getByRole('dialog', { name: 'Déjà débité ?' });
+  await question.getByRole('button', { name: 'Non, déduis-le' }).click();
+  await page.getByRole('button', { name: 'Annuler' }).waitFor();
+  state = await stored(page);
+  assert.equal(state.currentBalance, Math.round((retard.currentBalance - late.amount) * 100), 'déduit une fois');
+});
+
+test('U01 et C11 · premier budget : « Prochaine rentrée : 1 600,00 € le 1 déc. » ; solde 0 € avec un objectif : carte et détail donnent le même total', async (t) => {
+  const { emptyBudgetState } = await import('../../lib/budget-state.ts');
+  const day = '2026-11-23';
+  const openOn = async (state) => {
+    const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+    t.after(() => context.close());
+    await context.clock.setFixedTime(new Date(`${day}T10:00:00+01:00`));
+    await context.addInitScript(([value]) => {
+      localStorage.setItem('boussole-budget-v2', value);
+      localStorage.setItem('boussole-budget-owner-v1', JSON.stringify({ type: 'guest' }));
+    }, [serializeBudget(state)]);
+    const page = await context.newPage();
+    await page.goto('/dashboard');
+    const card = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Vrai disponible' }) }).first();
+    await card.waitFor();
+    return { page, card };
+  };
+  const first = { ...emptyBudgetState, currentBalance: 400, balanceDate: day, incomes: [{
+    id: 'initial-income', label: GENERIC_INCOME_LABEL, type: 'other', amount: 1600, frequency: 'one_time', expectedDate: '2026-12-01', isConfirmed: true,
+  }] };
+  let { card } = await openOn(first);
+  let text = clean(await card.innerText());
+  assert.ok(text.includes(`Prochaine rentrée : ${euro(1600)} le 1 déc.`), text);
+  assert.ok(!text.includes(`: ${GENERIC_INCOME_LABEL}`) && !text.includes('déc..'), text);
+  // Résumé « Comment c'est calculé » : cible tactile de 44 px.
+  const height = await card.getByText('Comment c’est calculé').evaluate((element) => element.getBoundingClientRect().height);
+  assert.ok(height >= 44, `hauteur ${height}`);
+
+  // C11 : solde recopié de 0 €, réserve 0 €, objectif gardé sur le compte (50,04 € + 20 € ce mois-ci) → −70,04 € partout.
+  const zero = { ...emptyBudgetState, currentBalance: 0, balanceDate: day, userProfile: { ...emptyBudgetState.userProfile, safetyReserve: 0 },
+    goals: [{ id: 'g', label: 'Coussin', targetAmount: 500, savedAmount: 50.04, monthlyContribution: 20, onCurrentAccount: true, status: 'realistic' }] };
+  ({ card } = await openOn(zero));
+  await card.getByText('Comment c’est calculé').click();
+  text = clean(await card.innerText());
+  assert.ok(text.includes(`Il te manque ${euro(70.04)}`), text);
+  assert.ok(text.includes(`−${euro(70.04)}`) || text.includes(`-${euro(70.04)}`), `carte : ${text}`);
 });

@@ -157,7 +157,7 @@ export function calculateBudgetSummary(
   safetyReserve: number,
   goals: Goal[] = [],
   today = todayInBrussels(),
-  { envelopes = [], spendings = [] }: { envelopes?: Envelope[]; spendings?: Spending[] } = {},
+  { envelopes = [], spendings = [], balanceDate }: { envelopes?: Envelope[]; spendings?: Spending[]; balanceDate?: string } = {},
 ): BudgetSummary {
   const totalMonthlyIncome = monthlyIncomeCents(incomes);
   const totalMonthlyExpenses = monthlyExpenseCents(expenses);
@@ -173,8 +173,10 @@ export function calculateBudgetSummary(
     spendings,
     goals,
   });
-  const empty = currentBalance === 0 && incomes.length === 0 && expenses.length === 0
-    && debts.length === 0 && childExpenses.length === 0 && envelopes.length === 0 && spendings.length === 0;
+  // Budget vide = rien d'encodé du tout. Un solde recopié (même 0 €) ou un objectif compte : sinon la carte afficherait 0 €
+  // alors que le détail du calcul donne un autre total (audit C11).
+  const empty = currentBalance === 0 && balanceDate === undefined && incomes.length === 0 && expenses.length === 0
+    && debts.length === 0 && childExpenses.length === 0 && envelopes.length === 0 && spendings.length === 0 && goals.length === 0;
 
   return {
     currentBalance,
@@ -268,6 +270,11 @@ export function formatDate(dateStr: string): string {
     month: 'short',
     year: 'numeric',
   }).format(parseLocalDate(dateStr));
+}
+
+/** Point final après un texte qui peut déjà finir par une abréviation (« 1 déc. ») : jamais « déc.. ». */
+export function endOfSentence(text: string): string {
+  return text.endsWith('.') ? '' : '.';
 }
 
 export function formatShortDate(dateStr: string): string {

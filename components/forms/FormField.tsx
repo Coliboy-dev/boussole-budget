@@ -2,6 +2,12 @@
 
 import { cloneElement, useId, type ReactElement } from 'react';
 
+/**
+ * Champ de montant : texte avec clavier décimal, jamais un champ « nombre ».
+ * Chrome, Android compris, peut avaler la virgule d'un champ nombre (« 12,34 » lu 1 234) ; la lecture se fait avec parseAmountInput.
+ */
+export const amountField = { type: 'text', inputMode: 'decimal', autoComplete: 'off' } as const;
+
 interface FormFieldProps {
   label: string;
   required?: boolean;

@@ -80,3 +80,32 @@ test('Objectifs · la réserve se dit en toutes lettres', () => {
   assert.equal(reserveExtras(0, 10), ' et ton épargne');
   assert.equal(reserveExtras(10, 10), ', tes provisions et ton épargne');
 });
+
+test('C01 · « J’ai mis de côté » vers un compte à part : le virement quitte le solde, le vrai disponible ne monte pas', async () => {
+  const { contributeToGoal, goalTransferMayBeInBalance } = await import('../lib/goals.ts');
+  const { emptyBudgetState } = await import('../lib/budget-state.ts');
+  const separate = goal({ id: 'g', monthlyContribution: 100, onCurrentAccount: false });
+  const state = { ...emptyBudgetState, currentBalance: 1000, balanceDate: '2026-05-02', goals: [separate] };
+  const available = (budget) => calculateBudgetSummary(budget.currentBalance, budget.incomes, budget.expenses, budget.debts,
+    budget.childExpenses, budget.userProfile.safetyReserve, budget.goals, today, { envelopes: [], spendings: [] }).trueAvailable;
+
+  // Le virement est déduit, la date du solde avance, l'épargne augmente.
+  const deducted = contributeToGoal(state, 'g', today, false);
+  assert.deepEqual([deducted.currentBalance, deducted.balanceDate, deducted.goals[0].savedAmount, deducted.goals[0].lastContributionMonth],
+    [900, today, 200, '2026-05']);
+  // Le cas de l'audit : avant, la sortie prévue disparaissait sans baisse du solde (+100 €). Désormais, rien ne bouge.
+  assert.equal(available(deducted), available(state));
+  // Solde recopié après le virement : seulement l'épargne.
+  const included = contributeToGoal(state, 'g', today, true);
+  assert.deepEqual([included.currentBalance, included.balanceDate, included.goals[0].savedAmount], [1000, '2026-05-02', 200]);
+  // Compte courant : l'argent ne bouge pas.
+  const onAccount = contributeToGoal({ ...state, goals: [{ ...separate, onCurrentAccount: true }] }, 'g', today, false);
+  assert.deepEqual([onAccount.currentBalance, onAccount.goals[0].savedAmount], [1000, 200]);
+  // Déjà fait ce mois-ci : rien.
+  assert.equal(contributeToGoal(deducted, 'g', today, false), deducted);
+  // La question n'a de sens que pour un compte à part et un solde recopié ce mois-ci.
+  assert.equal(goalTransferMayBeInBalance(separate, '2026-05-02', today), true);
+  assert.equal(goalTransferMayBeInBalance(separate, '2026-04-30', today), false);
+  assert.equal(goalTransferMayBeInBalance(separate, undefined, today), false);
+  assert.equal(goalTransferMayBeInBalance({ ...separate, onCurrentAccount: true }, today, today), false);
+});

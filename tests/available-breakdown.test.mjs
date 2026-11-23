@@ -49,3 +49,19 @@ test('Prochaine rentrée : la première rentrée certaine à venir, jamais une r
     if (next) assert.ok(s.incomes.some(({ label, isConfirmed }) => isConfirmed && next.label.includes(label)), `${name} : ${next.label}`);
   }
 });
+
+test('C11 · solde recopié de 0 € avec un objectif : le budget n’est pas « vide », carte et détail donnent −70,04 €', async () => {
+  const { calculateBudgetSummary, endOfSentence } = await import('../lib/budget-calculations.ts');
+  const goals = [{ id: 'g', label: 'Coussin', targetAmount: 500, savedAmount: 50.04, monthlyContribution: 20, onCurrentAccount: true, status: 'realistic' }];
+  const day = '2026-11-23';
+  const summary = calculateBudgetSummary(0, [], [], [], [], 0, goals, day, { balanceDate: day });
+  assert.equal(summary.emptyBudget, false);
+  assert.equal(summary.trueAvailable, -70.04);
+  assert.equal(summary.availableForecast.breakdown.available, summary.trueAvailable);
+  // Rien d'encodé du tout : vide. Un solde recopié, même à 0 € et sans rien d'autre, suffit à ne plus l'être.
+  assert.equal(calculateBudgetSummary(0, [], [], [], [], 0, [], day).emptyBudget, true);
+  assert.equal(calculateBudgetSummary(0, [], [], [], [], 0, [], day, { balanceDate: day }).emptyBudget, false);
+  // U01 : jamais « déc.. ».
+  assert.equal(endOfSentence('1 déc.'), '');
+  assert.equal(endOfSentence('20 juin'), '.');
+});

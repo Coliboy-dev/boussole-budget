@@ -4,10 +4,10 @@ import { useRef, useState, type FormEvent } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import { calculateBudgetSummary, formatCurrency } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
-import { parseAmountInput } from '@/lib/money';
+import { amountInputValue, parseAmountInput } from '@/lib/money';
 import { envelopesOf, replaceExpenseWithEnvelope, selectableSpendingCategories, spendingCategoryLabels, spendingsOf, withCurrent } from '@/lib/spending';
 import type { Envelope, SpendingCategory } from '@/lib/types';
-import FormField from '@/components/forms/FormField';
+import FormField, { amountField } from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Modal from '@/components/ui/Modal';
 
@@ -27,7 +27,7 @@ export default function EnvelopeForm({ initial, prefill, onClose }: {
   const firstAmount = initial?.monthlyAmount ?? prefill?.monthlyAmount;
   const [category, setCategory] = useState<SpendingCategory | ''>(firstCategory ?? '');
   const [label, setLabel] = useState(initial?.label ?? (firstCategory ? spendingCategoryLabels[firstCategory] : ''));
-  const [amount, setAmount] = useState(firstAmount?.toString() ?? '');
+  const [amount, setAmount] = useState(amountInputValue(firstAmount) ?? '');
   const [replaceId, setReplaceId] = useState<string>();
   const formRef = useRef<HTMLFormElement>(null);
   const { errors, validate, clearFieldError } = useFormValidation();
@@ -87,7 +87,7 @@ export default function EnvelopeForm({ initial, prefill, onClose }: {
         </FormField>
         <FormField label="Montant mensuel (€)" required error={errors.amount}
           hint={prefill && prefill.monthlyAmount === undefined ? 'Indique ce que tu veux réserver chaque mois.' : undefined}>
-          <input name="amount" type="number" inputMode="decimal" min="0" step="0.01" className={inputClass}
+          <input name="amount" {...amountField} className={inputClass}
             required value={amount} onChange={(event) => { setAmount(event.target.value); setReplaceId(undefined); }} />
         </FormField>
         {expense && (

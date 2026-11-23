@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { TriangleAlert } from 'lucide-react';
-import { formatCurrency, formatDate, formatShortDate } from '@/lib/budget-calculations';
+import { endOfSentence, formatCurrency, formatDate, formatShortDate } from '@/lib/budget-calculations';
+import { GENERIC_INCOME_LABEL } from '@/lib/onboarding';
 import { householdCopy } from '@/lib/household-copy';
 import type { BudgetSummary } from '@/lib/types';
 import { RiskChip } from '@/components/projection/ProjectionTimeline';
@@ -78,10 +79,12 @@ export default function SummaryCard({
             // Le repère de chacun, quel que soit son jour de paie ; le calcul, lui, couvre toujours un mois complet.
             <p className="mt-1 text-sm text-white/90">
               {forecast.nextIncome ? (
-                <>Prochaine rentrée : <strong className="text-white">{forecast.nextIncome.label}</strong>,{' '}
-                  {formatCurrency(forecast.nextIncome.amount)} le <time dateTime={forecast.nextIncome.date}>{formatShortDate(forecast.nextIncome.date)}</time>.</>
+                <>Prochaine rentrée :{' '}
+                  {forecast.nextIncome.label.trim() !== GENERIC_INCOME_LABEL && <><strong className="text-white">{forecast.nextIncome.label}</strong>,{' '}</>}
+                  {formatCurrency(forecast.nextIncome.amount)} le <time dateTime={forecast.nextIncome.date}>{formatShortDate(forecast.nextIncome.date)}</time>
+                  {endOfSentence(formatShortDate(forecast.nextIncome.date))}</>
               ) : (
-                <>Aucune rentrée certaine prévue d’ici le <time dateTime={end.date}>{formatShortDate(end.date)}</time>.</>
+                <>Aucune rentrée certaine prévue d’ici le <time dateTime={end.date}>{formatShortDate(end.date)}</time>{endOfSentence(formatShortDate(end.date))}</>
               )}
             </p>
           )}
@@ -103,7 +106,7 @@ export default function SummaryCard({
           </p>
         ) : (
           <details open={explainOpen} className="relative rounded-xl bg-white/10 px-3 py-2 text-sm text-white/90">
-            <summary className="min-h-8 cursor-pointer font-semibold text-white focus-visible:outline-white">Comment c’est calculé</summary>
+            <summary className="min-h-11 cursor-pointer py-3 leading-5 font-semibold text-white focus-visible:outline-white">Comment c’est calculé</summary>
             <dl className="mt-2 space-y-1.5">
               <Step label="Ton solde aujourd’hui" amount={steps.balance} />
               {steps.incomes > 0 && <Step label={`Revenus certains d’ici ${lowestDay}`} amount={steps.incomes} sign="+" />}
