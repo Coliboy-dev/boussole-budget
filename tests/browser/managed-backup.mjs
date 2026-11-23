@@ -84,7 +84,7 @@ async function device(t, copy) {
 
 // Le budget se crée d’abord sur l’appareil, puis « Sauvegarder en ligne » ouvre l’inscription.
 async function startGuestBudget(page) {
-  await button(page, 'Commencer mon budget').click();
+  if (signupEnabled) await button(page, 'Commencer mon budget').click();
   await firstBudget(page);
   await heading(page, 'Ton premier budget').waitFor();
 }
@@ -105,7 +105,14 @@ async function associateBudget(page, copy) {
   assert.ok(copy.vault, 'la copie en ligne a été créée');
 }
 
-const alreadyHaveAccount = (page) => page.getByRole('link', { name: 'J’ai déjà un compte', exact: true });
+async function openSignIn(page) {
+  if (signupEnabled) {
+    await page.getByRole('link', { name: 'J’ai déjà un compte', exact: true }).click();
+  } else {
+    await page.goto('/synchronisation');
+  }
+  await heading(page, 'Te connecter').waitFor();
+}
 
 // « J’ai déjà un compte » mène à Compte et sécurité ; une fois le budget récupéré, on revient sur l’accueil.
 async function openTodayAfterRestore(page) {
@@ -124,8 +131,7 @@ async function choosePassword(page, password = 'un mot de passe long') {
 }
 
 async function signIn(page, password) {
-  await alreadyHaveAccount(page).click();
-  await heading(page, 'Te connecter').waitFor();
+  await openSignIn(page);
   await page.locator('input[name=email]').fill('capiste@example.test');
   await page.locator('input[name=password]').fill(password);
   await button(page, 'Me connecter').click();
@@ -133,7 +139,7 @@ async function signIn(page, password) {
 
 async function openRecovery(page) {
   await page.goto('/dashboard');
-  await alreadyHaveAccount(page).click();
+  await openSignIn(page);
   await button(page, 'Mot de passe oublié ou pas encore créé ?').click();
   await page.locator('input[name=email]').fill('capiste@example.test');
   await button(page, 'Recevoir un code').click();
@@ -212,7 +218,7 @@ test('mot de passe oublié : code e-mail sans création de compte, puis nouveau 
   const copy = { otp: [], keyRequests: 0, password: 'ancien mot de passe' };
   const page = await device(t, copy);
   await page.goto('/dashboard');
-  await alreadyHaveAccount(page).click();
+  await openSignIn(page);
   await button(page, 'Mot de passe oublié ou pas encore créé ?').click();
   await page.locator('input[name=email]').fill('capiste@example.test');
   await button(page, 'Recevoir un code').click();

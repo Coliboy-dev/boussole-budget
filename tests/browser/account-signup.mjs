@@ -83,11 +83,17 @@ test('C1 — le budget se crée avant de choisir la sauvegarde en ligne', async 
   });
 
   await page.goto('/dashboard');
-  await heading(page, 'Comment veux-tu commencer ?').waitFor();
-  assert.equal(await page.getByRole('link', { name: 'Créer mon compte', exact: true }).count(), 0);
-  assert.equal(await page.getByRole('link', { name: 'J’ai déjà un compte', exact: true }).count(), 1);
-  await button(page, 'Commencer mon budget').click();
-  await page.locator('input[name=balance]').fill('1200');
+  const balanceField = page.getByLabel('Solde bancaire (€)');
+  if (signupEnabled) {
+    await heading(page, 'Comment veux-tu commencer ?').waitFor();
+    assert.equal(await page.getByRole('link', { name: 'Créer mon compte', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('link', { name: 'J’ai déjà un compte', exact: true }).count(), 1);
+    await button(page, 'Commencer mon budget').click();
+  } else {
+    await balanceField.waitFor();
+    assert.equal(await button(page, 'Commencer mon budget').count(), 0);
+  }
+  await balanceField.fill('1200');
   await button(page, 'Continuer').click();
   await button(page, 'Pas de rentrée confirmée').click();
   await button(page, 'Calculer sans ajouter de facture').click();
