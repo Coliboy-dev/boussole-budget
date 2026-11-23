@@ -110,6 +110,18 @@ function SavedBudgetDashboard() {
       </SummaryCard>}
       {!joint && <p className="text-sm text-cap-text">{householdCopy.noJointAccount}</p>}
 
+      {attention && <AlertBanner variant="warning" title={householdCopy.attention}>{attention}</AlertBanner>}
+      {!household && (summary.riskLevel === 'danger' || summary.riskLevel === 'fragile') && (
+        <RiskNotice
+          danger={summary.riskLevel === 'danger'}
+          lowest={forecast.balance}
+          date={forecast.date}
+          causes={forecast.causes.slice(0, 2).join(', ')}
+          reserve={forecast.reservedAmount}
+          withProvision={hasAnnualProvision}
+        />
+      )}
+
       {joint && partial && (
         <div className="flex gap-2 rounded-2xl border border-cap-secondary/20 bg-cap-secondary-soft px-3 py-3 text-sm text-cap-text">
           <Icon icon={Info} className="mt-0.5 size-4 shrink-0 text-cap-secondary-text" />
@@ -133,18 +145,6 @@ function SavedBudgetDashboard() {
           Voir les échéances
         </Link>
       </nav>
-
-      {attention && <AlertBanner variant="warning" title={householdCopy.attention}>{attention}</AlertBanner>}
-      {!household && (summary.riskLevel === 'danger' || summary.riskLevel === 'fragile') && (
-        <RiskNotice
-          danger={summary.riskLevel === 'danger'}
-          lowest={forecast.balance}
-          date={forecast.date}
-          causes={forecast.causes.slice(0, 2).join(', ')}
-          reserve={forecast.reservedAmount}
-          withProvision={hasAnnualProvision}
-        />
-      )}
 
       {household && joint && <HouseholdContributionList />}
       {joint && !summary.emptyBudget && (
