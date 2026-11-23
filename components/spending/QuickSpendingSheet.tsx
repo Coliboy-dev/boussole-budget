@@ -8,7 +8,7 @@ import { suggestCategory } from '@/lib/merchants';
 import { parseAmountInput } from '@/lib/money';
 import { parseQuickEntry } from '@/lib/quick-entry';
 import { labelSuggestions } from '@/lib/label-breakdown';
-import { merchantCategoriesOf, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
+import { merchantCategoriesOf, selectableSpendingCategories, spendingCategoryLabels, spendingsOf, withCurrent } from '@/lib/spending';
 import type { Spending, SpendingCategory } from '@/lib/types';
 import FormField from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
@@ -18,7 +18,6 @@ import { spendingCategoryIcons } from './category-icons';
 import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
 import { householdCopy } from '@/lib/household-copy';
 
-const categories = Object.keys(spendingCategoryLabels) as SpendingCategory[];
 const inputClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
 type Fields = Omit<Spending, 'id' | 'balanceRevision' | 'debited'>;
 
@@ -39,6 +38,8 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
   for (const { date, category } of spendingsOf(state)) {
     if (category !== 'household' && date >= from && date <= today) counts.set(category, (counts.get(category) ?? 0) + 1);
   }
+  // Catégorie d'une dépense modifiée toujours proposée, même si elle n'est pas (encore) au choix.
+  const categories = withCurrent(selectableSpendingCategories, initial?.category === 'household' ? undefined : initial?.category);
   const ranked = [...categories].sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
   const main = ranked.slice(0, 6);
   const more = ranked.slice(6);

@@ -11,13 +11,32 @@ export const spendingCategoryLabels: Record<SpendingCategory, string> = {
   restaurants: 'Restaurants et snacks',
   transport: 'Transport et carburant',
   health: 'Santé et pharmacie',
-  leisure: 'Loisirs et sorties',
+  leisure: 'Loisirs, sport et sorties',
   clothing: 'Vêtements',
   home: 'Maison et bricolage',
   children: 'Enfants (quotidien)',
   cash: 'Retrait d’espèces',
+  pets: 'Animaux',
+  gifts: 'Cadeaux et fêtes',
+  beauty: 'Soins et beauté',
+  travel: 'Vacances et voyages',
   other: 'Autre',
 };
+
+/**
+ * Catégories lues mais pas encore proposées à la saisie : elles le seront à la mise en ligne suivante, quand
+ * toutes les versions en circulation sauront les lire (une version plus ancienne refuserait le budget).
+ */
+const readOnlySpendingCategories: ReadonlySet<SpendingCategory> = new Set(['pets', 'gifts', 'beauty', 'travel']);
+
+/** Catégories proposées à la saisie ; celle d'une dépense existante reste toujours affichée (voir withCurrent). */
+export const selectableSpendingCategories = (Object.keys(spendingCategoryLabels) as SpendingCategory[])
+  .filter((category) => !readOnlySpendingCategories.has(category));
+
+/** Ajoute la catégorie actuelle d'un élément modifié, pour ne jamais la changer en silence. */
+export function withCurrent<T extends string>(list: readonly T[], current?: T | '' | null): T[] {
+  return current && !list.includes(current) ? [...list, current] : [...list];
+}
 
 export const envelopesOf = (state: AppState) => state.envelopes ?? [];
 export const spendingsOf = (state: AppState) => state.spendings ?? [];
