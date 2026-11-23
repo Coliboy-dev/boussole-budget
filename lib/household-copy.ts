@@ -108,7 +108,7 @@ export const householdCopy = {
   personalStaysPrivate: 'Les données personnelles de chaque membre restent privées.',
   formerMemberMayKeep: 'Certaines informations déjà consultées ou enregistrées par un ancien membre peuvent rester en sa possession.',
   localCopyKept: 'Une copie du foyer reste sur cet appareil. Elle n’est plus mise à jour.',
-  unreadableItems: 'Un élément du foyer n’a pas pu être lu sur cet appareil. Les autres éléments restent affichés.',
+  unreadableItems: 'Des éléments du foyer sont illisibles sur cet appareil. Les montants affichés peuvent être incomplets.',
   transfers: 'Virements vers le compte commun',
   weekly: 'Chaque semaine',
   monthly: 'Chaque mois',

@@ -1,0 +1,8 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "claude/foyer-p5a": false,
+      "claude/foyer-p5b": false
+    }
+  }
+}

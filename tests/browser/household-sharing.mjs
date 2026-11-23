@@ -131,12 +131,51 @@ function idb(page, id) {
   }), id);
 }
 
-async function waitForEntry(page, id, predicate) {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    if (predicate(await idb(page, id))) return;
-    await page.waitForTimeout(150);
-  }
-  assert.fail(`entrée ${id} absente`);
+async function waitForEntry(page, id, property) {
+  const ready = await page.waitForFunction(({ entry, field }) => new Promise((resolve, reject) => {
+    const open = indexedDB.open('boussole-cloud', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const request = db.transaction('keys').objectStore('keys').get(entry);
+      request.onsuccess = () => {
+        const value = request.result?.[field];
+        db.close();
+        resolve(Array.isArray(value) ? value.length > 0 : Boolean(value));
+      };
+      request.onerror = () => { db.close(); reject(request.error); };
+    };
+  }), { entry: id, field: property });
+  await ready.dispose();
+}
+
+async function holdDirectoryUpdate(page, userId) {
+  await page.evaluate((directoryKey) => {
+    const get = IDBObjectStore.prototype.get;
+    const complete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    let holding = false;
+    const callbacks = [];
+
+    IDBObjectStore.prototype.get = function (key) {
+      const request = get.call(this, key);
+      if (key === directoryKey && (holding || this.transaction.mode === 'readonly')) {
+        holding = true;
+        const transaction = this.transaction;
+        Object.defineProperty(transaction, 'oncomplete', {
+          set(callback) {
+            complete.set.call(transaction, (event) => callbacks.push(() => callback.call(transaction, event)));
+          },
+        });
+      }
+      return request;
+    };
+
+    window.releaseHouseholdDirectory = () => {
+      IDBObjectStore.prototype.get = get;
+      for (const completeRead of callbacks) completeRead();
+    };
+    window.householdDirectoryHeld = () => callbacks.length > 0;
+  }, `household-directory:${userId}`);
 }
 
 /** Déclenche « online » et « visible » puis attend que l'annuaire ait réellement interrogé le serveur. Aucune temporisation. */
@@ -228,7 +267,7 @@ test('5a · quitter : textes de la charte, synchronisation arrêtée, copie chif
   const { page, server } = await fixture(t, A, [[mA, A], [mB, B]]);
   await openHousehold(page);
   await page.getByText('Ce foyer est partagé avec Autre membre.').waitFor();
-  await waitForEntry(page, `household-v1:${A}:${H}`, (value) => Boolean(value?.key));
+  await waitForEntry(page, `household-v1:${A}:${H}`, 'key');
   const cacheBefore = await idb(page, `household-v1:${A}:${H}`);
   assert.equal(cacheBefore.key, 'CryptoKey');
 
@@ -281,7 +320,7 @@ test('5a · accès retiré par l’autre membre : copie gardée, foyer noté com
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   // Selon l'ordre des réponses, la synchronisation signale le retrait ou l'annuaire classe directement le foyer comme ancien.
   await page.getByText('Ce compte n’a plus accès à ce foyer.').or(page.getByText('Le partage de ce foyer a été désactivé.')).first().waitFor();
-  await waitForEntry(page, `household-directory:${B}`, (value) => value?.former?.length === 1);
+  await waitForEntry(page, `household-directory:${B}`, 'former');
   const cache = await idb(page, `household-v1:${B}:${H}`);
   assert.equal(cache.key, 'CryptoKey', 'la copie et sa clé restent sur l’appareil');
   const calls = syncCalls(server);
@@ -292,18 +331,26 @@ test('5a · accès retiré par l’autre membre : copie gardée, foyer noté com
 test('5a · ordre forcé : refus de lecture alors que la liste dit encore « membre » — aucune synchronisation ensuite', async (t) => {
   const { page, server } = await fixture(t, B, [[mA, A], [mB, B]]);
   await openHousehold(page);
-  await waitForEntry(page, `household-v1:${B}:${H}`, (value) => Boolean(value?.key));
-  server.pullRefused = true; // la liste des foyers continue de répondre « membre »
+  await waitForEntry(page, `household-v1:${B}:${H}`, 'key');
+  // Laisser la réponse d’IndexedDB en attente pendant que l’annuaire HTTP dit encore « membre ».
+  // Le composant reste monté après le refus : sa garde doit bloquer les nouvelles tentatives.
+  await holdDirectoryUpdate(page, B);
+  server.pullRefused = true;
 
   const refused = page.waitForResponse((response) => response.url().endsWith('/rpc/pull_records') && response.status() === 403);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await refused;
-  await waitForEntry(page, `household-v1:${B}:${H}`, (value) => value?.revoked === true);
-  const afterRefusal = syncCalls(server);
+  const directoryHeld = await page.waitForFunction(() => window.householdDirectoryHeld());
+  await directoryHeld.dispose();
+  const afterRefusal = server.calls.length;
 
-  // Cinq occasions de resynchroniser, chacune confirmée par une réponse du serveur : aucune lecture ni écriture.
   await nudge(page, 5);
-  assert.equal(syncCalls(server), afterRefusal, 'le refus est définitif pour cet appareil');
+  const laterCalls = server.calls.slice(afterRefusal);
+  assert.equal(laterCalls.filter(({ rpc }) => rpc === 'pull_records').length, 0, 'aucune lecture après le refus');
+  assert.equal(laterCalls.filter(({ rpc }) => rpc === 'upsert_records').length, 0, 'aucune écriture après le refus');
+
+  await page.evaluate(() => window.releaseHouseholdDirectory());
+  await page.getByRole('heading', { name: 'Membres du foyer' }).waitFor({ state: 'detached' });
   const cache = await idb(page, `household-v1:${B}:${H}`);
   assert.equal(cache.revoked, true);
   assert.equal(cache.key, 'CryptoKey', 'la copie et sa clé restent sur l’appareil');
