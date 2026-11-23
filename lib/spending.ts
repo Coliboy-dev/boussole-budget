@@ -24,14 +24,11 @@ export const spendingCategoryLabels: Record<SpendingCategory, string> = {
 };
 
 /**
- * Catégories lues mais pas encore proposées à la saisie : elles le seront à la mise en ligne suivante, quand
- * toutes les versions en circulation sauront les lire (une version plus ancienne refuserait le budget).
+ * Catégories proposées à la saisie ; celle d'une dépense existante reste toujours affichée (voir withCurrent).
+ * Une NOUVELLE catégorie s'ajoute en deux mises en ligne : d'abord lue (lib/budget-schema.ts) en étant exclue
+ * d'ici, puis proposée une fois la version qui la lit partout (une version plus ancienne refuserait le budget).
  */
-const readOnlySpendingCategories: ReadonlySet<SpendingCategory> = new Set(['pets', 'gifts', 'beauty', 'travel']);
-
-/** Catégories proposées à la saisie ; celle d'une dépense existante reste toujours affichée (voir withCurrent). */
-export const selectableSpendingCategories = (Object.keys(spendingCategoryLabels) as SpendingCategory[])
-  .filter((category) => !readOnlySpendingCategories.has(category));
+export const selectableSpendingCategories = Object.keys(spendingCategoryLabels) as SpendingCategory[];
 
 /** Ajoute la catégorie actuelle d'un élément modifié, pour ne jamais la changer en silence. */
 export function withCurrent<T extends string>(list: readonly T[], current?: T | '' | null): T[] {
