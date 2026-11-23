@@ -219,7 +219,26 @@ export interface BudgetSummary {
     goalThisMonth: number;
     reservedAmount: number;
     optimisticAvailable: number;
+    /** Le vrai disponible ligne par ligne, du solde au montant dépensable (voir lib/available-breakdown.ts). */
+    breakdown: AvailableBreakdown;
   };
+}
+
+/** Montants en euros ; les sorties sont positives (elles se lisent « moins … »). */
+export interface AvailableBreakdown {
+  /** Jour le plus serré de la période : c'est là que le calcul s'arrête. */
+  lowestDate: string;
+  balance: number;
+  incomes: number;
+  charges: number;
+  envelopes: number;
+  savingsTransfers: number;
+  /** Solde prévu au jour le plus serré. */
+  lowest: number;
+  safetyReserve: number;
+  annualProvision: number;
+  goalSavings: number;
+  available: number;
 }
 
 // Advice
