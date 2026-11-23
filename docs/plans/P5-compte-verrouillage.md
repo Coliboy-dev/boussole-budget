@@ -1,4 +1,12 @@
-# P5 — Compte, sauvegarde et verrouillage de l’application (révision 6.1)
+# P5 — Compte, sauvegarde et verrouillage de l’application (révision 6.2)
+
+### Révision 6.2 — Le budget d’abord, le compte ensuite (23 novembre 2026)
+
+Remplace, dans la révision 6, le compte imposé au premier accès.
+
+- **Premier accès :** « Commencer mon budget » ouvre les trois questions et enregistre le budget sur l’appareil, en mode invité, sans aucune requête d’authentification. « J’ai déjà un compte » mène à la connexion par mot de passe.
+- **Après le premier budget :** si les inscriptions sont ouvertes, l’écran de résultat propose « Sauvegarder en ligne » avec une phrase exacte selon le mode (clé gérée : retrouvable avec l’e-mail et le mot de passe ; mode historique : phrase secrète). L’inscription mène au choix d’association du §7.3 (« Associer ce budget à mon compte »), puis à la création du premier coffre.
+- **Mode clés gérées :** `AccountGate` n’impose plus de compte avant le budget. Toutes les protections de C0 et C1 restent en place.
 
 ### Révision 6.1 — Mot de passe du compte, verrou proposé (22 novembre 2026)
 
@@ -233,10 +241,9 @@ Avertissement à l’activation du verrou sans compte ni déverrouillage par le 
 **Lot C1**, dans une PR séparée après la fusion de C0 (§7 et §9.5). La connexion aux comptes existants utilise `shouldCreateUser: false`. Le parcours **Créer mon compte** demande explicitement la création. Son ouverture aux utilisateurs exige l’expéditeur Boussole du §5.6.
 
 ### 5.1 Écran de choix (`components/onboarding/AccountChoice.tsx`, avant l’étape 1 de `BudgetOnboarding`)
-- **Créer mon compte** (bouton principal) : « Sauvegarde en ligne chiffrée, plusieurs appareils, et plus tard le partage en couple. La copie en ligne est chiffrée sur ton téléphone avant l’envoi : nous ne pouvons pas la lire. »
-- **J’ai déjà un compte**.
-- **Continuer sans compte** (lien secondaire) : « Tout reste sur ce téléphone. Tu pourras créer un compte plus tard. »
-- La démo et la restauration restent accessibles. L’écran n’apparaît pas si `cloudConfigured` est faux.
+- **Commencer mon budget** est l’action principale et ouvre les trois questions en mode invité.
+- **J’ai déjà un compte** permet de retrouver un budget existant. La démo et la restauration locale restent accessibles.
+- Quand les inscriptions sont fermées ou que Supabase est indisponible dans le build, ouvrir directement les trois questions en mode invité.
 
 ### 5.2 Phrase secrète (D2, S7)
 - Générée par défaut : 4 groupes de 5 caractères dans `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (31 symboles), soit `log2(31^20)` ≈ 99,1 bits.
@@ -261,7 +268,7 @@ Avertissement à l’activation du verrou sans compte ni déverrouillage par le 
 5. Afficher « Copie en ligne créée » seulement après confirmation, puis proposer le verrou. Une erreur ou un coffre qui ne peut pas être relu ou déchiffré maintient la création en attente.
 
 ### 5.4 Sans compte (C12)
-Après les trois questions, l’écran de résultat (`OnboardingResult`) propose aussi « Verrouiller Boussole avec un code ? ».
+Après les trois questions, l’écran de résultat (`OnboardingResult`) permet d’ouvrir le tableau de bord et propose le verrouillage de l’appareil. Quand les inscriptions sont ouvertes, la personne peut choisir **Sauvegarder en ligne** depuis ce résultat. La connexion et la phrase de récupération interviennent à partir de ce choix.
 
 ### 5.5 Personnes existantes
 Les parcours sans compte restent disponibles. « Plus → Compte et sécurité » propose « Créer un compte pour ce budget » pour un budget invité. La personne confirme l’instantané à associer après identification du compte (§7, cas A). Le marqueur et la reprise du §5.3 s’appliquent à ce premier coffre.
