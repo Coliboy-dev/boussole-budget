@@ -68,9 +68,16 @@ export function diffHousehold(previous: AppState, next: AppState, context: DiffC
     }
     if (JSON.stringify(old?.data) === JSON.stringify(record.data)) continue;
 
-    if (record.kind === 'occurrence' && !isBankReading && balanceDelta !== 0 && !context.unscheduledPayment) {
+    if (record.kind === 'occurrence') {
       const occurrence = record.data as HouseholdOccurrence;
-      if (occurrence.status === 'paid') {
+      const previousOccurrence = old?.data as HouseholdOccurrence | undefined;
+      if (occurrence.status === 'paid' && previousOccurrence?.status === 'paid') {
+        // Compléter un ancien montant ne crée aucun mouvement : le relevé et la date du débit restent ceux d’origine.
+        const saved = stored.get(key);
+        if (saved?.balanceEffect) record.balanceEffect = saved.balanceEffect;
+        const paymentDate = (saved?.data as HouseholdOccurrence | undefined)?.paymentDate;
+        if (paymentDate) occurrence.paymentDate = paymentDate;
+      } else if (occurrence.status === 'paid' && !isBankReading && balanceDelta !== 0 && !context.unscheduledPayment) {
         if (!checkpoint) throw new Error('Recopie le solde du foyer avant de saisir un paiement.');
         record.balanceEffect = { checkpointId: checkpoint.checkpointId, deltaCents: balanceDelta };
         if (context.paymentDate) occurrence.paymentDate = context.paymentDate;

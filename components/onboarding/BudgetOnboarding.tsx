@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import SummaryCard from '@/components/dashboard/SummaryCard';
 import { accountSignupEnabled, useCloudSync } from '@/components/sync/CloudSyncProvider';
-import FormField from '@/components/forms/FormField';
+import FormField, { amountField, OverdrawnCheckbox, readDateInput } from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Card from '@/components/ui/Card';
 import { useLock } from '@/components/security/LockProvider';
@@ -13,7 +13,7 @@ import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
 import { isBudgetAmount } from '@/lib/budget-schema';
 import { useApp } from '@/lib/context/AppContext';
 import { addDays, isLocalDate } from '@/lib/local-date';
-import { parseAmountInput } from '@/lib/money';
+import { parseAmountInput, parseBalanceInput } from '@/lib/money';
 import { isPositiveOnboardingAmount, type FirstBudgetInput } from '@/lib/onboarding';
 import { AVAILABLE_HORIZON } from '@/lib/projection';
 
@@ -29,7 +29,7 @@ const questions: Record<Step, string> = {
 const inputClass = 'min-w-0 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-base text-gray-900 focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700';
 const primaryClass = 'w-full rounded-xl bg-teal-700 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-teal-800';
 const secondaryClass = 'rounded-xl px-3 py-2.5 text-sm font-medium text-teal-800 hover:bg-teal-50';
-const positiveAmountError = 'Saisis un montant supérieur à zéro avec deux décimales au maximum.';
+const positiveAmountError = 'Encode un montant supérieur à zéro avec deux décimales au maximum.';
 
 function billName(id: number, field: BillField): string {
   return `bill-${id}-${field}`;
@@ -43,6 +43,7 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
   const { today, finishOnboarding } = useApp();
   const [step, setStep] = useState<Step>(1);
   const [balance, setBalance] = useState('');
+  const [overdrawn, setOverdrawn] = useState(false);
   const [income, setIncome] = useState({ date: '', amount: '' });
   const [bills, setBills] = useState<BillDraft[]>([]);
   const [saveError, setSaveError] = useState('');
@@ -70,6 +71,15 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
     setBills((current) => current.map((bill) => bill.id === id ? { ...bill, [field]: value } : bill));
   }
 
+  function goBack(form: HTMLFormElement) {
+    if (step === 3) {
+      setBills(bills.map(bill => ({ ...bill, date: readDateInput(form, billName(bill.id, 'date')) })));
+    } else {
+      setIncome({ ...income, date: readDateInput(form, 'incomeDate') });
+    }
+    changeStep(step === 3 ? 2 : 1);
+  }
+
   async function finish(input?: FirstBudgetInput) {
     if (saving) return;
     setSaving(true);
@@ -90,23 +100,28 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
     const form = event.currentTarget;
 
     if (step === 1) {
-      const validBalance = isBudgetAmount(parseAmountInput(balance));
-      if (validate(form, { balance: validBalance ? undefined : 'Saisis un solde valide avec deux décimales au maximum.' })) {
+      const validBalance = isBudgetAmount(parseBalanceInput(balance, overdrawn));
+      if (validate(form, { balance: validBalance ? undefined : 'Encode un solde valide avec deux décimales au maximum.' })) {
         changeStep(2);
       }
       return;
     }
 
     if (step === 2) {
+      const date = readDateInput(form, 'incomeDate');
       if (validate(form, {
-        incomeDate: isLocalDate(income.date) && income.date >= today ? undefined : 'Choisis une date à partir d’aujourd’hui.',
+        incomeDate: isLocalDate(date) && date >= today ? undefined : 'Choisis une date à partir d’aujourd’hui.',
         incomeAmount: isPositiveOnboardingAmount(parseAmountInput(income.amount)) ? undefined : positiveAmountError,
-      })) changeStep(3);
+      })) {
+        setIncome({ ...income, date });
+        changeStep(3);
+      }
       return;
     }
 
     const rules: Record<string, string | undefined> = {};
-    const entries = bills.map(({ id, label, amount: text, date }) => {
+    const entries = bills.map(({ id, label, amount: text }) => {
+      const date = readDateInput(form, billName(id, 'date'));
       const amount = parseAmountInput(text);
       if (!label.trim()) rules[billName(id, 'label')] = 'Renseigne le nom de la facture.';
       if (!isPositiveOnboardingAmount(amount)) rules[billName(id, 'amount')] = positiveAmountError;
@@ -116,7 +131,7 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
     if (!validate(form, rules)) return;
 
     void finish({
-      balance: parseAmountInput(balance),
+      balance: parseBalanceInput(balance, overdrawn),
       income: income.date ? { date: income.date, amount: parseAmountInput(income.amount) } : undefined,
       bills: entries,
     });
@@ -147,16 +162,19 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
 
         <form key={step} onSubmit={submit} onChange={clearFieldError} noValidate>
           {step === 1 && (
-            <FormField required label="Solde bancaire (€)" error={errors.balance} hint="Indique un signe moins si ton compte est à découvert.">
-              <input name="balance" required type="text" placeholder="0,00" className={inputClass}
-                value={balance} onChange={(event) => setBalance(event.target.value)} />
-            </FormField>
+            <>
+              <FormField required label="Solde bancaire (€)" error={errors.balance}>
+                <input name="balance" required {...amountField} placeholder="0,00" className={inputClass}
+                  value={balance} onChange={(event) => setBalance(event.target.value)} />
+              </FormField>
+              <OverdrawnCheckbox checked={overdrawn} onChange={setOverdrawn} />
+            </>
           )}
           {step === 2 && (
             <div className="grid gap-x-4 sm:grid-cols-2">
               <FormField required label="Date du prochain versement" error={errors.incomeDate}>
                 <input name="incomeDate" required type="date" className={inputClass}
-                  value={income.date} onChange={(event) => setIncome({ ...income, date: event.target.value })} />
+                  defaultValue={income.date} />
               </FormField>
               <FormField required label="Montant attendu (€)" error={errors.incomeAmount}>
                 <input name="incomeAmount" required type="text" inputMode="decimal" placeholder="0,00" className={inputClass}
@@ -180,7 +198,7 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
                     </FormField>
                     <FormField required label="Échéance" error={errors[billName(bill.id, 'date')]}>
                       <input name={billName(bill.id, 'date')} required type="date" className={inputClass}
-                        value={bill.date} onChange={(event) => updateBill(bill.id, 'date', event.target.value)} />
+                        defaultValue={bill.date} />
                     </FormField>
                   </div>
                   <button type="button" className="mb-2 rounded-lg py-2 text-sm font-medium text-gray-700 underline"
@@ -200,7 +218,7 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
             <button type="submit" disabled={saving} className={primaryClass}>{saving ? 'Enregistrement…' : action}</button>
             {step > 1 && (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <button type="button" className={secondaryClass} onClick={() => changeStep(step === 3 ? 2 : 1)}>Retour</button>
+                <button type="button" className={secondaryClass} onClick={(event) => { if (event.currentTarget.form) goBack(event.currentTarget.form); }}>Retour</button>
                 {step === 2 && (
                   <button type="button" className={secondaryClass} onClick={() => {
                     setIncome({ date: '', amount: '' });

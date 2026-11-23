@@ -172,7 +172,7 @@ test('B01 · « Payé » sur une échéance due au plus tard le jour du solde re
   const home = engine(dueToday).reminders.find(({ refId }) => refId === 'loyer');
   let page = await open(t, dueToday);
   await page.locator(`[id="pay-home-${home.id}"]`).click();
-  let question = page.getByRole('dialog', { name: 'Déjà débité ?' });
+  let question = page.getByRole('dialog', { name: 'Déjà passé sur ton compte ?' });
   assert.ok(clean(await question.innerText()).includes(`Ton solde du ${clean(formatShortDate(today))} comprend-il déjà ce paiement : Loyer, ${euro(300)} ?`));
   // Fermer la question n'enregistre rien.
   await question.getByRole('button', { name: 'Fermer' }).click();
@@ -191,7 +191,7 @@ test('B01 · « Payé » sur une échéance due au plus tard le jour du solde re
   page = await open(t, retard);
   await page.goto('/projection');
   await page.locator(`[id="pay-${late.id.replace(/^rem-/, '')}"]`).click();
-  question = page.getByRole('dialog', { name: 'Déjà débité ?' });
+  question = page.getByRole('dialog', { name: 'Déjà passé sur ton compte ?' });
   await question.getByRole('button', { name: 'Non, déduis-le' }).click();
   await page.getByRole('button', { name: 'Annuler' }).waitFor();
   state = await stored(page);

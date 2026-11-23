@@ -40,6 +40,12 @@ export function parseAmountInput(text: string): number {
   return Number(value.replace(/[ \u00a0\u202f]/g, '').replace(',', '.'));
 }
 
+/** La case Découvert fixe le signe sans inverser un montant déjà négatif. */
+export function parseBalanceInput(text: string, overdrawn: boolean): number {
+  const amount = parseAmountInput(text.trim().replace(/^−/, '-'));
+  return overdrawn && amount > 0 ? -amount : amount;
+}
+
 /** Montant facultatif : champ vide = `empty`, sinon même lecture stricte que parseAmountInput. */
 export function parseOptionalAmount(text: string, empty: number): number {
   return text.trim() === '' ? empty : parseAmountInput(text);

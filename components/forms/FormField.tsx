@@ -1,12 +1,33 @@
 'use client';
 
-import { cloneElement, useId, type ReactElement } from 'react';
+import { cloneElement, useId, type ChangeEvent, type ReactElement } from 'react';
 
 /**
  * Champ de montant : texte avec clavier décimal, jamais un champ « nombre ».
  * Chrome, Android compris, peut avaler la virgule d'un champ nombre (« 12,34 » lu 1 234) ; la lecture se fait avec parseAmountInput.
  */
 export const amountField = { type: 'text', inputMode: 'decimal', autoComplete: 'off' } as const;
+
+export function readDateInput(form: HTMLFormElement, name: string): string {
+  const field = form.elements.namedItem(name);
+  return field instanceof HTMLInputElement ? field.value : '';
+}
+
+/** Maintient la contrainte native sans piloter la valeur des champs date depuis React. */
+export function constrainEndDate(event: ChangeEvent<HTMLInputElement>): void {
+  const end = event.currentTarget.form?.elements.namedItem('endDate');
+  if (end instanceof HTMLInputElement) end.min = event.currentTarget.value;
+}
+
+export function OverdrawnCheckbox({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-gray-800">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)}
+        className="size-5 shrink-0 accent-teal-700" />
+      Mon compte est à découvert
+    </label>
+  );
+}
 
 interface FormFieldProps {
   label: string;

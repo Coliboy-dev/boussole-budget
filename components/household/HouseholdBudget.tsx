@@ -186,7 +186,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     assertHouseholdAccount(userId);
     if (!view || revoked) throw new Error(householdCopy.unavailable);
     const newCheckpointId = crypto.randomUUID();
-    saveQueue.current = saveQueue.current.then(async () => {
+    const pending = saveQueue.current.then(async () => {
       assertHouseholdAccount(userId);
       const cache = await readHouseholdCache(userId, householdId);
       if (!cache || cache.revoked) throw new Error(householdCopy.revoked);
@@ -209,9 +209,11 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
       setFailure('');
       await display(updated);
       void synchronize();
-    }).catch((error: unknown) => {
+    });
+    saveQueue.current = pending.catch((error: unknown) => {
       if (initialized.current) setFailure(error instanceof Error ? error.message : householdCopy.saveFailed);
     });
+    return pending;
   }
 
   function dispatch(action: AppAction) {
@@ -228,7 +230,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     )) {
       throw new Error(householdCopy.enterBalance);
     }
-    save((budget) => reduceBudget({
+    return save((budget) => reduceBudget({
       ...budget, storageStatus: 'ready', storageRevision: 0, lastBackupDate: null,
     }, action), { paymentDate: today, spendingId: action.type === 'ADD_SPENDING' ? action.spending.id : undefined });
   }

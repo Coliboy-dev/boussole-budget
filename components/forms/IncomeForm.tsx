@@ -5,7 +5,7 @@ import type { Income, IncomeType, Frequency } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { amountInputValue, parseAmountInput } from '@/lib/money';
 import { isLocalDate } from '@/lib/local-date';
-import FormField, { amountField } from './FormField';
+import FormField, { amountField, constrainEndDate, readDateInput } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -24,8 +24,6 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
     type: (initial?.type ?? 'other') as IncomeType,
     amount: amountInputValue(initial?.amount) ?? '',
     frequency: (initial?.frequency ?? 'monthly') as Frequency,
-    expectedDate: initial?.expectedDate ?? '',
-    endDate: initial?.endDate ?? '',
     isConfirmed: initial?.isConfirmed ?? true,
     notes: initial?.notes ?? '',
   });
@@ -35,20 +33,22 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const expectedDate = readDateInput(e.currentTarget, 'expectedDate');
+    const endDate = readDateInput(e.currentTarget, 'endDate');
     const amount = parseAmountInput(form.amount);
     if (!validate(e.currentTarget, {
       label: form.label.trim() ? undefined : 'Renseigne l’intitulé du revenu.',
       amount: isNonNegativeBudgetAmount(amount) && amount > 0 ? undefined : 'Saisis un montant valide supérieur à zéro.',
-      expectedDate: isLocalDate(form.expectedDate) ? undefined : 'Renseigne une date de versement valide.',
-      endDate: form.endDate && !isLocalDate(form.endDate) ? 'Renseigne une date de fin valide.' : undefined,
+      expectedDate: isLocalDate(expectedDate) ? undefined : 'Renseigne une date de versement valide.',
+      endDate: endDate && !isLocalDate(endDate) ? 'Renseigne une date de fin valide.' : undefined,
     })) return;
     onSubmit({
       label: form.label.trim(),
       type: form.type,
       amount,
       frequency: form.frequency,
-      expectedDate: form.expectedDate,
-      endDate: form.frequency === 'one_time' ? undefined : form.endDate || undefined,
+      expectedDate,
+      endDate: form.frequency === 'one_time' ? undefined : endDate || undefined,
       isConfirmed: form.isConfirmed,
       notes: form.notes.trim() || undefined,
     });
@@ -116,23 +116,23 @@ export default function IncomeForm({ initial, onSubmit, onCancel }: Props) {
           type="date"
           required
           name="expectedDate"
-          value={form.expectedDate}
-          onChange={(e) => set('expectedDate', e.target.value)}
+          defaultValue={initial?.expectedDate}
+          onChange={constrainEndDate}
         />
       </FormField>
 
-      {form.frequency !== 'one_time' && (
+      <div hidden={form.frequency === 'one_time'}>
         <FormField label="Fin de la récurrence" hint="Optionnel" error={errors.endDate}>
           <input
             className={cls}
             type="date"
-            min={form.expectedDate || undefined}
+            min={initial?.expectedDate}
             name="endDate"
-            value={form.endDate}
-            onChange={(e) => set('endDate', e.target.value)}
+            defaultValue={initial?.endDate}
+            disabled={form.frequency === 'one_time'}
           />
         </FormField>
-      )}
+      </div>
 
       <div className="flex items-center gap-3 mb-4">
         <input

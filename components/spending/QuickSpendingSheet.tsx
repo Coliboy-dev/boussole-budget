@@ -10,7 +10,7 @@ import { parseQuickEntry } from '@/lib/quick-entry';
 import { labelSuggestions } from '@/lib/label-breakdown';
 import { merchantCategoriesOf, selectableSpendingCategories, spendingCategoryLabels, spendingsOf, withCurrent } from '@/lib/spending';
 import type { Spending, SpendingCategory } from '@/lib/types';
-import FormField, { amountField } from '@/components/forms/FormField';
+import FormField, { amountField, readDateInput } from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Modal from '@/components/ui/Modal';
 import { Icon } from '@/components/ui/icons';
@@ -48,10 +48,11 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
     amount: amountInputValue(initial?.amount ?? prefill?.amount) ?? '',
     category: (initial?.category === 'household' ? '' : initial?.category ?? prefill?.category ?? '') as SpendingCategory | '',
     label: initial?.label ?? prefill?.label ?? '',
-    date: initial?.date ?? prefill?.date ?? today,
   });
   const [expanded, setExpanded] = useState(Boolean(initial && initial.category !== 'household' && !main.includes(initial.category))
     || Boolean(prefill && !main.includes(prefill.category)));
+  const initialDate = initial?.date ?? prefill?.date ?? today;
+  const [dateForBalance, setDateForBalance] = useState(initialDate);
   const [included, setIncluded] = useState<boolean>();
   const [paidPersonal, setPaidPersonal] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -61,12 +62,13 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
   const balanceHint = useId();
   const { errors, validate, clearFieldError, reset } = useFormValidation();
   const paidFromPersonal = !!household && (hasJointAccount === false || paidPersonal);
-  const showIncluded = !initial && !paidFromPersonal && Boolean(balanceDate && isLocalDate(form.date) && form.date <= balanceDate);
-  const balanceIncluded = showIncluded && (included ?? (balanceDate !== undefined && form.date < balanceDate));
+  const canInclude = (date: string) => !initial && !paidFromPersonal && Boolean(balanceDate && isLocalDate(date) && date <= balanceDate);
+  const isIncluded = (date: string) => canInclude(date) && ((date === dateForBalance ? included : undefined)
+    ?? (balanceDate !== undefined && date < balanceDate));
+  const showIncluded = canInclude(dateForBalance);
 
-  function change(field: 'amount' | 'label' | 'category' | 'date', value: string) {
-    if (field === 'date') setIncluded(undefined);
-    else manual.current[field] = true;
+  function change(field: 'amount' | 'label' | 'category', value: string) {
+    manual.current[field] = true;
     setForm({ ...form, [field]: value });
   }
 
@@ -91,15 +93,16 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
     event.preventDefault();
     setSaveError('');
     const amount = parseAmountInput(form.amount);
+    const date = readDateInput(event.currentTarget, 'date');
     const valid = validate(event.currentTarget, {
       amount: isSpendingAmount(amount) ? undefined : 'Saisis un montant d’au moins 0,01 € avec deux décimales au maximum.',
       category: form.category ? undefined : 'Choisis une catégorie.',
-      date: isLocalDate(form.date) && form.date <= today ? undefined : 'Choisis une date égale ou antérieure à aujourd’hui.',
+      date: isLocalDate(date) && date <= today ? undefined : 'Choisis une date égale ou antérieure à aujourd’hui.',
     });
     if (!valid || !form.category || storageBlocked) return;
 
     try {
-      onSave({ amount, category: form.category, date: form.date, label: form.label.trim() || undefined, balanceIncluded,
+      onSave({ amount, category: form.category, date, label: form.label.trim() || undefined, balanceIncluded: isIncluded(date),
         ...(paidFromPersonal && { paidFrom: 'personal' }) });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Impossible d’enregistrer cette dépense.');
@@ -157,7 +160,10 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
         </datalist>
         <FormField label="Date" required error={errors.date}>
           <input name="date" type="date" max={today} className={inputClass} required
-            value={form.date} onChange={(event) => change('date', event.target.value)} />
+            defaultValue={initialDate} onChange={(event) => {
+              setDateForBalance(event.target.value);
+              setIncluded(undefined);
+            }} />
         </FormField>
         {!initial && household && (
           <label className="mb-4 flex min-h-11 items-center gap-2 text-sm font-medium text-slate-800">
@@ -170,7 +176,7 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
           <div className="mb-3">
             <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-gray-800">
               <input type="checkbox" className="size-5 shrink-0 accent-teal-700" aria-describedby={balanceHint}
-                checked={balanceIncluded} onChange={(event) => setIncluded(event.target.checked)} />
+                checked={isIncluded(dateForBalance)} onChange={(event) => setIncluded(event.target.checked)} />
               Déjà comprise dans mon solde
             </label>
             <p id={balanceHint} className="text-xs text-gray-600">Coche si ton solde a été recopié de ta banque après cet achat.</p>
