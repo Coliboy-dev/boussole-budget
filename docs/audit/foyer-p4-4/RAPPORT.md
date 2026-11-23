@@ -102,3 +102,9 @@ initdb -D /tmp/pg/data -U postgres --auth=trust && pg_ctl -D /tmp/pg/data -o "-p
 # Depuis une copie de la branche de la PR #32 (ou MIGRATIONS_DIR=<dossier des migrations>)
 PGHOST=/tmp/pg PGPORT=55432 node --test docs/audit/foyer-p4-4/audit.test.mjs docs/audit/foyer-p4-4/compat.test.mjs
 ```
+
+## Après déploiement (23 novembre 2026)
+
+- Les deux migrations fusionnées dans `main` (`515c2bf`) sont **identiques à l'octet près** à celles auditées (`607a8a9`). Le code client du Foyer n'a pas changé non plus.
+- Sondes anonymes en production : nouvelles colonnes et `list_my_households` présentes et refusées à `anon` ; `household_members.user_id` refusé.
+- `controle-production.sql` : requête en lecture seule à exécuter dans l'éditeur SQL de Supabase. Elle compare le catalogue réel aux valeurs auditées : empreintes des fonctions, droits d'exécution, colonnes lisibles, écritures directes, RLS, politiques, déclencheur, publications. Chaque ligne doit afficher `ok = true` ; validée sur le schéma audité (24/24).
