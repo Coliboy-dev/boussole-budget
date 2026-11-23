@@ -122,7 +122,7 @@ export const householdCopy = {
   copyEraseQuestion: 'Effacer définitivement la copie de ce foyer sur cet appareil ?',
   copyErasePersonalSafe: 'Ton budget Personnel et ses lignes liées au foyer ne sont pas modifiés.',
   copyEraseConfirm: 'Effacer la copie',
-  unreadableItems: 'Un élément du foyer n’a pas pu être lu sur cet appareil. Les autres éléments restent affichés.',
+  unreadableItems: 'Des éléments du foyer sont illisibles sur cet appareil. Les montants affichés peuvent être incomplets.',
   transfers: 'Virements vers le compte commun',
   weekly: 'Chaque semaine',
   monthly: 'Chaque mois',

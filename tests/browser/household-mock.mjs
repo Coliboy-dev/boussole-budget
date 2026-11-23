@@ -139,12 +139,52 @@ export function idb(page, id) {
   }), id);
 }
 
-export async function waitForEntry(page, id, predicate) {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    if (predicate(await idb(page, id))) return;
-    await page.waitForTimeout(150);
-  }
-  assert.fail(`entrée ${id} absente`);
+export async function waitForEntry(page, id, property) {
+  const ready = await page.waitForFunction(({ entry, field }) => new Promise((resolve, reject) => {
+    const open = indexedDB.open('boussole-cloud', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const request = db.transaction('keys').objectStore('keys').get(entry);
+      request.onsuccess = () => {
+        const value = request.result?.[field];
+        db.close();
+        const present = Array.isArray(value) ? value.length > 0 : Boolean(value);
+        resolve(present && (field !== 'confirmed' || request.result.pending.length === 0));
+      };
+      request.onerror = () => { db.close(); reject(request.error); };
+    };
+  }), { entry: id, field: property });
+  await ready.dispose();
+}
+
+export async function holdDirectoryUpdate(page, userId) {
+  await page.evaluate((directoryKey) => {
+    const get = IDBObjectStore.prototype.get;
+    const complete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    let holding = false;
+    const callbacks = [];
+
+    IDBObjectStore.prototype.get = function (key) {
+      const request = get.call(this, key);
+      if (key === directoryKey && (holding || this.transaction.mode === 'readonly')) {
+        holding = true;
+        const transaction = this.transaction;
+        Object.defineProperty(transaction, 'oncomplete', {
+          set(callback) {
+            complete.set.call(transaction, (event) => callbacks.push(() => callback.call(transaction, event)));
+          },
+        });
+      }
+      return request;
+    };
+
+    window.releaseHouseholdDirectory = () => {
+      IDBObjectStore.prototype.get = get;
+      for (const completeRead of callbacks) completeRead();
+    };
+    window.householdDirectoryHeld = () => callbacks.length > 0;
+  }, `household-directory:${userId}`);
 }
 
 /** Déclenche « online » et « visible » puis attend que l'annuaire ait réellement interrogé le serveur. Aucune temporisation. */

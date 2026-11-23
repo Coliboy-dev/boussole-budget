@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import {
-  A, B, H, INVITATION, baseURL, browser, button, fixture, idb, mA, mB, nudge, openHousehold, origin, syncCalls, waitForEntry,
+  A, B, H, INVITATION, baseURL, browser, button, fixture, holdDirectoryUpdate, idb, mA, mB, nudge, openHousehold, origin, syncCalls, waitForEntry,
 } from './household-mock.mjs';
 
 test('5a · inviter : le lien porte le jeton dont le serveur ne reçoit que l’empreinte, puis l’annulation', async (t) => {
@@ -69,7 +69,7 @@ test('5a · quitter : textes de la charte, synchronisation arrêtée, copie chif
   const { page, server } = await fixture(t, A, [[mA, A], [mB, B]]);
   await openHousehold(page);
   await page.getByText('Ce foyer est partagé avec Autre membre.').waitFor();
-  await waitForEntry(page, `household-v1:${A}:${H}`, (value) => Boolean(value?.key));
+  await waitForEntry(page, `household-v1:${A}:${H}`, 'key');
   const cacheBefore = await idb(page, `household-v1:${A}:${H}`);
   assert.equal(cacheBefore.key, 'CryptoKey');
 
@@ -122,7 +122,7 @@ test('5a · accès retiré par l’autre membre : copie gardée, foyer noté com
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   // Selon l'ordre des réponses, la synchronisation signale le retrait ou l'annuaire classe directement le foyer comme ancien.
   await page.getByText('Ce compte n’a plus accès à ce foyer.').or(page.getByText('Le partage de ce foyer a été désactivé.')).first().waitFor();
-  await waitForEntry(page, `household-directory:${B}`, (value) => value?.former?.length === 1);
+  await waitForEntry(page, `household-directory:${B}`, 'former');
   const cache = await idb(page, `household-v1:${B}:${H}`);
   assert.equal(cache.key, 'CryptoKey', 'la copie et sa clé restent sur l’appareil');
   const calls = syncCalls(server);
@@ -133,18 +133,26 @@ test('5a · accès retiré par l’autre membre : copie gardée, foyer noté com
 test('5a · ordre forcé : refus de lecture alors que la liste dit encore « membre » — aucune synchronisation ensuite', async (t) => {
   const { page, server } = await fixture(t, B, [[mA, A], [mB, B]]);
   await openHousehold(page);
-  await waitForEntry(page, `household-v1:${B}:${H}`, (value) => Boolean(value?.key));
-  server.pullRefused = true; // la liste des foyers continue de répondre « membre »
+  await waitForEntry(page, `household-v1:${B}:${H}`, 'key');
+  // Laisser la réponse d’IndexedDB en attente pendant que l’annuaire HTTP dit encore « membre ».
+  // Le composant reste monté après le refus : sa garde doit bloquer les nouvelles tentatives.
+  await holdDirectoryUpdate(page, B);
+  server.pullRefused = true;
 
   const refused = page.waitForResponse((response) => response.url().endsWith('/rpc/pull_records') && response.status() === 403);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await refused;
-  await waitForEntry(page, `household-v1:${B}:${H}`, (value) => value?.revoked === true);
-  const afterRefusal = syncCalls(server);
+  const directoryHeld = await page.waitForFunction(() => window.householdDirectoryHeld());
+  await directoryHeld.dispose();
+  const afterRefusal = server.calls.length;
 
-  // Cinq occasions de resynchroniser, chacune confirmée par une réponse du serveur : aucune lecture ni écriture.
   await nudge(page, 5);
-  assert.equal(syncCalls(server), afterRefusal, 'le refus est définitif pour cet appareil');
+  const laterCalls = server.calls.slice(afterRefusal);
+  assert.equal(laterCalls.filter(({ rpc }) => rpc === 'pull_records').length, 0, 'aucune lecture après le refus');
+  assert.equal(laterCalls.filter(({ rpc }) => rpc === 'upsert_records').length, 0, 'aucune écriture après le refus');
+
+  await page.evaluate(() => window.releaseHouseholdDirectory());
+  await page.getByRole('heading', { name: 'Membres du foyer' }).waitFor({ state: 'detached' });
   const cache = await idb(page, `household-v1:${B}:${H}`);
   assert.equal(cache.revoked, true);
   assert.equal(cache.key, 'CryptoKey', 'la copie et sa clé restent sur l’appareil');

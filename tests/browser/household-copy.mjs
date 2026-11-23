@@ -15,7 +15,7 @@ async function formerHousehold(t) {
   await button(page, 'Modifier le solde bancaire').or(button(page, 'Mettre à jour le solde bancaire')).first().click();
   await page.getByLabel('Solde bancaire actuel').fill('500');
   await button(page, 'OK').click();
-  await waitForEntry(page, `household-v1:${A}:${H}`, (value) => value?.confirmed?.length > 0 && value.pending.length === 0);
+  await waitForEntry(page, `household-v1:${A}:${H}`, 'confirmed');
 
   await page.goto('/foyer');
   await button(page, 'Quitter le foyer').click();

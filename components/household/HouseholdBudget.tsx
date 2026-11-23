@@ -70,7 +70,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
   const spendingUndo = useRef<string | null>(null);
   const automaticMirrors = view?.mirrors?.automatic;
   const movementChanges = view?.movementMirrors;
-  const canWriteMirrors = personalBudgetAccessible && !isBudgetLoading && !storageBlocked;
+  const canWriteMirrors = personalBudgetAccessible && !isBudgetLoading && !storageBlocked && unreadable === 0;
   useEffect(() => {
     if (memberId && automaticMirrors?.length && canWriteMirrors) {
       syncContributionMirrors(userId, householdId, memberId, automaticMirrors, today);
