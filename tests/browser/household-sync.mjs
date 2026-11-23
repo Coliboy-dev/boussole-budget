@@ -58,9 +58,10 @@ async function householdFixture(t) {
   const password = randomBytes(24).toString('hex');
   const { user } = success(await admin.auth.admin.createUser({ email, password, email_confirm: true }));
   const browser = await chromium.launch({ executablePath: process.env.BOUSSOLE_CHROMIUM_PATH ?? '/usr/bin/chromium' });
+  let deleted = false;
   t.after(async () => {
     await browser.close();
-    success(await admin.auth.admin.deleteUser(user.id));
+    if (!deleted) success(await admin.auth.admin.deleteUser(user.id));
   });
 
   async function openDevice(personalBudget, previousHousehold = null) {
@@ -98,7 +99,10 @@ async function householdFixture(t) {
         };
       });
     }, { session, personalBudget, previousHousehold, authKey: AUTH_STORAGE_KEY, ownerKey: ACCOUNT_OWNER_KEY, budgetKey: BUDGET_STORAGE_KEY });
-    return { api, context, page };
+    return { api, context, page, deleteAccount: async () => {
+      success(await api.rpc('delete_my_account'));
+      deleted = true;
+    } };
   }
 
   return openDevice;
@@ -316,4 +320,84 @@ test('Versement du partenaire · accord explicite, mise à jour et clôture de l
     assert.equal(mirror?.endDate, date);
     assert.equal(mirror.isRecurring, false);
   });
+});
+
+test('F-B · avance et transfert avec deux comptes, historique sur un appareil neuf et foyer sans compte commun', { timeout: 120000, skip: !householdEnabled }, async (t) => {
+  const openMarc = await householdFixture(t);
+  const openSam = await householdFixture(t);
+  const marc = await openMarc(privateContents);
+  const sam = await openSam(privateContents);
+  const [{ household_id: h }] = success(await marc.api.rpc('create_household'));
+  const { token, tokenHash } = await createInvitationToken();
+  const invitation = success(await marc.api.rpc('create_invitation', { h, token_hash: tokenHash }));
+  success(await sam.api.rpc('accept_invitation', { invitation, token }));
+
+  async function selectHousehold({ page }) {
+    await page.goto('/foyer');
+    await button(page, 'Ouvrir le foyer').click();
+    await page.waitForURL('**/dashboard');
+    await page.getByRole('heading', { name: 'Aujourd’hui' }).waitFor();
+  }
+  async function personalBudget(page) {
+    const contents = await page.evaluate(key => localStorage.getItem(key), BUDGET_STORAGE_KEY);
+    return deserializeStoredBudget(contents).budget;
+  }
+
+  await selectHousehold(marc);
+  await button(marc.page, 'Modifier le solde bancaire').click();
+  await marc.page.getByLabel('Solde bancaire actuel').fill('500');
+  await button(marc.page, 'OK').click();
+  await balance(marc.page, 500).waitFor();
+  await button(marc.page, 'Ajouter une dépense').click();
+  await marc.page.getByLabel('Saisie rapide').fill('40 Colruyt');
+  await marc.page.getByRole('checkbox', { name: 'Payé avec mon argent personnel' }).check();
+  await button(marc.page, 'Ajouter la dépense').click();
+  await waitFor(async () => assert.equal((await personalBudget(marc.page)).currentBalance, 737));
+  await balance(marc.page, 500).waitFor();
+
+  await marc.page.goto('/foyer/mouvements');
+  await button(marc.page, 'Déclarer un transfert').click();
+  await marc.page.getByLabel('Montant du transfert (€)').fill('50');
+  await button(marc.page, 'Enregistrer').click();
+  await marc.page.getByText(/À confirmer/).waitFor();
+  await waitFor(async () => assert.equal((await personalBudget(marc.page)).currentBalance, 687));
+  assert.equal(await button(marc.page, 'Confirmer la réception').count(), 0);
+
+  await selectHousehold(sam);
+  await sam.page.goto('/foyer/mouvements');
+  await sam.page.getByText(/À confirmer/).waitFor();
+  assert.equal((await personalBudget(sam.page)).currentBalance, 777);
+  await button(sam.page, 'Confirmer la réception').click();
+  await sam.page.getByText(/Confirmé par Toi/).waitFor();
+  await waitFor(async () => {
+    const budget = await personalBudget(sam.page);
+    assert.equal(budget.currentBalance, 827);
+    assert.equal(budget.incomes.filter(({ type }) => type === 'household_transfer').length, 1);
+  });
+  await sam.page.reload();
+  await sam.page.getByText(/Confirmé par Toi/).waitFor();
+  assert.equal((await personalBudget(sam.page)).currentBalance, 827);
+  await sam.page.evaluate(axeSource);
+  const audit = await sam.page.evaluate(() => window.axe.run({ runOnly: {
+    type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'],
+  } }));
+  assert.deepEqual(audit.violations.map(({ id }) => id), []);
+
+  await sam.deleteAccount();
+  const freshMarc = await openMarc(privateContents);
+  await selectHousehold(freshMarc);
+  await freshMarc.page.goto('/foyer/mouvements');
+  await freshMarc.page.getByText(/Confirmé par Ancien membre/).waitFor();
+
+  await freshMarc.page.goto('/foyer');
+  await freshMarc.page.getByRole('checkbox', { name: 'Nous n’avons pas de compte commun' }).click();
+  await freshMarc.page.getByRole('region', { name: 'Mon versement' }).waitFor({ state: 'hidden' });
+  await freshMarc.page.goto('/dashboard');
+  await freshMarc.page.getByText('Ce foyer fonctionne sans compte commun.').waitFor();
+  assert.equal(await freshMarc.page.getByRole('heading', { name: 'Disponible confirmé' }).count(), 0);
+  assert.equal(await freshMarc.page.getByRole('link', { name: 'Échéances' }).count(), 0);
+  await button(freshMarc.page, 'Ajouter une dépense').click();
+  const paidFrom = freshMarc.page.getByRole('checkbox', { name: 'Payé avec mon argent personnel' });
+  assert.equal(await paidFrom.isChecked(), true);
+  assert.equal(await paidFrom.isDisabled(), true);
 });

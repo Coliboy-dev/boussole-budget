@@ -2,6 +2,7 @@ import type { ChildExpense, Debt, Envelope, Expense, Goal, Income, MediationFile
 import { updateBalance, type SettledOccurrence } from './balance-update.ts';
 import { cancelExpenseOccurrence, recordPayment, type AppState, type Payment } from './budget-state.ts';
 import { applyContributionMirrorChanges, type ContributionMirrorChange } from './household-contributions.ts';
+import { applyMovementMirrors, type MovementMirror } from './household-movements.ts';
 import {
   addSpending as insertSpending, deleteEnvelope as removeEnvelope, deleteSpending as removeSpending,
   replaceExpenseWithEnvelope as replaceExpense, updateSpending as editSpending, upsertEnvelope,
@@ -29,6 +30,7 @@ export type AppAction =
   | { type: 'UPDATE_EXPENSE'; payload: { id: string; data: Partial<Expense> } }
   | { type: 'DELETE_EXPENSE'; payload: string }
   | { type: 'SYNC_CONTRIBUTION_MIRRORS'; householdId: string; memberId: string; changes: ContributionMirrorChange[]; today: string }
+  | { type: 'SYNC_MOVEMENT_MIRRORS'; changes: MovementMirror[]; today: string }
   | { type: 'ADD_DEBT'; payload: Omit<Debt, 'id'> }
   | { type: 'UPDATE_DEBT'; payload: { id: string; data: Partial<Debt> } }
   | { type: 'DELETE_DEBT'; payload: string }
@@ -58,6 +60,11 @@ export function reduceBudget(state: RuntimeState, action: AppAction): RuntimeSta
   if (action.type === 'SYNC_CONTRIBUTION_MIRRORS') {
     if (state.storageStatus !== 'ready' && state.storageStatus !== 'fresh') return state;
     const next = applyContributionMirrorChanges(state, action.householdId, action.memberId, action.changes, action.today);
+    return next === state ? state : { ...next, storageStatus: 'ready' };
+  }
+  if (action.type === 'SYNC_MOVEMENT_MIRRORS') {
+    if (state.storageStatus !== 'ready' && state.storageStatus !== 'fresh') return state;
+    const next = applyMovementMirrors(state, action.changes, action.today);
     return next === state ? state : { ...next, storageStatus: 'ready' };
   }
 

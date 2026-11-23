@@ -44,6 +44,8 @@ export function writeBudgetSnapshot(
 
 export interface AppState {
   currentBalance: number;
+  hasJointAccount?: boolean;
+  retiredHouseholdMovements?: Record<string, number>;
   balanceDate?: string;
   userProfile: UserProfile;
   incomes: Income[];

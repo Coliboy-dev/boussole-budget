@@ -36,6 +36,7 @@ export interface MonthAnalysis {
   unrecordedCents: number;
   recordedCount: number;
   transfersCents?: number;
+  receivedTransfersCents?: number;
 }
 
 function paidDates(statuses: Record<string, 'paid' | 'cancelled'> | undefined, month: string): string[] {
@@ -48,7 +49,7 @@ function itemsInMonth(state: AppState, month: string): CategorizedItem[] {
   const spendings = spendingsOf(state);
   const items: CategorizedItem[] = [];
   for (const { date, amount, label, id, category } of spendings) {
-    if (date.slice(0, 7) !== month) continue;
+    if (date.slice(0, 7) !== month || category === 'household') continue;
     items.push({ date, cents: toCents(amount), label: label || spendingCategoryLabels[category], source: 'spending', id, category });
   }
 
@@ -76,7 +77,7 @@ function itemsInMonth(state: AppState, month: string): CategorizedItem[] {
   for (const gap of balanceGapsOf(state)) {
     if (gap.date.slice(0, 7) !== month || gap.amount <= 0) continue;
     const encoded = spendings
-      .filter(({ date, balanceIncluded }) => balanceIncluded && date > gap.fromDate && date <= gap.date)
+      .filter(({ date, balanceIncluded, paidFrom }) => paidFrom !== 'personal' && balanceIncluded && date > gap.fromDate && date <= gap.date)
       .reduce((total, spending) => total + toCents(spending.amount), 0);
     const cents = toCents(gap.amount) - encoded;
     if (cents > 0) {
@@ -100,9 +101,14 @@ export function analyzeMonth(state: AppState, month: string): MonthAnalysis {
   const totals = categoryTotals(items);
   const previous = [1, 2, 3].map((offset) => categoryTotals(itemsInMonth(state, addMonths(start, -offset).slice(0, 7))));
   const sampled = previous.filter((period) => period.size > 0);
+  const mirroredSpendings = spendingsOf(state).filter(({ category, date }) => category === 'household' && date.slice(0, 7) === month);
   const transfersCents = state.expenses.filter(({ category }) => category === 'household')
     .reduce((sum, expense) => paidDates(expense.occurrenceStatuses, month).reduce((subtotal, date) =>
-      subtotal + (expense.occurrenceAmountsCents?.[date] ?? toCents(expense.amount)), sum), 0);
+      subtotal + (expense.occurrenceAmountsCents?.[date] ?? toCents(expense.amount)), sum),
+    mirroredSpendings.reduce((sum, spending) => sum + toCents(spending.amount), 0));
+  const receivedTransfersCents = state.incomes.filter(({ type }) => type === 'household_transfer')
+    .reduce((sum, income) => paidDates(income.occurrenceStatuses, month).reduce((subtotal, date) =>
+      subtotal + (income.occurrenceAmountsCents?.[date] ?? toCents(income.amount)), sum), 0);
 
   return {
     month,
@@ -118,6 +124,7 @@ export function analyzeMonth(state: AppState, month: string): MonthAnalysis {
     unrecordedCents: totals.get('unrecorded') ?? 0,
     recordedCount: items.filter(({ source }) => source === 'spending').length,
     ...(transfersCents > 0 ? { transfersCents } : {}),
+    ...(receivedTransfersCents > 0 ? { receivedTransfersCents } : {}),
   };
 }
 

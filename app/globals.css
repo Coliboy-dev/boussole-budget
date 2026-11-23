@@ -16,6 +16,44 @@
   --warning: #b45309;
   --danger: #b91c1c;
   --accent: #4338ca;
+
+  /*
+   * Élan Signature V3 : couleurs à rôle (design/capiste-signature-v3/tokens.json).
+   * Ajout seul : aucun écran ne les utilise encore. Les composants refondus les adopteront lot par lot.
+   */
+  --cap-background: #f5f3ee;
+  --cap-surface: #ffffff;
+  --cap-surface-soft: #eef7f4;
+  --cap-border: #e4e0d7;
+  --cap-border-strong: #8a949b;
+  --cap-text: #172c37;
+  --cap-text-muted: #4f6270;
+  --cap-primary: #087f78;
+  --cap-primary-strong: #0b5f5d;
+  --cap-primary-text: #076e68;
+  --cap-on-primary: #ffffff;
+  --cap-secondary: #8274d8;
+  --cap-secondary-text: #6758ac;
+  --cap-secondary-soft: #efedfb;
+  --cap-accent: #e6ab51;
+  --cap-warning-text: #8a5a00;
+  --cap-warning-soft: #fdf3e1;
+  --cap-danger-text: #a53d4b;
+  --cap-danger-soft: #fbecee;
+  --cap-success-text: #1e6b4a;
+  --cap-focus: #087f78;
+  /* Graphiques : charges programmées (teal) et dépenses enregistrées (mauve) ne se mélangent jamais. */
+  --cap-chart-scheduled-1: #0b5f5d;
+  --cap-chart-scheduled-2: #087f78;
+  --cap-chart-scheduled-3: #2ba698;
+  --cap-chart-scheduled-4: #7fd3c4;
+  --cap-chart-scheduled-5: #c8ebe3;
+  --cap-chart-recorded-1: #4e3f9e;
+  --cap-chart-recorded-2: #6758ac;
+  --cap-chart-recorded-3: #8274d8;
+  --cap-chart-recorded-4: #afa4ea;
+  --cap-chart-recorded-5: #dad4f7;
+  --cap-chart-envelope: #e6ab51;
 }
 
 @theme inline {
@@ -31,6 +69,27 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-accent: var(--accent);
+  --color-cap-background: var(--cap-background);
+  --color-cap-surface: var(--cap-surface);
+  --color-cap-surface-soft: var(--cap-surface-soft);
+  --color-cap-border: var(--cap-border);
+  --color-cap-border-strong: var(--cap-border-strong);
+  --color-cap-text: var(--cap-text);
+  --color-cap-text-muted: var(--cap-text-muted);
+  --color-cap-primary: var(--cap-primary);
+  --color-cap-primary-strong: var(--cap-primary-strong);
+  --color-cap-primary-text: var(--cap-primary-text);
+  --color-cap-on-primary: var(--cap-on-primary);
+  --color-cap-secondary: var(--cap-secondary);
+  --color-cap-secondary-text: var(--cap-secondary-text);
+  --color-cap-secondary-soft: var(--cap-secondary-soft);
+  --color-cap-accent: var(--cap-accent);
+  --color-cap-warning-text: var(--cap-warning-text);
+  --color-cap-warning-soft: var(--cap-warning-soft);
+  --color-cap-danger-text: var(--cap-danger-text);
+  --color-cap-danger-soft: var(--cap-danger-soft);
+  --color-cap-success-text: var(--cap-success-text);
+  --color-cap-focus: var(--cap-focus);
   --font-sans: var(--font-inter), system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   --font-display: var(--font-jakarta), var(--font-inter), system-ui, sans-serif;
 }

@@ -108,7 +108,8 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
 
   const directory = userId && directoryView?.userId === userId ? directoryView.directory : emptyDirectory;
   const selected = directory.selected;
-  const memberId = directory.households.find(({ id }) => id === selected)?.memberId;
+  const membership = directory.households.find(({ id }) => id === selected);
+  const memberId = membership?.memberId;
   const active = !!(userId && selected && sharedRoutes.has(pathname));
   const inHouseholdShell = !!(userId && (active || pathname === '/foyer'));
 
@@ -148,7 +149,7 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
     }}>
       {active && userId && selected ? (
         <HouseholdBudget key={`${userId}:${selected}`} userId={userId} householdId={selected}
-          memberId={memberId} onExit={() => { void select(null); }}>
+          memberId={memberId} activeMemberIds={membership?.activeMemberIds} onExit={() => { void select(null); }}>
           {pathname === '/conseils' ? (
             <main id="contenu" className="mx-auto max-w-2xl px-4 py-6">
               <p>{householdCopy.advicePersonal}</p>

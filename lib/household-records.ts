@@ -4,7 +4,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const kinds = [
   'settings', 'member', 'income', 'expense', 'debt', 'envelope', 'goal',
-  'spending', 'transfer', 'gap', 'occurrence', 'checkpoint', 'child-expense', 'merchant', 'debt-payment',
+  'spending', 'transfer', 'transfer-response', 'gap', 'occurrence', 'checkpoint', 'child-expense', 'merchant', 'debt-payment',
 ] as const;
 
 export type HouseholdRecordKind = (typeof kinds)[number];
@@ -23,6 +23,19 @@ export interface SequencedHouseholdRecord {
   seq: number;
   record: HouseholdRecord;
   updatedBy?: string | null;
+  authorMemberId?: string | null;
+  editorMemberId?: string | null;
+  exclusive?: boolean;
+}
+
+export function isHouseholdEditByMember(
+  row: SequencedHouseholdRecord, userId: string, memberId: string | undefined, cursor: number,
+): boolean {
+  // Un numéro local au-delà du curseur appartient à la file de cet appareil.
+  if (row.seq > cursor) return true;
+  if (row.editorMemberId !== undefined) return row.editorMemberId === memberId;
+  // Compatibilité avec les lignes déjà présentes dans le trousseau avant la migration.
+  return row.updatedBy === userId;
 }
 
 export function householdOperationId({ kind, id }: RecordIdentity): string {
@@ -51,6 +64,7 @@ export interface EncryptedHouseholdRecord {
   iv: string;
   ciphertext: string;
   deleted: boolean;
+  exclusive?: boolean;
 }
 
 export async function derivedRecordId(householdId: string, key: string): Promise<string> {
@@ -63,6 +77,7 @@ export async function derivedRecordId(householdId: string, key: string): Promise
 }
 
 export function householdRecordId(householdId: string, kind: HouseholdRecordKind, engineId: string): Promise<string> {
+  if (kind === 'transfer-response') return Promise.resolve(engineId);
   return derivedRecordId(householdId, `${kind}|${engineId}`);
 }
 

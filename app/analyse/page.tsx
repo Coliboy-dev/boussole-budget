@@ -108,6 +108,9 @@ export default function AnalysisPage() {
       {!!analysis.transfersCents && (
         <p className="px-1 text-sm text-slate-700">{householdMessages.transfersForHousehold(analysis.transfersCents)}</p>
       )}
+      {!!analysis.receivedTransfersCents && (
+        <p className="px-1 text-sm text-slate-700">{householdMessages.receivedTransfers(analysis.receivedTransfersCents)}</p>
+      )}
 
       {selectedCategory && (
         <DetailSheet title={categoryPresentation(selectedCategory).title} onClose={close}>
