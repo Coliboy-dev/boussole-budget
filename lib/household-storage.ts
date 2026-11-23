@@ -121,3 +121,46 @@ export function updateHouseholdCache(
   return entry<StoredHousehold>(`household-v1:${userId}:${householdId}`, update)
     .then((current) => current!);
 }
+
+/** Copie locale d'un ancien foyer : lue uniquement depuis l'appareil, jamais depuis le serveur. */
+export async function readFormerHouseholdCopy(userId: string, householdId: string): Promise<StoredHousehold | undefined> {
+  const directory = await householdDirectory(userId);
+  if (!directory.former?.some(({ id }) => id === householdId)) return undefined;
+  if (directory.households.some(({ id }) => id === householdId)) return undefined;
+  const copy = await readHouseholdCache(userId, householdId);
+  return copy && copy.userId === userId && copy.householdId === householdId ? copy : undefined;
+}
+
+/**
+ * Effacement volontaire de la copie d'un ancien foyer. Refusé pour un foyer encore actif.
+ * Seules l'entrée de ce foyer et sa ligne dans la liste des anciens foyers sont supprimées.
+ */
+export async function eraseFormerHouseholdCopy(userId: string, householdId: string): Promise<HouseholdDirectory> {
+  const db = await openStore();
+  const directoryKey = `household-directory:${userId}`;
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(store, 'readwrite');
+      const records = transaction.objectStore(store);
+      const request = records.get(directoryKey);
+      let next = emptyDirectory;
+      transaction.oncomplete = () => resolve(next);
+      transaction.onabort = () => reject(transaction.error ?? new Error('Stockage du foyer indisponible.'));
+      request.onsuccess = () => {
+        const directory = (request.result as HouseholdDirectory | undefined) ?? emptyDirectory;
+        const former = directory.former?.filter(({ id }) => id !== householdId);
+        if (directory.households.some(({ id }) => id === householdId) || former?.length === directory.former?.length) {
+          reject(new Error('Seule la copie d’un ancien foyer peut être effacée.'));
+          transaction.abort();
+          return;
+        }
+        // Une réintégration dans un autre onglet ne peut pas intervenir entre le contrôle et la suppression.
+        next = { ...directory, former: former?.length ? former : undefined };
+        records.delete(`household-v1:${userId}:${householdId}`);
+        records.put(next, directoryKey);
+      };
+    });
+  } finally {
+    db.close();
+  }
+}
