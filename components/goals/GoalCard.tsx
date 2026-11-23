@@ -11,6 +11,9 @@ interface GoalCardProps {
   feasibility: GoalFeasibility;
   onEdit?: (goal: Goal) => void;
   onDelete?: (id: string) => void;
+  /** « J'ai mis de côté » : la mise de côté du mois est faite. */
+  onContribute?: (goal: Goal) => void;
+  currentMonth?: string;
 }
 
 const statusConfig: Record<
@@ -26,11 +29,13 @@ const statusConfig: Record<
   to_postpone: { label: 'À reporter', variant: 'neutral', progressColor: 'primary' },
 };
 
-export default function GoalCard({ goal, feasibility, onEdit, onDelete }: GoalCardProps) {
+export default function GoalCard({ goal, feasibility, onEdit, onDelete, onContribute, currentMonth }: GoalCardProps) {
   const status = statusConfig[feasibility.status];
   const percent =
     goal.targetAmount > 0 ? Math.min(100, (goal.savedAmount / goal.targetAmount) * 100) : 0;
   const remaining = goal.targetAmount - goal.savedAmount;
+  const contribution = Math.min(goal.monthlyContribution ?? 0, Math.max(0, remaining));
+  const contributedThisMonth = goal.lastContributionMonth !== undefined && goal.lastContributionMonth === currentMonth;
 
   return (
     <Card>
@@ -71,6 +76,27 @@ export default function GoalCard({ goal, feasibility, onEdit, onDelete }: GoalCa
 
       {goal.targetDate && (
         <p className="text-xs text-gray-600 mt-1">Objectif : {formatShortDate(goal.targetDate)}</p>
+      )}
+
+      <p className="mt-2 text-xs text-gray-600">
+        {goal.onCurrentAccount
+          ? 'Gardée sur ton compte courant : les montants épargnés et la mise de côté du mois sont réservés, hors de ton vrai disponible.'
+          : goal.onCurrentAccount === false
+            ? 'Sur un compte à part : chaque mise de côté est un virement prévu dans tes échéances.'
+            : 'Considérée sur un compte à part : modifie l’objectif si tu la gardes sur ton compte courant.'}
+      </p>
+
+      {onContribute && contribution > 0 && (
+        contributedThisMonth ? (
+          <p role="status" className="mt-2 text-sm font-semibold text-teal-800">
+            Mis de côté ce mois-ci.{!goal.onCurrentAccount && ' Pense à mettre ton solde bancaire à jour après le virement.'}
+          </p>
+        ) : (
+          <button type="button" onClick={() => onContribute(goal)}
+            className="mt-2 inline-flex min-h-11 items-center rounded-xl bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800">
+            J’ai mis de côté {formatCurrency(contribution)}
+          </button>
+        )
       )}
 
       {(onEdit || onDelete) && (

@@ -82,7 +82,7 @@ export default function SimulationPage() {
                     <dd className="text-xs"><time dateTime={result.lowestDate}>{formatDate(result.lowestDate)}</time></dd>
                   </div>
                   <div>
-                    <dt className="text-sm">{forecast.annualProvision > 0 ? 'Marge après réserve et provisions' : 'Marge après réserve'}</dt>
+                    <dt className="text-sm">{forecast.annualProvision > 0 || forecast.goalSavings > 0 ? 'Marge après réserve et provisions' : 'Marge après réserve'}</dt>
                     <dd className="wrap-anywhere text-xl font-bold tabular-nums">{formatCurrency(result.available)}</dd>
                   </div>
                 </dl>

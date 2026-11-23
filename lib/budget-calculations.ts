@@ -1,3 +1,5 @@
+import { availableBreakdown, nextCertainIncome } from './available-breakdown.ts';
+import { goalReserveOnAccount } from './goals.ts';
 import type {
   Income,
   Expense,
@@ -25,11 +27,26 @@ function monthlyIncomeCents(incomes: Income[]): number {
   return incomes.reduce((sum, income) => sum + monthlyCents(income.amount, income.frequency), 0);
 }
 
+function expenseMonthlyCents(expense: Expense): number {
+  return monthlyCents(expense.amount, expense.isRecurring ? expense.frequency : 'one_time');
+}
+
 function monthlyExpenseCents(expenses: Expense[]): number {
-  return expenses.reduce(
-    (sum, expense) => sum + monthlyCents(expense.amount, expense.isRecurring ? expense.frequency : 'one_time'),
-    0,
-  );
+  return expenses.reduce((sum, expense) => sum + expenseMonthlyCents(expense), 0);
+}
+
+/**
+ * Charges programmées ramenées au mois, par catégorie, du plus grand au plus petit.
+ * Même normalisation que le résumé : la somme est égale à totalMonthlyExpenses.
+ */
+export function monthlyChargesByCategory(expenses: Expense[]): { category: Expense['category']; cents: number }[] {
+  const totals = new Map<Expense['category'], number>();
+  for (const expense of expenses) {
+    totals.set(expense.category, (totals.get(expense.category) ?? 0) + expenseMonthlyCents(expense));
+  }
+  return [...totals].filter(([, cents]) => cents > 0)
+    .map(([category, cents]) => ({ category, cents }))
+    .sort((first, second) => second.cents - first.cents || first.category.localeCompare(second.category));
 }
 
 function monthlyDebtCents(debts: Debt[]): number {
@@ -154,6 +171,7 @@ export function calculateBudgetSummary(
     horizon: AVAILABLE_HORIZON,
     envelopes,
     spendings,
+    goals,
   });
   const empty = currentBalance === 0 && incomes.length === 0 && expenses.length === 0
     && debts.length === 0 && childExpenses.length === 0 && envelopes.length === 0 && spendings.length === 0;
@@ -177,6 +195,10 @@ export function calculateBudgetSummary(
       horizon: AVAILABLE_HORIZON,
       dailyBalances: forecast.dailyBalances,
       annualProvision: forecast.annualProvision,
+      goalSavings: forecast.goalSavings,
+      goalThisMonth: fromCents(goalReserveOnAccount(goals, today).thisMonthCents),
+      breakdown: availableBreakdown(currentBalance, forecast, safetyReserve),
+      nextIncome: nextCertainIncome(forecast.events),
       reservedAmount: forecast.reservedAmount,
       optimisticAvailable: empty ? 0 : forecast.optimisticAvailable,
     },

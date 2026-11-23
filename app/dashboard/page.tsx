@@ -14,10 +14,12 @@ import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import BackupStatus from '@/components/dashboard/BackupStatus';
 import BalanceRows from '@/components/dashboard/BalanceRows';
+import SavingsTipCard from '@/components/dashboard/SavingsTipCard';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
-import NewSpendingAction, { quickActionTile } from '@/components/spending/NewSpendingAction';
+import { NEW_SPENDING_EVENT, quickActionTile, UNDO_TOAST_MS } from '@/components/spending/NewSpendingAction';
 import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
+import { reserveExtras } from '@/lib/goals';
 import { getUpcomingReminders, formatCurrency, formatDate, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
@@ -60,9 +62,24 @@ function SavedBudgetDashboard() {
     if (paymentFeedback?.paid) undoButton.current?.focus({ preventScroll: true });
   }, [paymentFeedback]);
 
+  // Comme pour une dépense, la bulle « Paiement enregistré · Annuler » se ferme seule.
+  useEffect(() => {
+    if (!paymentFeedback) return;
+    const timer = setTimeout(() => setPaymentFeedback(undefined), UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [paymentFeedback]);
+
+  // Une seule annonce à la fois en bas d'écran : ouvrir la saisie d'une dépense ferme celle du paiement.
+  useEffect(() => {
+    const clear = () => { setPaymentFeedback(undefined); setPaymentError(''); };
+    window.addEventListener(NEW_SPENDING_EVENT, clear);
+    return () => window.removeEventListener(NEW_SPENDING_EVENT, clear);
+  }, []);
+
   const forecast = summary.availableForecast;
   const reminders = getUpcomingReminders(expenses, debts, [], today, forecast.horizon);
-  const hasAnnualProvision = forecast.annualProvision > 0;
+  // Provisions annuelles ou épargne des objectifs gardée sur le compte : au-delà de la seule réserve.
+  const hasAnnualProvision = forecast.annualProvision > 0 || forecast.goalSavings > 0;
   const partial = hasUndatedPayments(expenses, debts);
   const hasProjection = !summary.emptyBudget || Boolean(balanceDate);
   const attention = household && joint && balanceDate ? householdAttention(state, today) : null;
@@ -105,7 +122,7 @@ function SavedBudgetDashboard() {
       )}
 
       {joint && <SummaryCard summary={summary} hasUndatedPayments={partial}
-        hasRecordedBalance={Boolean(balanceDate)} inHousehold={household}>
+        hasRecordedBalance={Boolean(balanceDate)} balanceDate={balanceDate} inHousehold={household}>
         <BalanceRows />
       </SummaryCard>}
       {!joint && <p className="text-sm text-cap-text">{householdCopy.noJointAccount}</p>}
@@ -119,6 +136,7 @@ function SavedBudgetDashboard() {
           causes={forecast.causes.slice(0, 2).join(', ')}
           reserve={forecast.reservedAmount}
           withProvision={hasAnnualProvision}
+          extras={reserveExtras(forecast.annualProvision, forecast.goalSavings)}
         />
       )}
 
@@ -132,22 +150,23 @@ function SavedBudgetDashboard() {
         </div>
       )}
 
-      <nav aria-label="Actions rapides" className="grid grid-cols-3 gap-2">
-        <NewSpendingAction variant="tile" onOpen={() => { setPaymentFeedback(undefined); setPaymentError(''); }} />
-        {joint && hasProjection && (
+      {/* « Ajouter une dépense » vit au centre de la barre du bas, sur tous les écrans. */}
+      {joint && <nav aria-label="Actions rapides" className="grid grid-cols-2 gap-2">
+        {hasProjection && (
           <Link href="/simulation" className={`${quickActionTile} bg-cap-secondary-soft text-cap-secondary-text hover:bg-cap-border`}>
             <Icon icon={Calculator} className="size-6" />
             Simuler un achat
           </Link>
         )}
         {/* Sans compte commun, le foyer n'a pas d'écran Échéances (même règle que la navigation). */}
-        {joint && (
-          <Link href="/projection" className={`${quickActionTile} bg-cap-warning-soft text-cap-warning-text hover:bg-cap-border`}>
-            <Icon icon={CalendarDays} className="size-6" />
-            Voir les échéances
-          </Link>
-        )}
-      </nav>
+        <Link href="/projection" className={`${quickActionTile} bg-cap-warning-soft text-cap-warning-text hover:bg-cap-border`}>
+          <Icon icon={CalendarDays} className="size-6" />
+          Voir les échéances
+        </Link>
+      </nav>}
+
+      {/* Une seule piste, fondée sur les dépenses encodées ; rien si aucune habitude ne ressort. */}
+      {!household && <SavingsTipCard />}
 
       {household && joint && <HouseholdContributionList />}
       {joint && !summary.emptyBudget && (
@@ -190,8 +209,8 @@ function SavedBudgetDashboard() {
 }
 
 /** Risque de l'accueil : le constat chiffré du moteur et le chemin vers l'écran Échéances, qui détaille les actions. */
-function RiskNotice({ danger, lowest, date, causes, reserve, withProvision }: {
-  danger: boolean; lowest: number; date: string; causes: string; reserve: number; withProvision: boolean;
+function RiskNotice({ danger, lowest, date, causes, reserve, withProvision, extras }: {
+  danger: boolean; lowest: number; date: string; causes: string; reserve: number; withProvision: boolean; extras: string;
 }) {
   return (
     <section aria-labelledby="home-risk-title" className={`rounded-2xl px-3 py-3 text-sm text-cap-text ${danger ? 'bg-cap-danger-soft' : 'bg-cap-warning-soft'}`}>
@@ -202,7 +221,7 @@ function RiskNotice({ danger, lowest, date, causes, reserve, withProvision }: {
       <p className="mt-1 pl-6">
         Ton solde descendrait à <strong className="tabular-nums">{formatCurrency(lowest)}</strong> le{' '}
         <time dateTime={date}>{formatShortDate(date)}</time>{causes && <>, après {causes}</>}
-        {danger ? '.' : <>, sous ta réserve{withProvision && ' et tes provisions'} ({formatCurrency(reserve)}). Évite les dépenses imprévues.</>}
+        {danger ? '.' : <>, sous ta réserve{extras} ({formatCurrency(reserve)}). Évite les dépenses imprévues.</>}
       </p>
       <p className="mt-2 pl-6">
         <Link href="/projection" className="font-semibold text-cap-primary-text underline">Voir le détail et quoi vérifier</Link>

@@ -7,7 +7,8 @@ import { addDays, isLocalDate } from '@/lib/local-date';
 import { suggestCategory } from '@/lib/merchants';
 import { parseAmountInput } from '@/lib/money';
 import { parseQuickEntry } from '@/lib/quick-entry';
-import { merchantCategoriesOf, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
+import { labelSuggestions } from '@/lib/label-breakdown';
+import { merchantCategoriesOf, selectableSpendingCategories, spendingCategoryLabels, spendingsOf, withCurrent } from '@/lib/spending';
 import type { Spending, SpendingCategory } from '@/lib/types';
 import FormField from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
@@ -17,17 +18,18 @@ import { spendingCategoryIcons } from './category-icons';
 import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
 import { householdCopy } from '@/lib/household-copy';
 
-const categories = Object.keys(spendingCategoryLabels) as SpendingCategory[];
 const inputClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
 type Fields = Omit<Spending, 'id' | 'balanceRevision' | 'debited'>;
 
 interface Props {
   initial?: Spending;
+  /** Valeurs proposées pour une NOUVELLE dépense (ex. un frais d'enfant déjà encodé) ; tout reste modifiable. */
+  prefill?: { amount: number; category: SpendingCategory; label?: string; date: string };
   onSave: (fields: Fields) => void;
   onClose: () => void;
 }
 
-export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) {
+export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }: Props) {
   const state = useApp();
   const { today, balanceDate, storageBlocked, hasJointAccount } = state;
   const household = useHouseholdMovements();
@@ -36,21 +38,24 @@ export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) 
   for (const { date, category } of spendingsOf(state)) {
     if (category !== 'household' && date >= from && date <= today) counts.set(category, (counts.get(category) ?? 0) + 1);
   }
+  // Catégorie d'une dépense modifiée toujours proposée, même si elle n'est pas (encore) au choix.
+  const categories = withCurrent(selectableSpendingCategories, initial?.category === 'household' ? undefined : initial?.category);
   const ranked = [...categories].sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
   const main = ranked.slice(0, 6);
   const more = ranked.slice(6);
   const [form, setForm] = useState({
     quickEntry: '',
-    amount: initial ? String(initial.amount) : '',
-    category: (initial?.category === 'household' ? '' : initial?.category ?? '') as SpendingCategory | '',
-    label: initial?.label ?? '',
-    date: initial?.date ?? today,
+    amount: initial ? String(initial.amount) : prefill ? String(prefill.amount) : '',
+    category: (initial?.category === 'household' ? '' : initial?.category ?? prefill?.category ?? '') as SpendingCategory | '',
+    label: initial?.label ?? prefill?.label ?? '',
+    date: initial?.date ?? prefill?.date ?? today,
   });
-  const [expanded, setExpanded] = useState(Boolean(initial && initial.category !== 'household' && !main.includes(initial.category)));
+  const [expanded, setExpanded] = useState(Boolean(initial && initial.category !== 'household' && !main.includes(initial.category))
+    || Boolean(prefill && !main.includes(prefill.category)));
   const [included, setIncluded] = useState<boolean>();
   const [paidPersonal, setPaidPersonal] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const manual = useRef({ amount: false, category: false, label: false });
+  const manual = useRef({ amount: !!prefill, category: !!prefill, label: !!prefill?.label });
   const amountRef = useRef<HTMLInputElement>(null);
   const groupId = useId();
   const balanceHint = useId();
@@ -143,8 +148,13 @@ export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) 
           {errors.category && <p id={`${groupId}-error`} role="alert" className="text-xs text-red-700">{errors.category}</p>}
         </div>
         <FormField label="Commerce ou note">
-          <input name="label" className={inputClass} value={form.label} onChange={(event) => change('label', event.target.value)} />
+          {/* Reprendre le même libellé (« Café ») permet de voir ce qu'il coûte sur le mois, dans Où part mon argent. */}
+          <input name="label" className={inputClass} value={form.label} list={`${groupId}-libelles`} autoComplete="off"
+            onChange={(event) => change('label', event.target.value)} />
         </FormField>
+        <datalist id={`${groupId}-libelles`}>
+          {labelSuggestions(state, form.category, today).map((label) => <option key={label} value={label} />)}
+        </datalist>
         <FormField label="Date" required error={errors.date}>
           <input name="date" type="date" max={today} className={inputClass} required
             value={form.date} onChange={(event) => change('date', event.target.value)} />

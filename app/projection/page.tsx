@@ -1,5 +1,6 @@
 'use client';
 
+import { reserveExtras } from '@/lib/goals';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Info, ShieldCheck, TriangleAlert, CircleAlert } from 'lucide-react';
@@ -73,7 +74,7 @@ export default function ProjectionPage() {
     debts,
     childExpenses,
     userProfile.safetyReserve,
-    { today, horizon, envelopes: envelopesOf(state), spendings: spendingsOf(state) },
+    { today, horizon, envelopes: envelopesOf(state), spendings: spendingsOf(state), goals: state.goals },
   );
 
   const { events, milestones } = projection;
@@ -100,7 +101,7 @@ export default function ProjectionPage() {
 
   const availableThrough = addDays(today, summary.availableForecast.horizon);
   const partial = hasUndatedPayments(expenses, debts);
-  const reserveLabel = projection.annualProvision > 0 ? 'ta réserve et tes provisions' : 'ta réserve';
+  const reserveLabel = `ta réserve${reserveExtras(projection.annualProvision, projection.goalSavings)}`;
   const missingForReserve = fromCents(toCents(projection.reservedAmount) - toCents(projection.lowestBalance));
   const causes = projection.lowestCauses.slice(0, 3).join(', ');
   const optimisticHelps = projection.optimisticLowestBalance > projection.lowestBalance;
@@ -198,7 +199,7 @@ export default function ProjectionPage() {
               lowestDate={projection.lowestDate}
               lowestBalance={projection.lowestBalance}
               reserve={projection.reservedAmount}
-              includesAnnualProvision={projection.annualProvision > 0}
+              includesAnnualProvision={projection.annualProvision > 0 || projection.goalSavings > 0}
             />
           </div>
 

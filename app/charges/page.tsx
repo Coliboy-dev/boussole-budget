@@ -8,21 +8,7 @@ import ExpenseList from '@/components/budget/ExpenseList';
 import Card from '@/components/ui/Card';
 import { calculateTotalMonthlyExpenses, calculateTotalMonthlyIncome, formatCurrency } from '@/lib/budget-calculations';
 import type { Expense, ExpenseCategory } from '@/lib/types';
-import { householdCopy } from '@/lib/household-copy';
-
-const categoryNames: Record<ExpenseCategory, string> = {
-  rent: 'Logement',
-  energy: 'Énergie',
-  phone: 'Téléphone',
-  insurance: 'Assurance',
-  groceries: 'Courses',
-  transport: 'Transport',
-  health: 'Santé',
-  school: 'Scolarité',
-  subscriptions: 'Abonnements',
-  other: 'Autre',
-  household: householdCopy.transfers,
-};
+import { expenseCategoryLabels } from '@/components/ui/icons';
 
 export default function ChargesPage() {
   const { expenses, incomes, summary, addExpense, updateExpense, deleteExpense } = useApp();
@@ -33,9 +19,9 @@ export default function ChargesPage() {
   const totalIncome = calculateTotalMonthlyIncome(incomes);
   const ratio = totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0;
 
-  const topCategory = Object.keys(categoryNames)
+  const topCategory = Object.keys(expenseCategoryLabels)
     .map((category) => ({
-      name: categoryNames[category as ExpenseCategory],
+      name: expenseCategoryLabels[category as ExpenseCategory],
       amount: calculateTotalMonthlyExpenses(expenses.filter((expense) => expense.category === category)),
     }))
     .filter(({ amount }) => amount > 0)

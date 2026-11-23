@@ -92,6 +92,11 @@ test('C1 — le budget se crée avant de choisir la sauvegarde en ligne', async 
   await button(page, 'Calculer sans ajouter de facture').click();
 
   await heading(page, 'Ton premier budget').waitFor();
+  // Le moment « ah » : la banque montre le solde, Capiste ce qu'on peut vraiment dépenser, calcul ouvert d'emblée.
+  const insight = (await page.getByRole('region', { name: /Ta banque te montre/ }).innerText()).replace(/[\u202f\u00a0]/g, ' ');
+  assert.match(insight, /Ta banque te montre 1 200,00 €\. Tu peux vraiment en dépenser 1 \d{3},\d{2} €\./);
+  assert.match(insight, /Capiste garde aussi \d+,\d{2} € de côté : ta réserve de sécurité, pour les imprévus\./);
+  assert.equal(await page.getByText('Ton solde aujourd’hui').isVisible(), true, 'calcul ouvert sur le premier écran');
   const budget = await stored(page, budgetKey);
   assert.equal(deserializeBudget(budget).currentBalance, 1200);
   assert.equal(await stored(page, authKey), null);

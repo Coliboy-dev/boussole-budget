@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { ArrowDownLeft, Baby, CalendarDays, CircleCheck, Landmark, TriangleAlert, Wallet, type LucideIcon } from 'lucide-react';
+import { ArrowDownLeft, Baby, CalendarDays, CircleCheck, Landmark, PiggyBank, TriangleAlert, Wallet, type LucideIcon } from 'lucide-react';
 import { formatCurrency, formatDate, formatShortDate } from '@/lib/budget-calculations';
 import type { ProjectionEvent } from '@/lib/projection';
 import { Icon } from '@/components/ui/icons';
@@ -10,6 +10,7 @@ const eventKinds: Record<ProjectionEvent['type'], { label: string; icon: LucideI
   child: { label: 'Remboursement enfant', icon: Baby, tile: 'bg-cap-surface-soft text-cap-primary-text' },
   debt: { label: 'Mensualité', icon: Landmark, tile: 'bg-cap-secondary-soft text-cap-secondary-text' },
   envelope: { label: 'Enveloppe', icon: Wallet, tile: 'bg-cap-warning-soft text-cap-warning-text' },
+  goal: { label: 'Objectif', icon: PiggyBank, tile: 'bg-cap-surface-soft text-cap-primary-text' },
 };
 
 /** Montant signé comme l’ancien écran : « +200,00 € » pour une entrée, « -650,00 € » pour une sortie. */

@@ -5,11 +5,19 @@ import type { Expense, ExpenseCategory, Frequency } from '@/lib/types';
 import { formatCurrency, toMonthlyAmount } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { isLocalDate } from '@/lib/local-date';
+import { withCurrent } from '@/lib/spending';
+import { expenseCategoryLabels, selectableExpenseCategories } from '@/components/ui/icons';
 import FormField from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
   'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 focus:border-teal-400 bg-white';
+
+const formLabels: Partial<Record<ExpenseCategory, string>> = {
+  phone: 'Téléphone / Internet',
+  groceries: 'Courses alimentaires',
+  health: 'Santé / Mutuelle',
+};
 
 interface Props {
   initial?: Expense;
@@ -63,6 +71,11 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
 
   return (
     <form onSubmit={handleSubmit} onChange={clearFieldError} noValidate>
+      <p className="mb-4 text-sm text-gray-700">
+        Une charge est une sortie prévue, avec une date : loyer, énergie, assurance, paiement unique annoncé.
+        Un achat du quotidien est une dépense (bouton « Dépense » en bas de l’écran). Un versement sur une dette déjà suivie
+        se fait avec « Paiement ponctuel » dans la fiche de la dette.
+      </p>
       <FormField label="Intitulé" required error={errors.label}>
         <input
           className={cls}
@@ -80,16 +93,10 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
           value={form.category}
           onChange={(e) => set('category', e.target.value as ExpenseCategory)}
         >
-          <option value="rent">Logement</option>
-          <option value="energy">Énergie</option>
-          <option value="phone">Téléphone / Internet</option>
-          <option value="insurance">Assurance</option>
-          <option value="groceries">Courses alimentaires</option>
-          <option value="transport">Transport</option>
-          <option value="health">Santé / Mutuelle</option>
-          <option value="school">Scolarité</option>
-          <option value="subscriptions">Abonnements</option>
-          <option value="other">Autre</option>
+          {/* Catégorie existante toujours gardée (Courses d'avant, ou catégorie encodée sur un autre appareil). */}
+          {withCurrent(selectableExpenseCategories, initial?.category).map((category) => (
+            <option key={category} value={category}>{formLabels[category] ?? expenseCategoryLabels[category]}</option>
+          ))}
         </select>
       </FormField>
 
