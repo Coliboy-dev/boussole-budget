@@ -17,7 +17,7 @@ export default function PaymentBalanceQuestion({ label, amount, balanceDate, onA
   onClose: () => void;
 }) {
   return (
-    <Modal title="Déjà débité ?" onClose={onClose}>
+    <Modal title="Déjà passé sur ton compte ?" onClose={onClose}>
       <p className="text-sm text-gray-800">
         Ton solde du <time dateTime={balanceDate}>{formatShortDate(balanceDate)}</time> comprend-il déjà {subject} :{' '}
         <strong>{label}</strong>{amount !== undefined && <>, <span className="tabular-nums">{formatCurrency(Math.abs(amount))}</span></>} ?

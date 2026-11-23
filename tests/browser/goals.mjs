@@ -59,7 +59,7 @@ test('« J’ai mis de côté » vers un compte à part : « Non, déduis-le » 
   await page.goto('/objectifs');
   await page.getByRole('button', { name: 'J’ai mis de côté 50,00 €' }).click();
   // Solde recopié ce mois-ci : le virement y figure peut-être déjà.
-  const question = page.getByRole('dialog', { name: 'Déjà débité ?' });
+  const question = page.getByRole('dialog', { name: 'Déjà passé sur ton compte ?' });
   assert.ok(clean(await question.innerText()).includes(`comprend-il déjà ce virement : Mise de côté : Voyage, ${euro(50)}`));
   await question.getByRole('button', { name: 'Non, déduis-le' }).click();
   await page.getByText('Mis de côté ce mois-ci. Ton solde tient compte du virement.').waitFor();
@@ -77,7 +77,7 @@ test('« J’ai mis de côté » vers un compte à part : « Non, déduis-le » 
 test('« J’ai mis de côté » : « Oui, déjà débité » garde le solde recopié tel quel', async (t) => {
   const page = await open(t, base, '/objectifs');
   await page.getByRole('button', { name: 'J’ai mis de côté 50,00 €' }).click();
-  await page.getByRole('dialog', { name: 'Déjà débité ?' }).getByRole('button', { name: 'Oui, déjà débité' }).click();
+  await page.getByRole('dialog', { name: 'Déjà passé sur ton compte ?' }).getByRole('button', { name: 'Oui, déjà débité' }).click();
   await page.getByText('Mis de côté ce mois-ci.').waitFor();
   const stateAfter = await stored(page);
   assert.deepEqual([stateAfter.goals[0].savedAmount, stateAfter.currentBalance], [15000, base.currentBalance * 100]);

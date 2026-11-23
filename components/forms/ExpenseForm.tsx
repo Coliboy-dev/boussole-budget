@@ -4,11 +4,11 @@ import { useState } from 'react';
 import type { Expense, ExpenseCategory, Frequency } from '@/lib/types';
 import { formatCurrency, toMonthlyAmount } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
-import { amountInputValue, parseAmountInput } from '@/lib/money';
+import { amountInputValue, parseAmountInput, toCents } from '@/lib/money';
 import { isLocalDate } from '@/lib/local-date';
 import { withCurrent } from '@/lib/spending';
 import { expenseCategoryLabels, selectableExpenseCategories } from '@/components/ui/icons';
-import FormField, { amountField } from './FormField';
+import FormField, { amountField, constrainEndDate, readDateInput } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -33,8 +33,6 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
     category: (initial?.category ?? 'other') as ExpenseCategory,
     amount: amountInputValue(initial?.amount) ?? '',
     frequency: (initial && !initial.isRecurring ? 'one_time' : initial?.frequency ?? 'monthly') as Frequency,
-    dueDate: initial?.dueDate ?? '',
-    endDate: initial?.endDate ?? '',
     isPaid: initial?.isPaid ?? false,
     notes: initial?.notes ?? '',
   });
@@ -47,25 +45,29 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const dueDate = readDateInput(e.currentTarget, 'dueDate');
+    const endDate = readDateInput(e.currentTarget, 'endDate');
     const isRecurring = form.frequency !== 'one_time';
     if (!validate(e.currentTarget, {
       label: form.label.trim() ? undefined : 'Renseigne l’intitulé de la charge.',
       amount: isNonNegativeBudgetAmount(amount) && amount > 0 ? undefined : 'Saisis un montant valide supérieur à zéro.',
-      dueDate: isLocalDate(form.dueDate) ? undefined : 'Renseigne une date d’échéance valide.',
-      endDate: form.endDate && !isLocalDate(form.endDate) ? 'Renseigne une date de fin valide.' : undefined,
+      dueDate: isLocalDate(dueDate) ? undefined : 'Renseigne une date d’échéance valide.',
+      endDate: endDate && !isLocalDate(endDate) ? 'Renseigne une date de fin valide.' : undefined,
     })) return;
+    const alreadyPaid = form.isPaid && !initial?.dueDate;
     onSubmit({
       label: form.label.trim(),
       category: form.category,
       amount,
       frequency: form.frequency,
-      dueDate: form.dueDate,
-      endDate: isRecurring ? form.endDate || undefined : undefined,
+      dueDate,
+      endDate: isRecurring ? endDate || undefined : undefined,
       isPaid: false,
       isRecurring,
-      occurrenceStatuses: form.isPaid && !initial?.dueDate
-        ? { ...initial?.occurrenceStatuses, [form.dueDate]: 'paid' }
-        : initial?.occurrenceStatuses,
+      occurrenceStatuses: alreadyPaid ? { ...initial?.occurrenceStatuses, [dueDate]: 'paid' } : initial?.occurrenceStatuses,
+      occurrenceAmountsCents: alreadyPaid
+        ? { ...initial?.occurrenceAmountsCents, [dueDate]: toCents(amount) }
+        : initial?.occurrenceAmountsCents,
       notes: form.notes.trim() || undefined,
     });
   }
@@ -139,23 +141,23 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
           type="date"
           required
           name="dueDate"
-          value={form.dueDate}
-          onChange={(e) => set('dueDate', e.target.value)}
+          defaultValue={initial?.dueDate}
+          onChange={constrainEndDate}
         />
       </FormField>
 
-      {form.frequency !== 'one_time' && (
+      <div hidden={form.frequency === 'one_time'}>
         <FormField label="Fin de la récurrence" hint="Optionnel" error={errors.endDate}>
           <input
             className={cls}
             type="date"
-            min={form.dueDate || undefined}
+            min={initial?.dueDate}
             name="endDate"
-            value={form.endDate}
-            onChange={(e) => set('endDate', e.target.value)}
+            defaultValue={initial?.endDate}
+            disabled={form.frequency === 'one_time'}
           />
         </FormField>
-      )}
+      </div>
 
       {!initial?.dueDate && (
         <div className="flex items-center gap-3 mb-4">

@@ -5,7 +5,7 @@ import type { ChildExpense, ChildExpenseCategory, ChildExpenseStatus } from '@/l
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { amountInputValue, parseAmountInput, parseOptionalAmount } from '@/lib/money';
 import { isLocalDate, todayInBrussels } from '@/lib/local-date';
-import FormField, { amountField } from './FormField';
+import FormField, { amountField, readDateInput } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -27,8 +27,6 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
     paidByUser: amountInputValue(initial?.paidByUser) ?? '',
     shareAmount: amountInputValue(initial?.shareAmount) ?? '0',
     status: (initial?.status ?? 'pending') as ChildExpenseStatus,
-    date: initial?.date ?? todayInBrussels(),
-    reimbursementDate: initial?.reimbursementDate ?? '',
     receiptSent: initial?.receiptSent ?? false,
     notes: initial?.notes ?? '',
   });
@@ -36,8 +34,12 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const showReimbursementDate = form.status !== 'reimbursed' && parseAmountInput(form.shareAmount) > 0;
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const date = readDateInput(e.currentTarget, 'date');
+    const reimbursementDate = readDateInput(e.currentTarget, 'reimbursementDate');
     const totalAmount = parseAmountInput(form.totalAmount);
     const paidByUser = parseAmountInput(form.paidByUser);
     const shareAmount = parseOptionalAmount(form.shareAmount, 0);
@@ -46,8 +48,8 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
       totalAmount: isNonNegativeBudgetAmount(totalAmount) ? undefined : 'Saisis un montant total valide et positif ou nul.',
       paidByUser: isNonNegativeBudgetAmount(paidByUser) ? undefined : 'Saisis un montant payé valide et positif ou nul.',
       shareAmount: isNonNegativeBudgetAmount(shareAmount) ? undefined : 'Saisis une part à rembourser valide et positive ou nulle.',
-      date: isLocalDate(form.date) ? undefined : 'Renseigne une date de paiement valide.',
-      reimbursementDate: form.reimbursementDate && !isLocalDate(form.reimbursementDate)
+      date: isLocalDate(date) ? undefined : 'Renseigne une date de paiement valide.',
+      reimbursementDate: reimbursementDate && !isLocalDate(reimbursementDate)
         ? 'Renseigne une date de remboursement valide.' : undefined,
     })) return;
     onSubmit({
@@ -58,8 +60,8 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
       paidByUser,
       shareAmount,
       status: form.status,
-      date: form.date,
-      reimbursementDate: form.status === 'reimbursed' ? undefined : form.reimbursementDate || undefined,
+      date,
+      reimbursementDate: form.status === 'reimbursed' ? undefined : reimbursementDate || undefined,
       receiptSent: form.receiptSent,
       notes: form.notes.trim() || undefined,
     });
@@ -144,8 +146,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
             className={cls}
             type="date"
             name="date"
-            value={form.date}
-            onChange={(e) => set('date', e.target.value)}
+            defaultValue={initial?.date ?? todayInBrussels()}
             required
           />
         </FormField>
@@ -164,17 +165,17 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
         </select>
       </FormField>
 
-      {form.status !== 'reimbursed' && parseAmountInput(form.shareAmount) > 0 && (
+      <div hidden={!showReimbursementDate}>
         <FormField label="Remboursement attendu le" hint="Optionnel, affiché comme revenu incertain" error={errors.reimbursementDate}>
           <input
             className={cls}
             type="date"
             name="reimbursementDate"
-            value={form.reimbursementDate}
-            onChange={(e) => set('reimbursementDate', e.target.value)}
+            defaultValue={initial?.reimbursementDate}
+            disabled={!showReimbursementDate}
           />
         </FormField>
-      )}
+      </div>
 
       <div className="flex items-center gap-3 mb-4">
         <input

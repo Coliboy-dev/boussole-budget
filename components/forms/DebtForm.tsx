@@ -5,7 +5,7 @@ import type { Debt, DebtStatus, DebtType } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { amountInputValue, parseAmountInput, parseOptionalAmount } from '@/lib/money';
 import { isLocalDate } from '@/lib/local-date';
-import FormField, { amountField } from './FormField';
+import FormField, { amountField, readDateInput } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -26,7 +26,6 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
     remainingAmount: amountInputValue(initial?.remainingAmount) ?? '',
     monthlyPayment: amountInputValue(initial?.monthlyPayment) ?? '',
     status: (initial?.status ?? 'to_pay') as DebtStatus,
-    nextDueDate: initial?.nextDueDate ?? '',
     isMediationIncluded: initial?.isMediationIncluded ?? false,
     notes: initial?.notes ?? '',
   });
@@ -36,6 +35,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const nextDueDate = readDateInput(e.currentTarget, 'nextDueDate');
     const initialAmount = parseAmountInput(form.initialAmount);
     const remainingAmount = parseAmountInput(form.remainingAmount);
     const monthlyPayment = parseOptionalAmount(form.monthlyPayment, 0);
@@ -44,7 +44,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
       initialAmount: isNonNegativeBudgetAmount(initialAmount) ? undefined : 'Saisis un montant initial valide et positif ou nul.',
       remainingAmount: isNonNegativeBudgetAmount(remainingAmount) ? undefined : 'Saisis un montant restant valide et positif ou nul.',
       monthlyPayment: isNonNegativeBudgetAmount(monthlyPayment) ? undefined : 'Saisis une mensualité valide et positive ou nulle.',
-      nextDueDate: (form.nextDueDate || monthlyPayment > 0) && !isLocalDate(form.nextDueDate)
+      nextDueDate: (nextDueDate || monthlyPayment > 0) && !isLocalDate(nextDueDate)
         ? 'Renseigne une date d’échéance valide.' : undefined,
     })) return;
     onSubmit({
@@ -54,7 +54,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
       remainingAmount,
       monthlyPayment,
       status: form.status,
-      nextDueDate: form.nextDueDate || undefined,
+      nextDueDate: nextDueDate || undefined,
       isMediationIncluded: form.isMediationIncluded,
       notes: form.notes.trim() || undefined,
     });
@@ -147,8 +147,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
             type="date"
             required={parseAmountInput(form.monthlyPayment) > 0}
             name="nextDueDate"
-            value={form.nextDueDate}
-            onChange={(e) => set('nextDueDate', e.target.value)}
+            defaultValue={initial?.nextDueDate}
           />
         </FormField>
       </div>

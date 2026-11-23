@@ -32,7 +32,7 @@ import {
 } from '@/lib/budget-state';
 import { todayInBrussels } from '@/lib/local-date';
 import { createFirstBudget, type FirstBudgetInput } from '@/lib/onboarding';
-import type { SettledOccurrence } from '@/lib/balance-update';
+import { updateBalance, type SettledOccurrence } from '@/lib/balance-update';
 import { canAccessBudget, useBudgetAccess } from '@/lib/budget-access';
 import { readBudgetOwner, readStoredSessionUserId } from '@/lib/account-guard';
 import { deleteSpending as removeSpending, envelopesOf, spendingsOf } from '@/lib/spending';
@@ -106,7 +106,7 @@ export interface AppContextType extends AppState {
   saveProfileSettings: (profile: Pick<UserProfile, 'firstName' | 'safetyReserve'>) => void;
   clearBudget: () => void;
   /** Solde affiché par la banque ; `settled` liste les échéances qu’il contient déjà. */
-  setBalance: (amount: number, settled?: SettledOccurrence[]) => void;
+  setBalance: (amount: number, settled?: SettledOccurrence[]) => void | Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => void;
   addIncome: (income: Omit<Income, 'id'>) => void;
   updateIncome: (id: string, data: Partial<Income>) => void;
@@ -149,7 +149,7 @@ type BudgetCommands = Pick<AppContextType,
   'setBalance' | 'updateProfile' | 'addIncome' | 'updateIncome' | 'deleteIncome' | 'addExpense' | 'updateExpense' | 'deleteExpense' | 'addDebt' | 'updateDebt' | 'deleteDebt' | 'addChildExpense' | 'updateChildExpense' | 'deleteChildExpense' | 'addGoal' | 'updateGoal' | 'contributeToGoal' | 'deleteGoal' | 'updateMediation' | 'recordPayment' | 'addSpending' | 'updateSpending' | 'deleteSpending' | 'saveEnvelope' | 'deleteEnvelope' | 'replaceExpenseWithEnvelope' | 'cancelExpenseOccurrence'
 >;
 
-export function budgetCommands(dispatch: (action: AppAction) => void, today: string): BudgetCommands {
+export function budgetCommands(dispatch: (action: AppAction) => void | Promise<void>, today: string): BudgetCommands {
   return {
     setBalance: (amount, settled) => dispatch({ type: 'SET_BALANCE', payload: { amount, today, settled } }),
     updateProfile: (data) => dispatch({ type: 'UPDATE_PROFILE', payload: data }),
@@ -307,6 +307,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return restored;
   }
 
+  function saveBalance(amount: number, settled?: SettledOccurrence[]): void {
+    if (!canAccessBudget()) throw new Error('Ce budget est temporairement protégé.');
+    if (!isCurrentBudget()) {
+      throw new Error('Le budget a changé dans un autre onglet. Recharge-le pour reprendre la modification du solde.');
+    }
+    if ((storageStatus !== 'ready' && storageStatus !== 'fresh') || state !== persistence.current?.saved) {
+      throw new Error('Attends que le budget soit enregistré avant de mettre à jour le solde.');
+    }
+    saveBudget(updateBalance(budget, { amount, today, settled }));
+  }
+
   function recordBackupExport(date: string): void {
     if (storageStatus === 'fresh') return;
     if (storageStatus !== 'ready' || state !== persistence.current?.saved) {
@@ -424,6 +435,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     syncMovementMirrors,
     // eslint-disable-next-line react-hooks/refs -- Cette fonction construit uniquement les gestionnaires d’événements.
     ...budgetCommands(dispatch, today),
+    setBalance: saveBalance,
     recordScheduledPayment,
     recordUnscheduledDebtPayment: saveUnscheduledDebtPayment,
     undoScheduledPayment,

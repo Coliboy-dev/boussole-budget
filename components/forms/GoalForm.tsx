@@ -5,7 +5,7 @@ import type { Goal } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { amountInputValue, parseAmountInput, parseOptionalAmount } from '@/lib/money';
 import { isLocalDate } from '@/lib/local-date';
-import FormField, { amountField } from './FormField';
+import FormField, { amountField, readDateInput } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -23,7 +23,6 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
     label: initial?.label ?? '',
     targetAmount: amountInputValue(initial?.targetAmount) ?? '',
     savedAmount: amountInputValue(initial?.savedAmount) ?? '0',
-    targetDate: initial?.targetDate ?? '',
     monthlyContribution: amountInputValue(initial?.monthlyContribution) ?? '',
     // Objectif existant sans réponse : épargne considérée à part, comme avant.
     place: (initial ? (initial.onCurrentAccount ? 'current' : 'separate') : '') as '' | 'current' | 'separate',
@@ -35,6 +34,7 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const targetDate = readDateInput(e.currentTarget, 'targetDate');
     const targetAmount = parseAmountInput(form.targetAmount);
     const savedAmount = parseOptionalAmount(form.savedAmount, 0);
     const monthlyContribution = form.monthlyContribution.trim() === '' ? undefined : parseAmountInput(form.monthlyContribution);
@@ -43,14 +43,14 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
       targetAmount: isNonNegativeBudgetAmount(targetAmount) && targetAmount > 0 ? undefined : 'Saisis un montant cible valide supérieur à zéro.',
       savedAmount: isNonNegativeBudgetAmount(savedAmount) ? undefined : 'Saisis un montant épargné valide et positif ou nul.',
       monthlyContribution: isNonNegativeBudgetAmount(monthlyContribution ?? 0) ? undefined : 'Saisis une contribution valide et positive ou nulle.',
-      targetDate: form.targetDate && !isLocalDate(form.targetDate) ? 'Renseigne une date cible valide.' : undefined,
+      targetDate: targetDate && !isLocalDate(targetDate) ? 'Renseigne une date cible valide.' : undefined,
       place: form.place ? undefined : 'Indique où tu gardes cet argent.',
     })) return;
     onSubmit({
       label: form.label.trim(),
       targetAmount,
       savedAmount,
-      targetDate: form.targetDate || undefined,
+      targetDate: targetDate || undefined,
       monthlyContribution,
       onCurrentAccount: form.place === 'current',
       ...(initial?.lastContributionMonth && { lastContributionMonth: initial.lastContributionMonth }),
@@ -111,8 +111,7 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
             className={cls}
             type="date"
             name="targetDate"
-            value={form.targetDate}
-            onChange={(e) => set('targetDate', e.target.value)}
+            defaultValue={initial?.targetDate}
           />
         </FormField>
       </div>

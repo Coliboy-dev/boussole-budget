@@ -71,7 +71,7 @@ test('Solde bancaire : « 1 234,50 » accepté, « 12,345 » refusé avec un mes
   const field = page.locator('input[name=balance]');
   await type(field, '12,345');
   await page.getByRole('button', { name: 'OK' }).click();
-  await page.getByRole('alert').filter({ hasText: 'Saisis un montant de solde valide.' }).waitFor();
+  await page.getByRole('alert').filter({ hasText: 'Encode un montant de solde valide.' }).waitFor();
   assert.equal((await stored(page)).currentBalance, base.currentBalance * 100, 'rien n’est enregistré');
   await type(field, '1 234,50');
   await page.getByRole('button', { name: 'OK' }).click();

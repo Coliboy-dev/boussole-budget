@@ -9,8 +9,8 @@ import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
 import { isBudgetAmount } from '@/lib/budget-schema';
 import { balanceFreshness, passedOccurrences, type PassedOccurrence } from '@/lib/balance-update';
 import { useApp } from '@/lib/context/AppContext';
-import { amountInputValue, fromCents, parseAmountInput } from '@/lib/money';
-import { amountField } from '@/components/forms/FormField';
+import { amountInputValue, fromCents, parseBalanceInput } from '@/lib/money';
+import { amountField, OverdrawnCheckbox } from '@/components/forms/FormField';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 
 const keyOf = (item: PassedOccurrence) => `${item.type}:${item.id}:${item.dueDate}`;
@@ -25,40 +25,61 @@ function ageLabel(days: number) {
 export default function BalanceRows() {
   const app = useApp();
   const { active: household } = useHouseholdWorkspace();
-  const { currentBalance, setBalance, balanceDate, userProfile, today } = app;
+  const { currentBalance, setBalance, reloadStoredBudget, balanceDate, userProfile, today } = app;
   const [step, setStep] = useState<'view' | 'amount' | 'passed'>('view');
   const [input, setInput] = useState('');
+  const [overdrawn, setOverdrawn] = useState(false);
   const [amount, setAmount] = useState(0);
   const [passed, setPassed] = useState<PassedOccurrence[]>([]);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
   const validation = useFormValidation();
   const freshness = balanceFreshness(app, today);
 
   function startEdit() {
     validation.reset();
     setFeedback('');
-    setInput(amountInputValue(currentBalance) ?? '');
+    setSaveError('');
+    setInput(amountInputValue(Math.abs(currentBalance)) ?? '');
+    setOverdrawn(currentBalance < 0);
     setStep('amount');
   }
 
-  function save(value: number, settled: PassedOccurrence[]) {
-    setBalance(value, settled.map(({ type, id, dueDate }) => ({ type, id, dueDate })));
-    setStep('view');
-    setFeedback(settled.length === 0
-      ? 'Solde mis à jour.'
-      : `Solde mis à jour. ${settled.length} ${settled.length === 1 ? 'échéance marquée comme passée' : 'échéances marquées comme passées'}.`);
+  async function save(value: number, settled: PassedOccurrence[]) {
+    if (saving) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await setBalance(value, settled.map(({ type, id, dueDate }) => ({ type, id, dueDate })));
+      setStep('view');
+      setFeedback(settled.length === 0
+        ? 'Solde mis à jour.'
+        : `Solde mis à jour. ${settled.length} ${settled.length === 1 ? 'échéance marquée comme passée' : 'échéances marquées comme passées'}.`);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Impossible d’enregistrer ton solde.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resumeAfterReload() {
+    reloadStoredBudget();
+    validation.reset();
+    setSaveError('');
+    setStep('amount');
   }
 
   function submitAmount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const value = parseAmountInput(input);
+    const value = parseBalanceInput(input, overdrawn);
     if (!validation.validate(event.currentTarget, {
-      balance: isBudgetAmount(value) ? undefined : 'Saisis un montant de solde valide.',
+      balance: isBudgetAmount(value) ? undefined : 'Encode un montant de solde valide.',
     })) return;
     const candidates = passedOccurrences(app, today);
     if (candidates.length === 0) {
-      save(value, []);
+      void save(value, []);
       return;
     }
     setAmount(value);
@@ -103,18 +124,20 @@ export default function BalanceRows() {
                   <p id="bank-balance-hint" className="mt-1 text-xs text-cap-text-muted">Le montant affiché par ta banque aujourd’hui.</p>
                 )}
               </div>
-              <button type="submit" className="rounded-xl bg-cap-primary px-4 text-sm font-bold text-cap-on-primary hover:bg-cap-primary-strong">
+              <button type="submit" disabled={saving} className="rounded-xl bg-cap-primary px-4 text-sm font-bold text-cap-on-primary hover:bg-cap-primary-strong">
                 OK
               </button>
               <button
                 type="button"
                 aria-label="Annuler la modification du solde"
-                onClick={() => setStep('view')}
+                disabled={saving}
+                onClick={() => { setSaveError(''); setStep('view'); }}
                 className="flex items-center justify-center rounded-xl bg-cap-background text-cap-text hover:bg-cap-border"
               >
                 <Icon icon={X} className="size-5" />
               </button>
             </div>
+            <OverdrawnCheckbox checked={overdrawn} onChange={setOverdrawn} />
           </form>
         )}
 
@@ -122,7 +145,7 @@ export default function BalanceRows() {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              save(amount, passed.filter((item) => checked.has(keyOf(item))));
+              void save(amount, passed.filter((item) => checked.has(keyOf(item))));
             }}
             className="space-y-3 py-1"
           >
@@ -131,8 +154,8 @@ export default function BalanceRows() {
                 Qu’est-ce qui est déjà passé sur ton compte ?
               </legend>
               <p className="mt-1 text-xs text-cap-text-muted">
-                Coche ce que ton solde de {formatCurrency(amount)} contient déjà. Ces montants ne seront pas déduits une seconde fois.
-                Ce qui n’est pas coché reste à payer.
+                Coche ce que ton solde de {formatCurrency(amount)} contient déjà. Ces montants sont déjà compris dans ton solde.
+                Les opérations non cochées restent ouvertes.
               </p>
               <ul className="mt-2 divide-y divide-cap-border rounded-xl border border-cap-border bg-white">
                 {passed.map((item) => {
@@ -164,12 +187,13 @@ export default function BalanceRows() {
               </ul>
             </fieldset>
             <div className="flex flex-wrap gap-2">
-              <button type="submit" className="rounded-xl bg-cap-primary px-4 text-sm font-bold text-cap-on-primary hover:bg-cap-primary-strong">
+              <button type="submit" disabled={saving} className="rounded-xl bg-cap-primary px-4 text-sm font-bold text-cap-on-primary hover:bg-cap-primary-strong">
                 Enregistrer le solde
               </button>
               <button
                 type="button"
-                onClick={() => setStep('amount')}
+                disabled={saving}
+                onClick={() => { setSaveError(''); setStep('amount'); }}
                 className="rounded-xl border border-cap-border-strong bg-cap-surface px-4 text-sm font-semibold text-cap-text"
               >
                 Retour
@@ -209,12 +233,19 @@ export default function BalanceRows() {
         )}
         {step === 'view' && freshness.stale && freshness.days !== null && (
           <p className="mt-1.5 rounded-lg bg-cap-warning-soft px-2.5 py-1.5 text-xs font-medium text-cap-warning-text">
-            Saisi {ageLabel(freshness.days)}
+            Recopié {ageLabel(freshness.days)}
             {freshness.passedSince > 0 && (
               <> · {freshness.passedSince} {freshness.passedSince === 1 ? 'échéance est passée' : 'échéances sont passées'} depuis</>
             )}
             . Recopie le solde de ta banque pour un disponible juste.
           </p>
+        )}
+        {saveError && (
+          <div className="mt-2 text-xs text-cap-danger-text">
+            <p role="alert">{saveError}</p>
+            {!household && <button type="button" onClick={resumeAfterReload}
+              className="min-h-11 font-semibold underline">Recharger le budget</button>}
+          </div>
         )}
         {step === 'view' && feedback && <p role="status" className="mt-1 text-xs text-cap-success-text">{feedback}</p>}
       </div>

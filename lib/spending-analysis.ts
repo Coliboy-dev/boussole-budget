@@ -59,7 +59,7 @@ function itemsInMonth(state: AppState, month: string): CategorizedItem[] {
     if (expense.isPaid && expense.dueDate?.slice(0, 7) === month) dates.add(expense.dueDate);
     for (const date of dates) {
       items.push({
-        date, label: expense.label, cents: toCents(expense.amount),
+        date, label: expense.label, cents: expense.occurrenceAmountsCents?.[date] ?? toCents(expense.amount),
         source: 'expense', id: expense.id, category: expense.category,
       });
     }
@@ -68,7 +68,7 @@ function itemsInMonth(state: AppState, month: string): CategorizedItem[] {
   for (const debt of state.debts) {
     for (const date of paidDates(debt.occurrenceStatuses, month)) {
       items.push({
-        date, label: `Remboursement ${debt.creditor}`, cents: toCents(debt.monthlyPayment),
+        date, label: `Remboursement ${debt.creditor}`, cents: debt.occurrenceAmountsCents?.[date] ?? toCents(debt.monthlyPayment),
         source: 'debt', id: debt.id, category: 'debts',
       });
     }

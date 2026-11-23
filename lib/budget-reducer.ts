@@ -2,6 +2,7 @@ import type { ChildExpense, Debt, Envelope, Expense, Goal, Income, MediationFile
 import { updateBalance, type SettledOccurrence } from './balance-update.ts';
 import { cancelExpenseOccurrence, recordPayment, type AppState, type Payment } from './budget-state.ts';
 import { contributeToGoal } from './goals.ts';
+import { toCents } from './money.ts';
 import { applyContributionMirrorChanges, type ContributionMirrorChange } from './household-contributions.ts';
 import { applyMovementMirrors, type MovementMirror } from './household-movements.ts';
 import {
@@ -56,6 +57,32 @@ function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function editExpense(expense: Expense, data: Partial<Expense>): Expense {
+  const updated = {
+    ...expense,
+    ...data,
+    trackedFrom: data.dueDate && data.dueDate !== expense.dueDate ? data.dueDate : expense.trackedFrom,
+  };
+  const legacyPaidDate = expense.isPaid ? expense.dueDate : undefined;
+  if (!legacyPaidDate && updated.amount === expense.amount) return updated;
+
+  // Les anciens paiements sans montant gardent le montant que l’analyse affichait avant cet encodage.
+  const paidDates = Object.entries(expense.occurrenceStatuses ?? {}).filter(([, status]) => status === 'paid').map(([date]) => date);
+  if (legacyPaidDate) paidDates.push(legacyPaidDate);
+  if (!paidDates.length) return updated;
+  const amounts = { ...updated.occurrenceAmountsCents };
+  for (const date of paidDates) amounts[date] ??= toCents(expense.amount);
+
+  return {
+    ...updated,
+    occurrenceAmountsCents: amounts,
+    ...(legacyPaidDate && {
+      isPaid: false,
+      occurrenceStatuses: { ...updated.occurrenceStatuses, [legacyPaidDate]: 'paid' },
+    }),
+  };
+}
+
 export function reduceBudget(state: RuntimeState, action: AppAction): RuntimeState {
   if (action.type === 'HYDRATE') return action.payload;
   if (state.storageStatus === 'loading') return state;
@@ -99,15 +126,8 @@ export function reduceBudget(state: RuntimeState, action: AppAction): RuntimeSta
     case 'UPDATE_EXPENSE':
       return {
         ...state,
-        expenses: state.expenses.map((e) =>
-          e.id === action.payload.id ? {
-            ...e,
-            ...action.payload.data,
-            trackedFrom: action.payload.data.dueDate && action.payload.data.dueDate !== e.dueDate
-              ? action.payload.data.dueDate
-              : e.trackedFrom,
-          } : e
-        ),
+        expenses: state.expenses.map((expense) =>
+          expense.id === action.payload.id ? editExpense(expense, action.payload.data) : expense),
       };
     case 'DELETE_EXPENSE':
       return { ...state, expenses: state.expenses.filter((e) => e.id !== action.payload) };

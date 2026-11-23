@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
-import FormField from '@/components/forms/FormField';
+import FormField, { readDateInput } from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Card from '@/components/ui/Card';
 import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
@@ -26,22 +26,22 @@ export function HouseholdContributionEditor() {
   const { memberId } = useHouseholdWorkspace();
   const { incomes, addIncome, today, storageBlocked } = useApp();
   const own = incomes.find((income) => income.type === 'household_contribution' && income.contributionMemberId === memberId);
-  const [draft, setDraft] = useState<{ amount?: string; date?: string; frequency?: Frequency }>({});
-  const [expected, setExpected] = useState<typeof draft>();
+  const [draft, setDraft] = useState<{ amount?: string; frequency?: Frequency }>({});
+  const [expected, setExpected] = useState<{ amount: number; date: string; frequency: Frequency }>();
   const [failure, setFailure] = useState('');
   const { errors, validate, clearFieldError } = useFormValidation();
   const amountText = draft.amount ?? amountInputValue(own?.amount) ?? '';
-  const date = draft.date ?? own?.expectedDate ?? today;
   const frequency = draft.frequency ?? own?.frequency ?? 'monthly';
 
   if (!memberId) return null;
-  const confirmed = own && expected && String(own.amount) === expected.amount
+  const confirmed = own && expected && own.amount === expected.amount
     && own.expectedDate === expected.date && own.frequency === expected.frequency;
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!memberId) return;
     const amount = parseAmountInput(amountText);
+    const date = readDateInput(event.currentTarget, 'date');
     if (!validate(event.currentTarget, {
       amount: isSpendingAmount(amount) ? undefined : householdCopy.contributionAmountInvalid,
       date: isLocalDate(date) ? undefined : householdCopy.contributionDateInvalid,
@@ -52,7 +52,7 @@ export function HouseholdContributionEditor() {
         amount, frequency, expectedDate: date, label: householdCopy.contribution,
         type: 'household_contribution', isConfirmed: false, contributionMemberId: memberId,
       });
-      setExpected({ amount: String(amount), date, frequency });
+      setExpected({ amount, date, frequency });
     } catch {
       setFailure(householdCopy.contributionUnavailable);
     }
@@ -79,10 +79,7 @@ export function HouseholdContributionEditor() {
             </select>
           </FormField>
           <FormField label={householdCopy.contributionDate} error={errors.date} required>
-            <input name="date" type="date" required className={inputClass} value={date} onChange={(event) => {
-              setExpected(undefined);
-              setDraft({ ...draft, date: event.target.value });
-            }} />
+            <input name="date" type="date" required className={inputClass} defaultValue={own?.expectedDate ?? today} onChange={() => { if (expected) setExpected(undefined); }} />
           </FormField>
           <button disabled={storageBlocked} className={buttonClass} type="submit">{householdCopy.save}</button>
         </form>

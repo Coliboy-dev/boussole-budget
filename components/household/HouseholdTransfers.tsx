@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import FormField from '@/components/forms/FormField';
+import FormField, { readDateInput } from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Card from '@/components/ui/Card';
 import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
@@ -101,12 +101,12 @@ function TransferForm({ previous, close }: { previous?: HouseholdTransfer; close
   const { today } = useApp();
   const { errors, validate, clearFieldError } = useFormValidation();
   const [amount, setAmount] = useState(previous ? String(fromCents(previous.amount)) : '');
-  const [date, setDate] = useState(previous?.date ?? today);
   const [error, setError] = useState('');
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = parseAmountInput(amount);
+    const date = readDateInput(event.currentTarget, 'date');
     if (!validate(event.currentTarget, {
       amount: isSpendingAmount(value) ? undefined : householdCopy.contributionAmountInvalid,
       date: isLocalDate(date) && date <= today ? undefined : householdCopy.contributionDateInvalid,
@@ -125,7 +125,7 @@ function TransferForm({ previous, close }: { previous?: HouseholdTransfer; close
         <input name="amount" required inputMode="decimal" className={input} value={amount} onChange={(event) => setAmount(event.target.value)} />
       </FormField>
       <FormField label={householdCopy.transferDate} error={errors.date} required>
-        <input name="date" type="date" required max={today} className={input} value={date} onChange={(event) => setDate(event.target.value)} />
+        <input name="date" type="date" required max={today} className={input} defaultValue={previous?.date ?? today} />
       </FormField>
       {error && <p role="alert" className="mb-2 text-sm text-rose-800">{error}</p>}
       <div className="flex flex-wrap gap-2">

@@ -1,5 +1,5 @@
 import { openPaymentOccurrence, recordPayment, type AppState } from './budget-state.ts';
-import { daysBetween } from './local-date.ts';
+import { addDays, daysBetween } from './local-date.ts';
 import { fromCents, toCents } from './money.ts';
 import { forecastOccurrences, incomeOccurrences, isOpenOccurrence } from './occurrences.ts';
 import { balanceGapsOf, balanceRevisionOf } from './spending.ts';
@@ -26,10 +26,13 @@ export const STALE_BALANCE_DAYS = 3;
  * les contient peut-être déjà. Les compter encore les déduirait deux fois.
  */
 export function passedOccurrences(state: AppState, today: string): PassedOccurrence[] {
-  const regularIncomes = state.incomes.filter(({ type }) => type !== 'household_contribution');
-  const contributions = state.incomes.filter(({ type }) => type === 'household_contribution')
-    .flatMap((income) => incomeOccurrences(income, income.expectedDate ?? today, today)).filter(isOpenOccurrence);
-  return [...forecastOccurrences(regularIncomes, state.expenses, state.debts, [], today, today), ...contributions]
+  const since = state.balanceDate && state.balanceDate < today ? addDays(state.balanceDate, 1) : today;
+  const incomes = state.incomes.flatMap((income) => {
+    // Les versements du Foyer conservent leur suivi des échéances antérieures.
+    const start = income.type === 'household_contribution' ? income.expectedDate ?? today : income.isConfirmed ? since : today;
+    return incomeOccurrences(income, start, today).filter(isOpenOccurrence);
+  });
+  return [...forecastOccurrences([], state.expenses, state.debts, [], today, today), ...incomes]
     .filter((occurrence) => occurrence.type !== 'child' && occurrence.dueDate <= today)
     .map((occurrence) => ({
       type: occurrence.type as SettledOccurrence['type'],

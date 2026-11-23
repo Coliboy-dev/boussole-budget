@@ -1,4 +1,4 @@
-import type { BalanceGap, ChildExpense, Debt, DocumentItem, Envelope, Expense, Goal, Income, MediationFile, Spending, SpendingCategory, UserProfile } from './types.ts';
+import type { BalanceGap, ChildExpense, Debt, DocumentItem, Envelope, Expense, Goal, Income, MediationFile, Schedule, Spending, SpendingCategory, UserProfile } from './types.ts';
 import { assertBudgetState } from './budget-schema.ts';
 import { isLocalDate } from './local-date.ts';
 import { debtOccurrences, expenseOccurrences, incomeOccurrences, isOpenOccurrence } from './occurrences.ts';
@@ -211,15 +211,28 @@ export function paymentMayBeInBalance(dueDate: string, balanceDate: string | und
   return balanceDate !== undefined && dueDate <= balanceDate;
 }
 
-export function openPaymentOccurrence(state: AppState, { type, id, dueDate, today }: Omit<Payment, 'balanceIncludesPayment'>) {
+export function openPaymentOccurrence(
+  state: AppState,
+  { type, id, dueDate, today, balanceIncludesPayment }: Omit<Payment, 'balanceIncludesPayment'> & Partial<Pick<Payment, 'balanceIncludesPayment'>>,
+) {
   const through = dueDate > today ? dueDate : today;
   const income = type === 'income' ? state.incomes.find((item) => item.id === id) : undefined;
   const expense = type === 'expense' ? state.expenses.find((item) => item.id === id) : undefined;
   const debt = type === 'debt' ? state.debts.find((item) => item.id === id) : undefined;
-  const start = income?.type === 'household_contribution' && dueDate < today ? dueDate : today;
+  const recentIncome = income?.isConfirmed && balanceIncludesPayment && state.balanceDate && dueDate > state.balanceDate;
+  const start = dueDate < today && (income?.type === 'household_contribution' || recentIncome) ? dueDate : today;
   const occurrences = income ? incomeOccurrences(income, start, through)
     : expense ? expenseOccurrences(expense, today, through) : debt ? debtOccurrences(debt, today, through) : [];
   return occurrences.find((item) => item.dueDate === dueDate && isOpenOccurrence(item));
+}
+
+function paidOccurrenceFields(
+  schedule: Schedule, dueDate: string, amountCents: number,
+): Pick<Schedule, 'occurrenceStatuses' | 'occurrenceAmountsCents'> {
+  return {
+    occurrenceStatuses: { ...schedule.occurrenceStatuses, [dueDate]: 'paid' },
+    occurrenceAmountsCents: { ...schedule.occurrenceAmountsCents, [dueDate]: Math.abs(amountCents) },
+  };
 }
 
 export function recordPayment(state: AppState, payment: Payment): AppState {
@@ -234,17 +247,9 @@ export function recordPayment(state: AppState, payment: Payment): AppState {
     balanceDate: balanceIncludesPayment ? state.balanceDate : today,
     currentBalance: balanceIncludesPayment ? state.currentBalance : fromCents(balanceCents + occurrence.amountCents),
     incomes: type === 'income' ? state.incomes.map((item) => item.id === id
-      ? { ...item, occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' },
-        ...(item.type === 'household_contribution' && {
-          occurrenceAmountsCents: { ...item.occurrenceAmountsCents, [dueDate]: occurrence.amountCents },
-        }) }
-      : item) : state.incomes,
+      ? { ...item, ...paidOccurrenceFields(item, dueDate, occurrence.amountCents) } : item) : state.incomes,
     expenses: type === 'expense' ? state.expenses.map((item) => item.id === id
-      ? { ...item, occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' },
-        ...(item.category === 'household' && {
-          occurrenceAmountsCents: { ...item.occurrenceAmountsCents, [dueDate]: -occurrence.amountCents },
-        }) }
-      : item) : state.expenses,
+      ? { ...item, ...paidOccurrenceFields(item, dueDate, occurrence.amountCents) } : item) : state.expenses,
     debts: type === 'debt' ? state.debts.map((item) => {
       if (item.id !== id) return item;
       const remainingCents = toCents(item.remainingAmount) + occurrence.amountCents;
@@ -252,7 +257,7 @@ export function recordPayment(state: AppState, payment: Payment): AppState {
         ...item,
         remainingAmount: fromCents(remainingCents),
         status: remainingCents === 0 ? 'completed' : item.status,
-        occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' },
+        ...paidOccurrenceFields(item, dueDate, occurrence.amountCents),
       };
       if (updated.status === 'late'
         && !debtOccurrences(updated, today, today).some((item) => item.status === 'late')) {
