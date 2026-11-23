@@ -538,10 +538,7 @@ function Active() {
   );
 }
 
-export default function CloudAccountSection({ protectedBudget = false, startingAccount = false }: {
-  protectedBudget?: boolean;
-  startingAccount?: boolean;
-}) {
+export default function CloudAccountSection({ protectedBudget = false }: { protectedBudget?: boolean }) {
   const { phase, beginSignIn, signingUp, otpEmail } = useCloudSync();
 
   return (
@@ -554,13 +551,13 @@ export default function CloudAccountSection({ protectedBudget = false, startingA
       )}
       {phase === 'loading' && <p role="status" className="text-sm text-slate-600">Chargement…</p>}
       {!protectedBudget && phase !== 'off' && phase !== 'loading' && <Explanation />}
-      {protectedBudget && !startingAccount && phase === 'signed-out' && (
+      {protectedBudget && phase === 'signed-out' && (
         <p className="text-sm text-slate-700">Reconnecte-toi au compte de ce budget pour y accéder.</p>
       )}
       {phase === 'signed-out' && <SignIn />}
-      {phase === 'signed-out' && accountSignupEnabled && (!protectedBudget || startingAccount) && !otpEmail && (
+      {phase === 'signed-out' && accountSignupEnabled && !protectedBudget && !otpEmail && (
         <button type="button" className={secondaryButton} onClick={() => beginSignIn(!signingUp)}>
-          {signingUp ? 'J’ai déjà un compte' : startingAccount ? 'Créer mon compte' : 'Créer un compte pour ce budget'}
+          {signingUp ? 'J’ai déjà un compte' : 'Créer un compte pour ce budget'}
         </button>
       )}
       {phase === 'needs-passphrase' && <Passphrase />}

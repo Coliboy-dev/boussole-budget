@@ -29,7 +29,7 @@ export default function DashboardPage() {
   const { isBudgetLoading, needsOnboarding } = useApp();
   const { active: household } = useHouseholdWorkspace();
   const { firstBudgetResult, initialVaultConfirmed, dismissFirstBudgetResult } = useCloudSync();
-  const [guestChosen, setGuestChosen] = useState(false);
+  const [budgetStarted, setBudgetStarted] = useState(false);
   const [showFirstResult, setShowFirstResult] = useState(false);
 
   if (isBudgetLoading) {
@@ -38,7 +38,7 @@ export default function DashboardPage() {
   if (household) return <SavedBudgetDashboard />;
   if (showFirstResult) return <OnboardingResult onContinue={() => setShowFirstResult(false)} />;
   if (firstBudgetResult && initialVaultConfirmed) return <OnboardingResult onContinue={dismissFirstBudgetResult} onlineCopy />;
-  if (needsOnboarding && accountSignupEnabled && !guestChosen) return <AccountChoice onGuest={() => setGuestChosen(true)} />;
+  if (needsOnboarding && accountSignupEnabled && !budgetStarted) return <AccountChoice onStartBudget={() => setBudgetStarted(true)} />;
   if (needsOnboarding) return <BudgetOnboarding onComplete={() => setShowFirstResult(true)} />;
 
   return <><VaultProgress /><SavedBudgetDashboard /></>;
