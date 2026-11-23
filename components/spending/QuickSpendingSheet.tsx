@@ -7,6 +7,7 @@ import { addDays, isLocalDate } from '@/lib/local-date';
 import { suggestCategory } from '@/lib/merchants';
 import { parseAmountInput } from '@/lib/money';
 import { parseQuickEntry } from '@/lib/quick-entry';
+import { labelSuggestions } from '@/lib/label-breakdown';
 import { merchantCategoriesOf, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
 import type { Spending, SpendingCategory } from '@/lib/types';
 import FormField from '@/components/forms/FormField';
@@ -146,8 +147,13 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
           {errors.category && <p id={`${groupId}-error`} role="alert" className="text-xs text-red-700">{errors.category}</p>}
         </div>
         <FormField label="Commerce ou note">
-          <input name="label" className={inputClass} value={form.label} onChange={(event) => change('label', event.target.value)} />
+          {/* Reprendre le même libellé (« Café ») permet de voir ce qu'il coûte sur le mois, dans Où part mon argent. */}
+          <input name="label" className={inputClass} value={form.label} list={`${groupId}-libelles`} autoComplete="off"
+            onChange={(event) => change('label', event.target.value)} />
         </FormField>
+        <datalist id={`${groupId}-libelles`}>
+          {labelSuggestions(state, form.category, today).map((label) => <option key={label} value={label} />)}
+        </datalist>
         <FormField label="Date" required error={errors.date}>
           <input name="date" type="date" max={today} className={inputClass} required
             value={form.date} onChange={(event) => change('date', event.target.value)} />

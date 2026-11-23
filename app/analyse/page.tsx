@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { CompactRows, DetailSheet } from '@/components/budget/CompactRows';
 import EnvelopeForm from '@/components/spending/EnvelopeForm';
 import EnvelopeScenario from '@/components/spending/EnvelopeScenario';
+import LabelBreakdown from '@/components/spending/LabelBreakdown';
 import NewSpendingAction from '@/components/spending/NewSpendingAction';
 import SpendingMonthSelector from '@/components/spending/SpendingMonthSelector';
 import AlertBanner from '@/components/ui/AlertBanner';
@@ -114,6 +115,8 @@ export default function AnalysisPage() {
               Différence entre ton solde recopié de la banque et ce que tu as encodé. Encode tes dépenses pour réduire cette ligne.
             </p>
           )}
+          {envelopeCategory && <LabelBreakdown month={month} category={envelopeCategory} monthCents={analysis.totalCents} />}
+          {envelopeCategory && items.length > 0 && <h3 className="pt-2 text-sm font-bold text-cap-text">Détail</h3>}
           {items.length > 0 && (
             <ul className="divide-y divide-slate-100">
               {items.map((item) => (
