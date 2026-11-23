@@ -67,8 +67,11 @@ for (const [name, state] of Object.entries(scenarios)) {
     assert.ok(card.includes(euro(state.currentBalance)), 'solde bancaire');
     assert.ok(card.includes(euro(state.userProfile.safetyReserve)), 'réserve');
 
-    // Actions rapides : libellés accessibles conservés.
-    await page.getByRole('button', { name: 'Ajouter une dépense' }).waitFor();
+    // « Ajouter une dépense » : un seul bouton, au centre de la barre du bas ; plus de raccourci Réglages en haut.
+    const nav = page.getByRole('navigation', { name: 'Navigation principale' });
+    assert.equal(await page.getByRole('button', { name: 'Ajouter une dépense' }).count(), 1);
+    assert.deepEqual((await nav.locator(':scope > div > a, :scope > div > button').allInnerTexts()).map(clean), ['Aujourd’hui', 'Échéances', 'Dépense', 'Budget', 'Plus']);
+    assert.equal(await page.locator('header').getByRole('link', { name: 'Réglages' }).count(), 0);
     await page.getByRole('link', { name: 'Voir les échéances' }).waitFor();
     assert.equal(await page.getByRole('link', { name: 'Simuler un achat' }).count(), 1);
 

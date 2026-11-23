@@ -23,11 +23,13 @@ type Fields = Omit<Spending, 'id' | 'balanceRevision' | 'debited'>;
 
 interface Props {
   initial?: Spending;
+  /** Valeurs proposées pour une NOUVELLE dépense (ex. un frais d'enfant déjà encodé) ; tout reste modifiable. */
+  prefill?: { amount: number; category: SpendingCategory; label?: string; date: string };
   onSave: (fields: Fields) => void;
   onClose: () => void;
 }
 
-export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) {
+export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }: Props) {
   const state = useApp();
   const { today, balanceDate, storageBlocked, hasJointAccount } = state;
   const household = useHouseholdMovements();
@@ -41,16 +43,17 @@ export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) 
   const more = ranked.slice(6);
   const [form, setForm] = useState({
     quickEntry: '',
-    amount: initial ? String(initial.amount) : '',
-    category: (initial?.category === 'household' ? '' : initial?.category ?? '') as SpendingCategory | '',
-    label: initial?.label ?? '',
-    date: initial?.date ?? today,
+    amount: initial ? String(initial.amount) : prefill ? String(prefill.amount) : '',
+    category: (initial?.category === 'household' ? '' : initial?.category ?? prefill?.category ?? '') as SpendingCategory | '',
+    label: initial?.label ?? prefill?.label ?? '',
+    date: initial?.date ?? prefill?.date ?? today,
   });
-  const [expanded, setExpanded] = useState(Boolean(initial && initial.category !== 'household' && !main.includes(initial.category)));
+  const [expanded, setExpanded] = useState(Boolean(initial && initial.category !== 'household' && !main.includes(initial.category))
+    || Boolean(prefill && !main.includes(prefill.category)));
   const [included, setIncluded] = useState<boolean>();
   const [paidPersonal, setPaidPersonal] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const manual = useRef({ amount: false, category: false, label: false });
+  const manual = useRef({ amount: !!prefill, category: !!prefill, label: !!prefill?.label });
   const amountRef = useRef<HTMLInputElement>(null);
   const groupId = useId();
   const balanceHint = useId();

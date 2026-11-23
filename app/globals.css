@@ -42,18 +42,17 @@
   --cap-danger-soft: #fbecee;
   --cap-success-text: #1e6b4a;
   --cap-focus: #087f78;
-  /* Graphiques : charges programmées (teal) et dépenses enregistrées (mauve) ne se mélangent jamais. */
-  --cap-chart-scheduled-1: #0b5f5d;
-  --cap-chart-scheduled-2: #087f78;
-  --cap-chart-scheduled-3: #2ba698;
-  --cap-chart-scheduled-4: #7fd3c4;
-  --cap-chart-scheduled-5: #c8ebe3;
-  --cap-chart-recorded-1: #4e3f9e;
-  --cap-chart-recorded-2: #6758ac;
-  --cap-chart-recorded-3: #8274d8;
-  --cap-chart-recorded-4: #afa4ea;
-  --cap-chart-recorded-5: #dad4f7;
-  --cap-chart-envelope: #e6ab51;
+  /*
+   * Graphiques : quatre teintes bien distinctes, dans cet ordre fixe, puis un gris pour « Autres ».
+   * Validées (outil dataviz) : écart normal ≥ 22, daltonisme ≥ 7,4 (légende et libellés toujours présents).
+   * Ce que mesure le graphique (charges ou dépenses) est écrit dans son titre, pas porté par la couleur.
+   */
+  --cap-chart-1: #00897b;
+  --cap-chart-2: #e69500;
+  --cap-chart-3: #5b4fd6;
+  --cap-chart-4: #e0457b;
+  --cap-chart-other: #aab2bb;
+  --cap-chart-envelope: var(--cap-chart-2);
 }
 
 @theme inline {

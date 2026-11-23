@@ -1,15 +1,16 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { Baby, ChevronRight, Calculator, ChartPie, HandCoins, Receipt, ShoppingBasket, Target, Wallet, type LucideIcon } from 'lucide-react';
-import { expenseCategoryLabels, Icon } from '@/components/ui/icons';
-import DonutChart from '@/components/charts/DonutChart';
-import { chartParts } from '@/lib/chart-parts';
-import { calculateTotalMonthlyIncome, formatCurrency, monthlyChargesByCategory } from '@/lib/budget-calculations';
+import { Icon } from '@/components/ui/icons';
+import { ChargesDonut, SpendingDonut, surface } from '@/components/budget/BudgetCharts';
+import { calculateTotalMonthlyIncome, formatCurrency } from '@/lib/budget-calculations';
 import { useApp } from '@/lib/context/AppContext';
 import { monthlySpendingTotals } from '@/lib/envelopes';
 import { fromCents, toCents } from '@/lib/money';
 import { envelopesOf, spendingsOf } from '@/lib/spending';
+import { analyzeMonth } from '@/lib/spending-analysis';
 import { jointAccountRoutes, useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
 
 interface Section {
@@ -64,14 +65,14 @@ function MonthBreakdown() {
             Revenus certains : <strong className="tabular-nums">{formatCurrency(certain)}</strong> par mois
           </p>
           <div className="flex h-3 overflow-hidden rounded-full bg-cap-border" aria-hidden="true">
-            <div className="bg-[var(--cap-chart-scheduled-1)]" style={{ width: `${(charges / base) * 100}%` }} />
-            <div className="bg-[var(--cap-chart-scheduled-4)]" style={{ width: `${(debts / base) * 100}%` }} />
+            <div className="bg-[var(--cap-chart-1)]" style={{ width: `${(charges / base) * 100}%` }} />
+            <div className="bg-[var(--cap-chart-3)]" style={{ width: `${(debts / base) * 100}%` }} />
             <div className="bg-[var(--cap-chart-envelope)]" style={{ width: `${(envelopes / base) * 100}%` }} />
             {rest > 0 && <div className="bg-cap-success-text" style={{ width: `${(rest / base) * 100}%` }} />}
           </div>
           <ul className="space-y-2">
-            <BreakdownSegment label="Charges" amount={fromCents(charges)} share={(charges / base) * 100} className="bg-[var(--cap-chart-scheduled-1)]" />
-            <BreakdownSegment label="Dettes" amount={fromCents(debts)} share={(debts / base) * 100} className="bg-[var(--cap-chart-scheduled-4)]" />
+            <BreakdownSegment label="Charges" amount={fromCents(charges)} share={(charges / base) * 100} className="bg-[var(--cap-chart-1)]" />
+            <BreakdownSegment label="Dettes" amount={fromCents(debts)} share={(debts / base) * 100} className="bg-[var(--cap-chart-3)]" />
             <BreakdownSegment label="Enveloppes" amount={fromCents(envelopes)} share={(envelopes / base) * 100} className="bg-[var(--cap-chart-envelope)]" />
             {rest >= 0 && (
               <BreakdownSegment label="Reste" amount={fromCents(rest)} share={(rest / base) * 100} className="bg-cap-success-text" />
@@ -93,30 +94,6 @@ function MonthBreakdown() {
   );
 }
 
-const surface = 'rounded-[19px] border border-cap-border bg-cap-surface p-4 shadow-[0_1px_2px_rgba(23,44,55,0.04)]';
-const scheduledColors = [
-  'var(--cap-chart-scheduled-1)', 'var(--cap-chart-scheduled-2)', 'var(--cap-chart-scheduled-3)',
-  'var(--cap-chart-scheduled-4)', 'var(--cap-chart-scheduled-5)',
-];
-
-/** Charges programmées par catégorie (famille teal) : jamais confondues avec les dépenses réellement effectuées. */
-function ChargesDonut() {
-  const { expenses } = useApp();
-  const rows = monthlyChargesByCategory(expenses);
-  const parts = chartParts(rows, ({ category }) => expenseCategoryLabels[category]);
-  if (parts.length === 0) return null;
-  const totalCents = rows.reduce((sum, { cents }) => sum + cents, 0);
-  return (
-    <section aria-label="Répartition des charges" className={`space-y-3 ${surface}`}>
-      <DonutChart title="Répartition des charges" totalLabel="par mois" totalCents={totalCents} parts={parts} colors={scheduledColors}
-        scope="Charges programmées ramenées au mois, pas les dépenses réellement effectuées." />
-      <Link href="/charges" className="inline-flex min-h-11 items-center text-sm font-semibold text-cap-primary-text underline">
-        Voir mes charges
-      </Link>
-    </section>
-  );
-}
-
 export default function BudgetPage() {
   const state = useApp();
   const household = useHouseholdMovements();
@@ -129,15 +106,20 @@ export default function BudgetPage() {
     .filter((expense) => expense.status === 'pending' || expense.status === 'receipt_sent')
     .reduce((sum, expense) => sum + expense.shareAmount, 0);
   const openGoals = goals.filter((goal) => goal.savedAmount < goal.targetAmount).length;
+  // Vue du quotidien par défaut : les dépenses du mois. Sans compte commun, le foyer n'a pas de charges.
+  const [view, setView] = useState<'spending' | 'charges'>('spending');
+  const shown = noJointAccount ? 'spending' : view;
+  const analysis = analyzeMonth(state, today.slice(0, 7));
 
   const sections: Section[] = [
-    { href: '/revenus', label: 'Revenus', icon: Wallet, detail: `${formatCurrency(summary.totalMonthlyIncome)}/mois` },
-    { href: '/charges', label: 'Charges', icon: Receipt, detail: `${formatCurrency(summary.totalMonthlyExpenses)}/mois` },
+    // Le quotidien d'abord, puis ce qui se règle une fois pour longtemps.
     {
       href: '/depenses', label: 'Dépenses du mois', icon: ShoppingBasket,
       detail: `${formatCurrency(fromCents(monthly.spentCents))} dépensés · ${formatCurrency(fromCents(monthly.remainingCents))} restants dans les enveloppes`,
     },
     { href: '/analyse', label: 'Où part mon argent', icon: ChartPie },
+    { href: '/charges', label: 'Charges', icon: Receipt, detail: `${formatCurrency(summary.totalMonthlyExpenses)}/mois` },
+    { href: '/revenus', label: 'Revenus', icon: Wallet, detail: `${formatCurrency(summary.totalMonthlyIncome)}/mois` },
     {
       href: '/dettes', label: 'Dettes', icon: HandCoins,
       detail: activeDebts.length > 0
@@ -145,8 +127,8 @@ export default function BudgetPage() {
         : 'Aucune dette',
     },
     {
-      href: '/enfants', label: 'Frais des enfants', icon: Baby,
-      detail: toRecover > 0 ? `${formatCurrency(toRecover)} à récupérer` : undefined,
+      href: '/enfants', label: 'Frais à partager', icon: Baby,
+      detail: toRecover > 0 ? `${formatCurrency(toRecover)} à récupérer` : 'Frais d’enfants remboursés par l’autre parent',
     },
     {
       href: '/objectifs', label: 'Objectifs', icon: Target,
@@ -159,10 +141,21 @@ export default function BudgetPage() {
     <div className="space-y-4 px-4 py-4">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold text-cap-text">Mon budget</h1>
-        <p className="text-sm text-cap-text-muted">Suis tes charges, tes dépenses et tes objectifs.</p>
+        <p className="text-sm text-cap-text-muted">Tes dépenses du quotidien, tes charges et tes objectifs.</p>
       </header>
-      {!noJointAccount && <ChargesDonut />}
-      {!noJointAccount && <MonthBreakdown />}
+      {!noJointAccount && (
+        <div role="group" aria-label="Vue" className="grid grid-cols-2 gap-1 rounded-2xl bg-cap-surface-soft p-1">
+          {([['spending', 'Dépenses du mois'], ['charges', 'Charges']] as const).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)}
+              className="min-h-11 rounded-xl px-3 text-sm font-semibold text-cap-text-muted aria-pressed:bg-cap-surface aria-pressed:text-cap-primary-text aria-pressed:shadow-sm">
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {shown === 'spending' && <SpendingDonut analysis={analysis} links />}
+      {shown === 'charges' && <ChargesDonut links />}
+      {shown === 'charges' && <MonthBreakdown />}
       <ul className="divide-y divide-cap-border overflow-hidden rounded-[19px] border border-cap-border bg-cap-surface">
         {sections.filter(({ href }) => !noJointAccount || !jointAccountRoutes.has(href)).map(({ href, label, icon, detail }) => (
           <li key={href}>
