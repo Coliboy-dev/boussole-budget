@@ -215,6 +215,8 @@ export interface BudgetSummary {
     annualProvision: number;
     /** Épargne des objectifs gardée sur le compte courant, comprise dans reservedAmount. */
     goalSavings: number;
+    /** Dont la mise de côté du mois en cours, pas encore faite. */
+    goalThisMonth: number;
     reservedAmount: number;
     optimisticAvailable: number;
   };

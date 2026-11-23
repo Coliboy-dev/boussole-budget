@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { calculateBudgetSummary } from '../lib/budget-calculations.ts';
-import { goalOccurrences, goalSavingsOnAccountCents, recordGoalContribution, reserveExtras } from '../lib/goals.ts';
+import { goalOccurrences, goalReserveOnAccount, goalSavingsOnAccountCents, recordGoalContribution, reserveExtras } from '../lib/goals.ts';
 import { buildProjection } from '../lib/projection.ts';
 
 const goal = (fields) => ({ id: 'g', label: 'Voyage', targetAmount: 600, savedAmount: 100, status: 'realistic', ...fields });
@@ -21,12 +21,15 @@ test('Objectifs · mise de côté du mois en cours puis le 1er de chaque mois, j
   assert.equal(goalOccurrences([goal({ savedAmount: 600, monthlyContribution: 50 }), goal({ id: 'h' })], today, '2026-08-10').length, 0);
 });
 
-test('Objectifs · compte courant : épargne et mises de côté réservées, aucune sortie ; compte à part : sorties', () => {
+test('Objectifs · compte courant : épargne et mise de côté du mois réservées, aucune sortie ; compte à part : sorties', () => {
   const onAccount = goal({ onCurrentAccount: true, monthlyContribution: 50 });
-  // 100 € déjà épargnés + mises de côté de mai et juin sur la période.
-  assert.equal(goalSavingsOnAccountCents([onAccount, goal({ id: 'h', savedAmount: 40, monthlyContribution: 50 })], today, '2026-06-24'), 10000 + 2 * 5000);
+  // 100 € déjà épargnés + la mise de côté de mai ; celle de juin sera réservée en juin (payée par les revenus de juin).
+  assert.deepEqual(goalReserveOnAccount([onAccount, goal({ id: 'h', savedAmount: 40, monthlyContribution: 50 })], today), { savedCents: 10000, thisMonthCents: 5000 });
+  assert.equal(goalSavingsOnAccountCents([onAccount], today), 15000);
+  // Mise de côté du mois déjà faite : seulement l'épargne.
+  assert.equal(goalSavingsOnAccountCents([goal({ onCurrentAccount: true, monthlyContribution: 50, lastContributionMonth: '2026-05' })], today), 10000);
   assert.equal(goalOccurrences([onAccount], today, '2026-06-24').length, 0, 'l’argent ne quitte pas le compte');
-  assert.equal(goalSavingsOnAccountCents([goal({})], today, '2026-06-24'), 0);
+  assert.equal(goalSavingsOnAccountCents([goal({})], today), 0);
 });
 
 test('Objectifs · « J’ai mis de côté » augmente l’épargne et marque le mois, sans dépasser l’objectif', () => {
@@ -43,9 +46,9 @@ test('Objectifs · le vrai disponible baisse exactement des mises de côté à v
   const onAccount = buildProjection(...base, { today, horizon: 35, goals: [goal({ monthlyContribution: 50, onCurrentAccount: true })] });
   // Horizon du 20 mai au 24 juin : mise de côté de mai (aujourd'hui) et de juin.
   assert.equal(Math.round((without.available - separate.available) * 100), 2 * 5000);
-  assert.equal(Math.round((without.available - onAccount.available) * 100), 2 * 5000 + 10000);
-  assert.equal(onAccount.goalSavings, 200);
-  assert.equal(onAccount.reservedAmount, 250);
+  assert.equal(Math.round((without.available - onAccount.available) * 100), 10000 + 5000);
+  assert.equal(onAccount.goalSavings, 150);
+  assert.equal(onAccount.reservedAmount, 200);
   // Épargne sur le compte : le solde prévu ne bouge pas, donc jamais de faux « découvert ».
   assert.deepEqual(onAccount.dailyBalances, without.dailyBalances);
   assert.equal(onAccount.events.some(({ type }) => type === 'goal'), false);
@@ -53,7 +56,8 @@ test('Objectifs · le vrai disponible baisse exactement des mises de côté à v
   // Résumé de l'accueil : même calcul.
   const summary = calculateBudgetSummary(1000, [], [], [], [], 50, [goal({ monthlyContribution: 50, onCurrentAccount: true })], today);
   assert.equal(summary.trueAvailable, onAccount.available);
-  assert.equal(summary.availableForecast.goalSavings, 200);
+  assert.equal(summary.availableForecast.goalSavings, 150);
+  assert.equal(summary.availableForecast.goalThisMonth, 50);
 });
 
 test('Objectifs · une rentrée avant la mise de côté la couvre : seul le point bas compte', () => {

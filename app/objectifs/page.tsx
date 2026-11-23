@@ -18,7 +18,8 @@ import { recordGoalContribution } from '@/lib/goals';
 import type { Goal } from '@/lib/types';
 
 export default function ObjectifsPage() {
-  const { goals, summary, today, addGoal, updateGoal, deleteGoal, storageBlocked } = useApp();
+  const { goals, summary, today, addGoal, updateGoal, deleteGoal, storageBlocked, currentBalance } = useApp();
+  const savedOnAccount = goals.filter(({ onCurrentAccount }) => onCurrentAccount).reduce((sum, { savedAmount }) => sum + savedAmount, 0);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Goal | null>(null);
 
@@ -91,6 +92,13 @@ export default function ObjectifsPage() {
             </div>
           </div>
         </Card>
+
+        {savedOnAccount > currentBalance && (
+          <AlertBanner variant="warning" title="Épargne plus élevée que ton solde">
+            Tu indiques {formatCurrency(savedOnAccount)} épargnés sur ton compte courant, mais ton solde est de {formatCurrency(currentBalance)}.
+            Vérifie ton solde, ou modifie l’objectif si cet argent est sur un compte à part.
+          </AlertBanner>
+        )}
 
         {goals.length > 0 && !hasRealisticGoal && (
           <AlertBanner variant="warning" title="Objectifs fragiles">

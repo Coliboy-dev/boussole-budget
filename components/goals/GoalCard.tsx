@@ -80,9 +80,10 @@ export default function GoalCard({ goal, feasibility, onEdit, onDelete, onContri
 
       <p className="mt-2 text-xs text-gray-600">
         {goal.onCurrentAccount
-          ? 'Épargne gardée sur ton compte courant : Capiste la réserve, elle n’entre pas dans ton vrai disponible.'
-          : goal.onCurrentAccount === false ? 'Épargne sur un compte à part.' : 'Épargne considérée sur un compte à part : modifie l’objectif si tu la gardes sur ton compte courant.'}
-        {contribution > 0 && ' La mise de côté du mois est retirée de ton vrai disponible.'}
+          ? 'Gardée sur ton compte courant : les montants épargnés et la mise de côté du mois sont réservés, hors de ton vrai disponible.'
+          : goal.onCurrentAccount === false
+            ? 'Sur un compte à part : chaque mise de côté est un virement prévu dans tes échéances.'
+            : 'Considérée sur un compte à part : modifie l’objectif si tu la gardes sur ton compte courant.'}
       </p>
 
       {onContribute && contribution > 0 && (

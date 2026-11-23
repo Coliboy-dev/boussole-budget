@@ -26,6 +26,9 @@ export default function SummaryCard({
   const forecast = summary.availableForecast;
   const end = forecast.dailyBalances.at(-1);
   const causes = forecast.causes.slice(0, 2).join(', ');
+  // L'épargne « gardée sur le compte courant » fait partie du solde : elle ne peut pas le dépasser.
+  const savedOnAccount = forecast.goalSavings - forecast.goalThisMonth;
+  const savingsAboveBalance = savedOnAccount > 0 && savedOnAccount > summary.currentBalance;
 
   return (
     <section className="overflow-hidden rounded-[22px] border border-cap-border bg-cap-surface shadow-[0_1px_2px_rgba(23,44,55,0.04)]">
@@ -63,7 +66,18 @@ export default function SummaryCard({
             Point bas prévu le <time dateTime={forecast.date}>{formatShortDate(forecast.date)}</time> à{' '}
             {formatCurrency(forecast.balance)}{causes && ` après ${causes}`}, moins {formatCurrency(summary.safetyReserve)} de réserve
             {forecast.annualProvision > 0 && ` et ${formatCurrency(forecast.annualProvision)} de provisions annuelles`}
-            {forecast.goalSavings > 0 && ` et ${formatCurrency(forecast.goalSavings)} d’épargne pour tes objectifs`}.
+            {forecast.goalSavings > 0 && ` et ${formatCurrency(forecast.goalSavings)} mis de côté pour tes objectifs`}
+            {forecast.goalThisMonth > 0
+              && ` (${formatCurrency(forecast.goalSavings - forecast.goalThisMonth)} déjà épargnés + ${formatCurrency(forecast.goalThisMonth)} à mettre de côté ce mois-ci)`}.
+          </p>
+        )}
+        {savingsAboveBalance && (
+          <p role="note" className="relative flex gap-2 rounded-xl bg-white/12 px-3 py-2 text-sm text-white">
+            <Icon icon={TriangleAlert} className="mt-0.5 size-4 shrink-0" />
+            <span>
+              Ton solde ({formatCurrency(summary.currentBalance)}) est plus bas que l’épargne que tu dis garder sur ton compte courant
+              ({formatCurrency(savedOnAccount)}). Vérifie ton solde, ou indique dans Objectifs que cette épargne est sur un compte à part.
+            </span>
           </p>
         )}
         {inHousehold && (!summary.emptyBudget || hasRecordedBalance) && (

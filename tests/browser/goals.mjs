@@ -76,5 +76,21 @@ test('Nouvel objectif : la question « Où gardes-tu cet argent ? » est obligat
   assert.deepEqual([goal.label, goal.onCurrentAccount, goal.savedAmount], ['Soldes de janvier', true, 6000]);
   await page.goto('/dashboard');
   const text = clean(await card(page).innerText());
-  assert.ok(text.includes(`et ${euro(60)} d’épargne pour tes objectifs`), text);
+  assert.ok(text.includes(`et ${euro(60)} mis de côté pour tes objectifs`), text);
+});
+
+test('Cas du fondateur : 50 € sur le compte, 250 € « épargnés sur le compte courant » : calcul détaillé et incohérence signalée', async (t) => {
+  const vacances = { id: 'v', label: 'Vacances', targetAmount: 500, savedAmount: 250, monthlyContribution: 30, onCurrentAccount: true,
+    targetDate: '2026-12-23', status: 'to_postpone' };
+  const state = { ...base, currentBalance: 50, incomes: [], expenses: [], debts: [], envelopes: [], spendings: [], goals: [vacances],
+    userProfile: { ...base.userProfile, safetyReserve: 50 } };
+  const page = await open(t, state, '/dashboard');
+  // 50 € (point bas) − 50 € de réserve − 250 € épargnés − 30 € de mise de côté du mois = −280 €.
+  assert.equal(available(state), -280);
+  const text = clean(await card(page).innerText());
+  assert.ok(text.includes(euro(-280)), text);
+  assert.ok(text.includes(`et ${euro(280)} mis de côté pour tes objectifs (${euro(250)} déjà épargnés + ${euro(30)} à mettre de côté ce mois-ci)`), text);
+  assert.ok(text.includes(`Ton solde (${euro(50)}) est plus bas que l’épargne que tu dis garder sur ton compte courant (${euro(250)})`), text);
+  const goals = await open(t, state, '/objectifs');
+  await goals.getByText('Épargne plus élevée que ton solde').waitFor();
 });

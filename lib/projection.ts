@@ -39,7 +39,7 @@ export interface ProjectionResult {
   lowestRisk: RiskLevel;
   optimisticLowestBalance: number;
   annualProvision: number;
-  /** Épargne des objectifs gardée sur le compte courant (déjà épargnée + mises de côté de la période), comprise dans la réserve. */
+  /** Épargne des objectifs gardée sur le compte courant (déjà épargnée + mise de côté du mois), comprise dans la réserve. */
   goalSavings: number;
   reservedAmount: number;
   available: number;
@@ -92,7 +92,7 @@ export function buildProjection(
   });
 
   const annualProvision = annualProvisionsCents(expenses, today, end);
-  const goalSavings = goalSavingsOnAccountCents(goals, today, end);
+  const goalSavings = goalSavingsOnAccountCents(goals, today);
   const reserve = toCents(safetyReserve) + annualProvision + goalSavings;
   let balance = toCents(currentBalance);
   let optimisticBalance = balance;

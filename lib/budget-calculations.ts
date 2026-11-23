@@ -1,3 +1,4 @@
+import { goalReserveOnAccount } from './goals.ts';
 import type {
   Income,
   Expense,
@@ -194,6 +195,7 @@ export function calculateBudgetSummary(
       dailyBalances: forecast.dailyBalances,
       annualProvision: forecast.annualProvision,
       goalSavings: forecast.goalSavings,
+      goalThisMonth: fromCents(goalReserveOnAccount(goals, today).thisMonthCents),
       reservedAmount: forecast.reservedAmount,
       optimisticAvailable: empty ? 0 : forecast.optimisticAvailable,
     },

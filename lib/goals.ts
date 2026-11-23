@@ -34,13 +34,23 @@ export function goalOccurrences(goals: readonly Goal[], today: string, end: stri
 }
 
 /**
- * Épargne gardée sur le compte courant : l'argent ne bouge pas, il est réservé. La réserve comprend ce qui est
- * déjà épargné et, par prudence, les mises de côté prévues sur la période (comme les provisions annuelles).
+ * Épargne gardée sur le compte courant : l'argent ne bouge pas, il est réservé. On réserve ce qui est déjà épargné
+ * et la mise de côté du mois en cours si elle n'est pas encore faite. Celles des mois suivants seront réservées
+ * le moment venu : les revenus de ces mois-là les financeront.
  */
-export function goalSavingsOnAccountCents(goals: readonly Goal[], today: string, end: string): number {
-  return goals.filter(({ onCurrentAccount }) => onCurrentAccount).reduce((sum, goal) => sum
-    + Math.max(0, toCents(goal.savedAmount))
-    + schedule(goal, today, end).reduce((planned, { amountCents }) => planned + amountCents, 0), 0);
+export function goalReserveOnAccount(goals: readonly Goal[], today: string): { savedCents: number; thisMonthCents: number } {
+  const month = today.slice(0, 7);
+  return goals.filter(({ onCurrentAccount }) => onCurrentAccount).reduce((total, goal) => ({
+    savedCents: total.savedCents + Math.max(0, toCents(goal.savedAmount)),
+    thisMonthCents: total.thisMonthCents + schedule(goal, today, `${month}-31`)
+      .filter(({ dueDate }) => dueDate.slice(0, 7) === month)
+      .reduce((sum, { amountCents }) => sum + amountCents, 0),
+  }), { savedCents: 0, thisMonthCents: 0 });
+}
+
+export function goalSavingsOnAccountCents(goals: readonly Goal[], today: string): number {
+  const { savedCents, thisMonthCents } = goalReserveOnAccount(goals, today);
+  return savedCents + thisMonthCents;
 }
 
 /** « J'ai mis de côté » : la mise de côté du mois est faite, l'épargne augmente. */
