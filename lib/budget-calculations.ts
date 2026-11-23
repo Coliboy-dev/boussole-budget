@@ -25,11 +25,26 @@ function monthlyIncomeCents(incomes: Income[]): number {
   return incomes.reduce((sum, income) => sum + monthlyCents(income.amount, income.frequency), 0);
 }
 
+function expenseMonthlyCents(expense: Expense): number {
+  return monthlyCents(expense.amount, expense.isRecurring ? expense.frequency : 'one_time');
+}
+
 function monthlyExpenseCents(expenses: Expense[]): number {
-  return expenses.reduce(
-    (sum, expense) => sum + monthlyCents(expense.amount, expense.isRecurring ? expense.frequency : 'one_time'),
-    0,
-  );
+  return expenses.reduce((sum, expense) => sum + expenseMonthlyCents(expense), 0);
+}
+
+/**
+ * Charges programmées ramenées au mois, par catégorie, du plus grand au plus petit.
+ * Même normalisation que le résumé : la somme est égale à totalMonthlyExpenses.
+ */
+export function monthlyChargesByCategory(expenses: Expense[]): { category: Expense['category']; cents: number }[] {
+  const totals = new Map<Expense['category'], number>();
+  for (const expense of expenses) {
+    totals.set(expense.category, (totals.get(expense.category) ?? 0) + expenseMonthlyCents(expense));
+  }
+  return [...totals].filter(([, cents]) => cents > 0)
+    .map(([category, cents]) => ({ category, cents }))
+    .sort((first, second) => second.cents - first.cents || first.category.localeCompare(second.category));
 }
 
 function monthlyDebtCents(debts: Debt[]): number {
