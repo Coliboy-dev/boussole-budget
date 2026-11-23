@@ -18,6 +18,7 @@ import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
 import { NEW_SPENDING_EVENT, quickActionTile, UNDO_TOAST_MS } from '@/components/spending/NewSpendingAction';
 import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
+import { reserveExtras } from '@/lib/goals';
 import { getUpcomingReminders, formatCurrency, formatDate, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
@@ -76,7 +77,8 @@ function SavedBudgetDashboard() {
 
   const forecast = summary.availableForecast;
   const reminders = getUpcomingReminders(expenses, debts, [], today, forecast.horizon);
-  const hasAnnualProvision = forecast.annualProvision > 0;
+  // Provisions annuelles ou épargne des objectifs gardée sur le compte : au-delà de la seule réserve.
+  const hasAnnualProvision = forecast.annualProvision > 0 || forecast.goalSavings > 0;
   const partial = hasUndatedPayments(expenses, debts);
   const hasProjection = !summary.emptyBudget || Boolean(balanceDate);
   const attention = household && joint && balanceDate ? householdAttention(state, today) : null;
@@ -133,6 +135,7 @@ function SavedBudgetDashboard() {
           causes={forecast.causes.slice(0, 2).join(', ')}
           reserve={forecast.reservedAmount}
           withProvision={hasAnnualProvision}
+          extras={reserveExtras(forecast.annualProvision, forecast.goalSavings)}
         />
       )}
 
@@ -202,8 +205,8 @@ function SavedBudgetDashboard() {
 }
 
 /** Risque de l'accueil : le constat chiffré du moteur et le chemin vers l'écran Échéances, qui détaille les actions. */
-function RiskNotice({ danger, lowest, date, causes, reserve, withProvision }: {
-  danger: boolean; lowest: number; date: string; causes: string; reserve: number; withProvision: boolean;
+function RiskNotice({ danger, lowest, date, causes, reserve, withProvision, extras }: {
+  danger: boolean; lowest: number; date: string; causes: string; reserve: number; withProvision: boolean; extras: string;
 }) {
   return (
     <section aria-labelledby="home-risk-title" className={`rounded-2xl px-3 py-3 text-sm text-cap-text ${danger ? 'bg-cap-danger-soft' : 'bg-cap-warning-soft'}`}>
@@ -214,7 +217,7 @@ function RiskNotice({ danger, lowest, date, causes, reserve, withProvision }: {
       <p className="mt-1 pl-6">
         Ton solde descendrait à <strong className="tabular-nums">{formatCurrency(lowest)}</strong> le{' '}
         <time dateTime={date}>{formatShortDate(date)}</time>{causes && <>, après {causes}</>}
-        {danger ? '.' : <>, sous ta réserve{withProvision && ' et tes provisions'} ({formatCurrency(reserve)}). Évite les dépenses imprévues.</>}
+        {danger ? '.' : <>, sous ta réserve{extras} ({formatCurrency(reserve)}). Évite les dépenses imprévues.</>}
       </p>
       <p className="mt-2 pl-6">
         <Link href="/projection" className="font-semibold text-cap-primary-text underline">Voir le détail et quoi vérifier</Link>
