@@ -40,7 +40,8 @@ export interface Income extends Schedule {
 }
 
 // Expense types
-export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions' | 'other' | 'household';
+export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions'
+  | 'alimony' | 'taxes' | 'childcare' | 'activities' | 'other' | 'household';
 
 export interface Expense extends Schedule {
   id: string;
@@ -57,7 +58,7 @@ export interface Expense extends Schedule {
 }
 
 export type SpendingCategory = 'groceries' | 'restaurants' | 'transport' | 'health' | 'leisure'
-  | 'clothing' | 'home' | 'children' | 'cash' | 'other';
+  | 'clothing' | 'home' | 'children' | 'cash' | 'pets' | 'gifts' | 'beauty' | 'travel' | 'other';
 
 export interface Envelope {
   id: string;
@@ -166,6 +167,10 @@ export interface Goal {
   targetDate?: string; // ISO date
   weeklyContribution?: number;
   monthlyContribution?: number;
+  /** L'épargne reste sur le compte courant : elle fait partie du solde, Capiste la réserve. */
+  onCurrentAccount?: boolean;
+  /** Mois (AAAA-MM) de la dernière mise de côté indiquée avec « J'ai mis de côté ». */
+  lastContributionMonth?: string;
   status: GoalStatus;
   notes?: string;
 }
@@ -208,9 +213,34 @@ export interface BudgetSummary {
     horizon: number;
     dailyBalances: DailyBalance[];
     annualProvision: number;
+    /** Épargne des objectifs gardée sur le compte courant, comprise dans reservedAmount. */
+    goalSavings: number;
+    /** Dont la mise de côté du mois en cours, pas encore faite. */
+    goalThisMonth: number;
     reservedAmount: number;
     optimisticAvailable: number;
+    /** Le vrai disponible ligne par ligne, du solde au montant dépensable (voir lib/available-breakdown.ts). */
+    breakdown: AvailableBreakdown;
+    /** Prochaine rentrée certaine de la période (jamais une rentrée en retard ni incertaine). */
+    nextIncome?: { label: string; amount: number; date: string };
   };
+}
+
+/** Montants en euros ; les sorties sont positives (elles se lisent « moins … »). */
+export interface AvailableBreakdown {
+  /** Jour le plus serré de la période : c'est là que le calcul s'arrête. */
+  lowestDate: string;
+  balance: number;
+  incomes: number;
+  charges: number;
+  envelopes: number;
+  savingsTransfers: number;
+  /** Solde prévu au jour le plus serré. */
+  lowest: number;
+  safetyReserve: number;
+  annualProvision: number;
+  goalSavings: number;
+  available: number;
 }
 
 // Advice

@@ -5,13 +5,12 @@ import { useApp } from '@/lib/context/AppContext';
 import { calculateBudgetSummary, formatCurrency } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
 import { parseAmountInput } from '@/lib/money';
-import { envelopesOf, replaceExpenseWithEnvelope, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
+import { envelopesOf, replaceExpenseWithEnvelope, selectableSpendingCategories, spendingCategoryLabels, spendingsOf, withCurrent } from '@/lib/spending';
 import type { Envelope, SpendingCategory } from '@/lib/types';
 import FormField from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Modal from '@/components/ui/Modal';
 
-const categories = Object.keys(spendingCategoryLabels) as SpendingCategory[];
 const inputClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
 
 export default function EnvelopeForm({ initial, prefill, onClose }: {
@@ -21,7 +20,7 @@ export default function EnvelopeForm({ initial, prefill, onClose }: {
 }) {
   const state = useApp();
   const used = envelopesOf(state);
-  const choices = initial ? [initial.category] : categories.filter(
+  const choices = initial ? [initial.category] : withCurrent(selectableSpendingCategories, prefill?.category).filter(
     (category) => !used.some((envelope) => envelope.category === category),
   );
   const firstCategory = initial?.category ?? prefill?.category;

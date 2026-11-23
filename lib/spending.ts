@@ -11,13 +11,29 @@ export const spendingCategoryLabels: Record<SpendingCategory, string> = {
   restaurants: 'Restaurants et snacks',
   transport: 'Transport et carburant',
   health: 'Santé et pharmacie',
-  leisure: 'Loisirs et sorties',
+  leisure: 'Loisirs, sport et sorties',
   clothing: 'Vêtements',
   home: 'Maison et bricolage',
   children: 'Enfants (quotidien)',
   cash: 'Retrait d’espèces',
+  pets: 'Animaux',
+  gifts: 'Cadeaux et fêtes',
+  beauty: 'Soins et beauté',
+  travel: 'Vacances et voyages',
   other: 'Autre',
 };
+
+/**
+ * Catégories proposées à la saisie ; celle d'une dépense existante reste toujours affichée (voir withCurrent).
+ * Une NOUVELLE catégorie s'ajoute en deux mises en ligne : d'abord lue (lib/budget-schema.ts) en étant exclue
+ * d'ici, puis proposée une fois la version qui la lit partout (une version plus ancienne refuserait le budget).
+ */
+export const selectableSpendingCategories = Object.keys(spendingCategoryLabels) as SpendingCategory[];
+
+/** Ajoute la catégorie actuelle d'un élément modifié, pour ne jamais la changer en silence. */
+export function withCurrent<T extends string>(list: readonly T[], current?: T | '' | null): T[] {
+  return current && !list.includes(current) ? [...list, current] : [...list];
+}
 
 export const envelopesOf = (state: AppState) => state.envelopes ?? [];
 export const spendingsOf = (state: AppState) => state.spendings ?? [];

@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { ChartPie, HandCoins, Plus } from 'lucide-react';
 import { CompactRows, DetailFact, DetailSheet, type CompactRow } from '@/components/budget/CompactRows';
 import EnvelopeForm from '@/components/spending/EnvelopeForm';
-import NewSpendingAction from '@/components/spending/NewSpendingAction';
 import QuickSpendingSheet from '@/components/spending/QuickSpendingSheet';
 import SpendingMonthSelector, { formatSpendingMonth } from '@/components/spending/SpendingMonthSelector';
 import { spendingCategoryIcons } from '@/components/spending/category-icons';
@@ -16,7 +15,7 @@ import { formatCurrency, formatDate } from '@/lib/budget-calculations';
 import { useApp } from '@/lib/context/AppContext';
 import { spentInMonth } from '@/lib/envelopes';
 import { fromCents, toCents } from '@/lib/money';
-import { envelopesOf, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
+import { envelopesOf, selectableSpendingCategories, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
 import type { Envelope, Spending } from '@/lib/types';
 import { householdCopy, householdMessages } from '@/lib/household-copy';
 import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
@@ -96,9 +95,8 @@ export default function SpendingPage() {
 
   return (
     <div className={`space-y-4 px-4 py-4 ${lastAddedSpendingId ? 'pb-28' : ''}`}>
-      <header className="flex flex-wrap items-center justify-between gap-2">
+      <header>
         <h1 className="text-xl font-bold text-gray-900">Dépenses du mois</h1>
-        <NewSpendingAction />
       </header>
       {storageBlocked && (
         <AlertBanner variant="warning" title="Stockage indisponible">
@@ -109,7 +107,7 @@ export default function SpendingPage() {
       <section aria-labelledby="enveloppes" className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="enveloppes" className="font-semibold text-slate-900">Enveloppes</h2>
-          <button type="button" disabled={storageBlocked || envelopes.length >= Object.keys(spendingCategoryLabels).length}
+          <button type="button" disabled={storageBlocked || envelopes.length >= selectableSpendingCategories.length}
             onClick={() => setPanel({ type: 'new-envelope' })}
             className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-50">
             <Icon icon={Plus} /> Créer une enveloppe
@@ -129,8 +127,9 @@ export default function SpendingPage() {
             <CompactRows rows={rows} onOpen={(id) => setPanel({ type: 'spending', id })} />
           </div>
         ))}
-        {byDay.size === 0 && <p className="text-sm text-slate-600">Aucune dépense encodée ce mois-ci.</p>}
-        <NewSpendingAction showTrigger={byDay.size === 0} />
+        {byDay.size === 0 && (
+          <p className="text-sm text-slate-600">Aucune dépense encodée ce mois-ci. Touche « Dépense » en bas de l’écran pour en ajouter une.</p>
+        )}
       </section>
 
       <Link href="/analyse"

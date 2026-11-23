@@ -1,4 +1,4 @@
-import { Baby, Banknote, Car, Cross, Ellipsis, House, Shirt, ShoppingBasket, Ticket, Utensils, type LucideIcon } from 'lucide-react';
+import { Baby, Banknote, Car, Cross, Ellipsis, Gift, House, PawPrint, Plane, Shirt, ShoppingBasket, Sparkles, Ticket, Utensils, type LucideIcon } from 'lucide-react';
 import type { SpendingCategory } from '@/lib/types';
 
 export const spendingCategoryIcons: Record<SpendingCategory, LucideIcon> = {
@@ -11,5 +11,9 @@ export const spendingCategoryIcons: Record<SpendingCategory, LucideIcon> = {
   home: House,
   children: Baby,
   cash: Banknote,
+  pets: PawPrint,
+  gifts: Gift,
+  beauty: Sparkles,
+  travel: Plane,
   other: Ellipsis,
 };
