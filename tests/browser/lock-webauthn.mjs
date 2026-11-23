@@ -7,7 +7,7 @@ import { after, before, test } from 'node:test';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const baseURL = process.env.BOUSSOLE_TEST_URL ?? 'http://localhost:3000';
 const pin = '684219';
-const fallbackMessage = "Le téléphone n'a pas confirmé. Entre ton code Boussole.";
+const fallbackMessage = "Le téléphone n'a pas confirmé. Entre ton code Capiste.";
 let browser;
 
 before(async () => {
@@ -46,7 +46,7 @@ async function fixture(t) {
     },
   });
   const button = (name) => page.getByRole('button', { name, exact: true });
-  const locked = page.getByRole('heading', { name: 'Boussole est verrouillé' });
+  const locked = page.getByRole('heading', { name: 'Capiste est verrouillé' });
   const settings = page.getByRole('heading', { name: 'Compte et sécurité' });
 
   await page.goto('/synchronisation');
@@ -68,7 +68,7 @@ async function fixture(t) {
   };
 }
 
-test('Le verrou demande WebAuthn au lancement, sans appui dans Boussole', async (t) => {
+test('Le verrou demande WebAuthn au lancement, sans appui dans Capiste', async (t) => {
   const { page, settings, locked, button, count, waitForCount } = await fixture(t);
   await page.reload();
   await waitForCount(1);
@@ -124,7 +124,7 @@ test('Une absence annule la demande et le retour du verrou la relance une seule 
   await waitForCount(2);
   await locked.waitFor();
   assert.equal(await count(), 2);
-  await button('Utiliser mon code Boussole').click();
+  await button('Utiliser mon code Capiste').click();
   await page.waitForFunction(() => document.activeElement?.id === 'lock-pin');
   assert.equal(await page.evaluate(() => window.phoneRequests[1].signal?.aborted), true);
   assert.equal(await count(), 2);

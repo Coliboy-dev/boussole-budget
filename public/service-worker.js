@@ -11,9 +11,12 @@ const pages = new Set([
 const appAssets = [
   '/favicon.ico',
   '/manifest.webmanifest',
-  '/icons/boussole-180.png',
-  '/icons/boussole-192.png',
-  '/icons/boussole-512.png',
+  '/icons/capiste-180.png',
+  '/icons/capiste-192.png',
+  '/icons/capiste-512.png',
+  '/icons/capiste-maskable-192.png',
+  '/icons/capiste-maskable-512.png',
+  '/brand/logo-capiste.svg',
 ];
 
 async function prepareOfflinePages() {

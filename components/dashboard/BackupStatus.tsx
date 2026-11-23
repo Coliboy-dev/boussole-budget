@@ -17,21 +17,21 @@ export default function BackupStatus({ lastBackupDate, today, hasBudget }: Props
   return (
     <section
       aria-labelledby="backup-status-title"
-      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-2xl border px-3 py-2 ${remind ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-white'}`}
+      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-[19px] border px-4 py-3 ${remind ? 'border-cap-warning-text/25 bg-cap-warning-soft' : 'border-cap-border bg-cap-surface'}`}
     >
       <div>
-        <h2 id="backup-status-title" className="text-sm font-semibold text-gray-900">Dernière sauvegarde exportée</h2>
-        <p className="text-xs text-gray-700">
+        <h2 id="backup-status-title" className="text-sm font-semibold text-cap-text">Dernière sauvegarde exportée</h2>
+        <p className="text-xs text-cap-text-muted">
           {date ? <time dateTime={date}>{formatDate(date)}</time> : 'Aucun export enregistré'}
         </p>
         {remind && (
-          <p className="mt-1 text-xs font-medium text-amber-900">
+          <p className="mt-1 text-xs font-medium text-cap-warning-text">
             {date ? 'Pense à exporter une nouvelle copie de ton budget.' : 'Pense à exporter une première copie de ton budget.'}
           </p>
         )}
       </div>
       <Link href="/sauvegarde" aria-label="Sauvegarder ou restaurer le budget"
-        className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-teal-800 underline">
+        className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-cap-primary-text underline">
         Sauvegarder
       </Link>
     </section>

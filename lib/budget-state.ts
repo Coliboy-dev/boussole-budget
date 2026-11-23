@@ -149,7 +149,7 @@ function parseBudgetJSON(contents: string): unknown {
 export function deserializeStoredBudget(stored: string): { budget: AppState; lastBackupDate: string | null } {
   const value = parseBudgetJSON(stored);
   if (!value || typeof value !== 'object' || !('version' in value) || !('state' in value)) {
-    throw new Error('Ce fichier ne contient pas de sauvegarde Boussole Budget.');
+    throw new Error('Ce fichier ne contient pas de sauvegarde Capiste.');
   }
   if (value.version !== BUDGET_VERSION) throw new Error('Cette version de sauvegarde n’est pas prise en charge.');
 

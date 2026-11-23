@@ -76,11 +76,11 @@ export default function BalanceRows() {
   }
 
   return (
-    <div className="divide-y divide-slate-200/70">
+    <div className="divide-y divide-cap-border">
       <div className="px-4 py-2">
         {step === 'amount' && (
           <form onSubmit={submitAmount} onChange={validation.clearFieldError} noValidate className="py-1">
-            <label htmlFor="bank-balance" className="text-sm font-semibold text-slate-900">Solde bancaire actuel</label>
+            <label htmlFor="bank-balance" className="text-sm font-semibold text-cap-text">Solde bancaire actuel</label>
             <div className="mt-1.5 flex items-start gap-2">
               <div className="min-w-0 flex-1">
                 <input
@@ -96,22 +96,22 @@ export default function BalanceRows() {
                   aria-invalid={validation.errors.balance ? true : undefined}
                   aria-describedby={validation.errors.balance ? 'bank-balance-error' : 'bank-balance-hint'}
                   placeholder="0,00"
-                  className="w-full rounded-xl border border-teal-300 bg-white px-3 py-2 text-lg font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  className="w-full rounded-xl border border-cap-border-strong bg-white px-3 py-2 text-lg font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-cap-focus"
                 />
                 {validation.errors.balance ? (
-                  <p id="bank-balance-error" role="alert" className="mt-1 text-xs text-red-700">{validation.errors.balance}</p>
+                  <p id="bank-balance-error" role="alert" className="mt-1 text-xs text-cap-danger-text">{validation.errors.balance}</p>
                 ) : (
-                  <p id="bank-balance-hint" className="mt-1 text-xs text-slate-600">Le montant affiché par ta banque aujourd’hui.</p>
+                  <p id="bank-balance-hint" className="mt-1 text-xs text-cap-text-muted">Le montant affiché par ta banque aujourd’hui.</p>
                 )}
               </div>
-              <button type="submit" className="rounded-xl bg-teal-700 px-4 text-sm font-bold text-white hover:bg-teal-800">
+              <button type="submit" className="rounded-xl bg-cap-primary px-4 text-sm font-bold text-cap-on-primary hover:bg-cap-primary-strong">
                 OK
               </button>
               <button
                 type="button"
                 aria-label="Annuler la modification du solde"
                 onClick={() => setStep('view')}
-                className="flex items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+                className="flex items-center justify-center rounded-xl bg-cap-background text-cap-text hover:bg-cap-border"
               >
                 <Icon icon={X} className="size-5" />
               </button>
@@ -128,14 +128,14 @@ export default function BalanceRows() {
             className="space-y-3 py-1"
           >
             <fieldset>
-              <legend className="text-sm font-semibold text-slate-900">
+              <legend className="text-sm font-semibold text-cap-text">
                 Qu’est-ce qui est déjà passé sur ton compte ?
               </legend>
-              <p className="mt-1 text-xs text-slate-600">
+              <p className="mt-1 text-xs text-cap-text-muted">
                 Coche ce que ton solde de {formatCurrency(amount)} contient déjà. Ces montants ne seront pas déduits une seconde fois.
                 Ce qui n’est pas coché reste à payer.
               </p>
-              <ul className="mt-2 divide-y divide-slate-200/70 rounded-xl border border-slate-200 bg-white">
+              <ul className="mt-2 divide-y divide-cap-border rounded-xl border border-cap-border bg-white">
                 {passed.map((item) => {
                   const key = keyOf(item);
                   const id = `passed-${key.replace(/[^a-zA-Z0-9-]/g, '-')}`;
@@ -147,15 +147,15 @@ export default function BalanceRows() {
                           type="checkbox"
                           checked={checked.has(key)}
                           onChange={() => toggle(key)}
-                          className="size-5 shrink-0 accent-teal-700"
+                          className="size-5 shrink-0 accent-[var(--cap-primary)]"
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium text-slate-900">{item.label}</span>
-                          <span className="block text-xs text-slate-600">
+                          <span className="block text-sm font-medium text-cap-text">{item.label}</span>
+                          <span className="block text-xs text-cap-text-muted">
                             Prévu le <time dateTime={item.dueDate}>{formatShortDate(item.dueDate)}</time>
                           </span>
                         </span>
-                        <span className={`shrink-0 text-sm font-semibold tabular-nums ${item.amountCents > 0 ? 'text-green-800' : 'text-slate-900'}`}>
+                        <span className={`shrink-0 text-sm font-semibold tabular-nums ${item.amountCents > 0 ? 'text-cap-success-text' : 'text-cap-text'}`}>
                           {item.amountCents > 0 ? '+' : ''}{formatCurrency(fromCents(item.amountCents))}
                         </span>
                       </label>
@@ -165,13 +165,13 @@ export default function BalanceRows() {
               </ul>
             </fieldset>
             <div className="flex flex-wrap gap-2">
-              <button type="submit" className="rounded-xl bg-teal-700 px-4 text-sm font-bold text-white hover:bg-teal-800">
+              <button type="submit" className="rounded-xl bg-cap-primary px-4 text-sm font-bold text-cap-on-primary hover:bg-cap-primary-strong">
                 Enregistrer le solde
               </button>
               <button
                 type="button"
                 onClick={() => setStep('amount')}
-                className="rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800"
+                className="rounded-xl border border-cap-border-strong bg-cap-surface px-4 text-sm font-semibold text-cap-text"
               >
                 Retour
               </button>
@@ -182,10 +182,10 @@ export default function BalanceRows() {
         {step === 'view' && (
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
-              <Icon icon={Landmark} className="size-5 shrink-0 text-teal-700" />
+              <Icon icon={Landmark} className="size-5 shrink-0 text-cap-primary-text" />
               <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900">Solde bancaire</p>
-                <p className="text-xs text-slate-600">
+                <p className="text-sm font-medium text-cap-text">Solde bancaire</p>
+                <p className="text-xs text-cap-text-muted">
                   {balanceDate
                     ? <>Au <time dateTime={balanceDate}>{formatShortDate(balanceDate)}</time></>
                     : 'À mettre à jour depuis ton compte'}
@@ -193,14 +193,14 @@ export default function BalanceRows() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <span className="text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(currentBalance)}</span>
+              <span className="text-sm font-semibold tabular-nums text-cap-text">{formatCurrency(currentBalance)}</span>
               <button
                 type="button"
                 onClick={startEdit}
                 aria-label={freshness.stale ? 'Mettre à jour le solde bancaire' : 'Modifier le solde bancaire'}
                 className={freshness.stale
-                  ? 'inline-flex items-center gap-1 rounded-xl bg-teal-700 px-3 text-xs font-semibold text-white hover:bg-teal-800'
-                  : 'inline-flex items-center gap-1 rounded-xl border border-teal-200 bg-teal-50 px-3 text-xs font-semibold text-teal-800 hover:bg-teal-100'}
+                  ? 'inline-flex items-center gap-1 rounded-xl bg-cap-primary px-3 text-xs font-semibold text-cap-on-primary hover:bg-cap-primary-strong'
+                  : 'inline-flex items-center gap-1 rounded-xl border border-cap-border bg-cap-surface-soft px-3 text-xs font-semibold text-cap-primary-text hover:bg-cap-border'}
               >
                 <Icon icon={freshness.stale ? RefreshCw : Pencil} className="size-3.5" />
                 {freshness.stale ? 'Mettre à jour' : 'Modifier'}
@@ -209,7 +209,7 @@ export default function BalanceRows() {
           </div>
         )}
         {step === 'view' && freshness.stale && freshness.days !== null && (
-          <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900">
+          <p className="mt-1.5 rounded-lg bg-cap-warning-soft px-2.5 py-1.5 text-xs font-medium text-cap-warning-text">
             Saisi {ageLabel(freshness.days)}
             {freshness.passedSince > 0 && (
               <> · {freshness.passedSince} {freshness.passedSince === 1 ? 'échéance est passée' : 'échéances sont passées'} depuis</>
@@ -217,19 +217,19 @@ export default function BalanceRows() {
             . Recopie le solde de ta banque pour un disponible juste.
           </p>
         )}
-        {step === 'view' && feedback && <p role="status" className="mt-1 text-xs text-green-800">{feedback}</p>}
+        {step === 'view' && feedback && <p role="status" className="mt-1 text-xs text-cap-success-text">{feedback}</p>}
       </div>
       <Link
         href={household ? '/foyer#reserve' : '/reglages#reserve'}
-        className="flex min-h-14 items-center justify-between gap-3 px-4 py-2 hover:bg-white/70"
+        className="flex min-h-14 items-center justify-between gap-3 px-4 py-2 hover:bg-cap-surface-soft"
       >
-        <span className="flex items-center gap-2.5 text-sm font-medium text-slate-900">
-          <Icon icon={ShieldCheck} className="size-5 text-teal-700" />
+        <span className="flex items-center gap-2.5 text-sm font-medium text-cap-text">
+          <Icon icon={ShieldCheck} className="size-5 text-cap-primary-text" />
           Réserve de sécurité
         </span>
-        <span className="flex items-center gap-1 text-sm font-semibold tabular-nums text-slate-900">
+        <span className="flex items-center gap-1 text-sm font-semibold tabular-nums text-cap-text">
           {formatCurrency(userProfile.safetyReserve)}
-          <Icon icon={ChevronRight} className="size-4 text-slate-500" />
+          <Icon icon={ChevronRight} className="size-4 text-cap-text-muted" />
         </span>
       </Link>
     </div>

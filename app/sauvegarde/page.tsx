@@ -28,7 +28,7 @@ export default function SauvegardePage() {
       const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = `boussole-budget-${exportDate}.json`;
+      link.download = `capiste-${exportDate}.json`;
       document.body.append(link);
       try {
         link.click();
