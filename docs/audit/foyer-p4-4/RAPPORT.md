@@ -43,6 +43,18 @@ Côté client, les transferts ne créditent que si l'auteur de la réponse, fix�
 
 **État de la production** (lecture seule, clé publique) : les migrations `households` et `household_writes` sont appliquées. `author_member_id`, `editor_member_id` et `list_my_households` n'existent pas encore.
 
+## Constats complémentaires (dossier d'audit de ChatGPT, vérifiés dans le code)
+
+1. **Le budget Personnel devient illisible pour l'ancien build.** Les miroirs créés par la #32 utilisent le type de revenu `household_transfer` et la catégorie de dépense `household`, que le schéma de `main` refuse (`lib/budget-schema.ts`). Un compte qui a reçu un miroir ne s'ouvre plus avec un build antérieur à la #32, même restauré depuis sa copie en ligne. Comme Preview et production partagent la même base, cela vaut pour tout compte de test utilisé sur une préversion Foyer.
+2. **Le Foyer de l'ancien client tombe dès le premier élément d'un type inconnu.** Le décodeur de `main` refuse `transfer-response`, et `decodeHouseholdView` charge tout d'un bloc (`Promise.all`) : un seul élément refusé bloque toute la vue.
+
+Conséquences sur ce rapport :
+- le retour arrière par l'application n'est sûr **qu'avant la première écriture de la PR 4** ;
+- entre les migrations et la fusion, n'utiliser **aucune** fonction de la PR 4 sur une préversion ;
+- recommandation pour la suite (non bloquante) : rendre la lecture tolérante, en ignorant et signalant un élément illisible ou d'un type inconnu au lieu de rejeter tout le Foyer ou tout le budget.
+
+La stratégie de compatibilité proposée par ChatGPT (contrat historique conservé, `pull_records` versionné, écritures gelées, build de secours) protège des anciens clients qui n'existent aujourd'hui que sur les préversions. Elle ne se justifie que si un vrai foyer pilote utilise déjà le Foyer sur une préversion.
+
 ## Remarques non bloquantes
 
 1. `service_role` garde l'exécution d'`upsert_records`, héritée de la migration de `main`. C'est sans effet : c'est une clé serveur, et `auth.uid()` y est vide. Les deux nouvelles fonctions la retirent ; on peut aligner plus tard.
@@ -61,7 +73,7 @@ Côté client, les transferts ne créditent que si l'auteur de la réponse, fix�
 
    À partir de là, le Foyer est indisponible sur les préversions qui n'ont pas la #32. La production ne change pas.
 4. **Contrôles immédiats en lecture seule** avec la clé publique : `household_records?select=author_member_id` répond 401/42501 (et non plus 42703), et `rpc/list_my_households` répond 401 (et non plus 404).
-5. **Fusion de la #32** dans la foulée. Le déploiement de production ne montre aucun changement, puisque le drapeau est désactivé.
+5. **Fusion de la #32** dans la foulée, sans utiliser entre-temps aucune fonction de la PR 4 sur une préversion. Le déploiement de production ne montre aucun changement, puisque le drapeau est désactivé.
 6. **Essai sur la préversion de `main`** avec deux comptes de test :
    - liste des foyers ;
    - avance ;
@@ -74,7 +86,8 @@ Les migrations passent avant la fusion. On vérifie ainsi le schéma avant d'env
 
 ## Retour arrière
 
-- **Application** : *Instant Rollback* Vercel vers le déploiement précédent, ou revert du commit de fusion par PR (`git revert -m 1`). Le Foyer n'étant pas en production, aucun utilisateur de production n'est concerné.
+- **Application, avant toute écriture de la PR 4** : *Instant Rollback* Vercel vers le déploiement précédent, ou revert du commit de fusion par PR (`git revert -m 1`).
+- **Application, après une écriture de la PR 4** : **pas de retour vers un build antérieur à la #32.** Les budgets Personnel qui contiennent un miroir y deviendraient illisibles. Corriger en avant, ou désactiver le Foyer en gardant les lecteurs de la #32.
 - **Base**, uniquement si l'ancien Foyer doit refonctionner sur les préversions : exécuter `retour-arriere.sql` (testé).
   - Il rétablit la lecture complète des deux tables et l'ancienne forme de `pull_records`.
   - Il **ne supprime aucune donnée** : colonnes d'auteur, exclusivité, déclencheur et `list_my_households` restent en place.
