@@ -140,10 +140,13 @@ function SavedBudgetDashboard() {
             Simuler un achat
           </Link>
         )}
-        <Link href="/projection" className={`${quickActionTile} bg-cap-warning-soft text-cap-warning-text hover:bg-cap-border`}>
-          <Icon icon={CalendarDays} className="size-6" />
-          Voir les échéances
-        </Link>
+        {/* Sans compte commun, le foyer n'a pas d'écran Échéances (même règle que la navigation). */}
+        {joint && (
+          <Link href="/projection" className={`${quickActionTile} bg-cap-warning-soft text-cap-warning-text hover:bg-cap-border`}>
+            <Icon icon={CalendarDays} className="size-6" />
+            Voir les échéances
+          </Link>
+        )}
       </nav>
 
       {household && joint && <HouseholdContributionList />}
