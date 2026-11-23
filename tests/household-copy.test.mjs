@@ -18,6 +18,8 @@ const examples = {
   transferConfirmedBy: [['Ancien membre'], 'Confirmé par Ancien membre'],
   sharedWith: [['Sam'], 'Ce foyer est partagé avec Sam.'],
   stopSharingWith: [['Sam'], 'Arrêter le partage avec Sam'],
+  copyTitle: [['23 nov.'], 'Copie en lecture seule, arrêtée le 23 nov'],
+  copyBalanceDate: [['23 nov.'], 'au 23 nov'],
   formerHouseholdSince: [['23 nov.'], 'Accès au foyer terminé le 23 nov.'],
   // La date abrégée garde un seul point final.
   contributionMirrorOffer: [[60000, 'monthly', false], `Versement au compte commun de ${currency(60000)} par mois. L’ajouter à ton budget personnel ?`],

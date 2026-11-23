@@ -5,12 +5,13 @@ import { useState, type FormEvent } from 'react';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 import { HouseholdContributionEditor } from '@/components/household/HouseholdContributions';
 import HouseholdSharing from '@/components/household/HouseholdSharing';
+import FormerHouseholdCopy from '@/components/household/FormerHouseholdCopy';
 import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
 import Card from '@/components/ui/Card';
 import { useApp } from '@/lib/context/AppContext';
 import { formatShortDate } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
-import { householdCopy, householdMessages } from '@/lib/household-copy';
+import { householdCopy } from '@/lib/household-copy';
 import { householdEnabled } from '@/lib/household-feature';
 
 const primary = 'inline-flex min-h-11 items-center rounded-xl bg-teal-700 px-4 text-sm font-semibold text-white focus-visible:ring-2 focus-visible:ring-teal-700 disabled:opacity-50';
@@ -28,7 +29,7 @@ export default function HouseholdPage() {
     <div className="space-y-4 px-4 py-4">
       <h1 className="text-xl font-bold text-slate-900">{householdCopy.household}</h1>
       {error && <p role="alert" className="text-sm text-rose-800">{error}</p>}
-      {userId && <FormerHouseholds former={directory.former ?? []} />}
+      {userId && <FormerHouseholds userId={userId} former={directory.former ?? []} />}
       {!userId ? (
         <Card className="space-y-3">
           <p>{householdCopy.signIn}</p>
@@ -120,17 +121,14 @@ function HouseholdReserve() {
   </Card></section>;
 }
 
-/** Foyers quittés : la synchronisation est arrêtée et la copie chiffrée reste sur l'appareil (consultation en 5b). */
-function FormerHouseholds({ former }: { former: { id: string; leftAt: string }[] }) {
+/** Foyers quittés : copie chiffrée gardée sur l'appareil, consultable, téléchargeable et effaçable, sans synchronisation. */
+function FormerHouseholds({ userId, former }: { userId: string; former: { id: string; leftAt: string }[] }) {
+  const { reloadStored } = useHouseholdWorkspace();
   if (former.length === 0) return null;
   return (
     <section aria-label={householdCopy.sharingDisabled} className="space-y-2">
       {former.map(({ id, leftAt }) => (
-        <Card key={id} className="space-y-1 text-sm">
-          <p role="status" className="font-semibold text-slate-900">{householdCopy.sharingDisabled}</p>
-          <p className="text-slate-700">{householdMessages.formerHouseholdSince(formatShortDate(leftAt.slice(0, 10)))}</p>
-          <p className="text-slate-700">{householdCopy.localCopyKept}</p>
-        </Card>
+        <FormerHouseholdCopy key={id} userId={userId} householdId={id} leftAt={leftAt} onErased={reloadStored} />
       ))}
     </section>
   );

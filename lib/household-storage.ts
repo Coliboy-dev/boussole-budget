@@ -64,6 +64,21 @@ async function entry<T>(id: string, update?: (value: T | undefined) => T): Promi
   }
 }
 
+/** Supprime une seule entrée du trousseau ; les autres (dont la clé du budget personnel) ne sont pas touchées. */
+async function removeEntry(id: string): Promise<void> {
+  const db = await openStore();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(store, 'readwrite');
+      transaction.objectStore(store).delete(id);
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error ?? new Error('Stockage du foyer indisponible.'));
+    });
+  } finally {
+    db.close();
+  }
+}
+
 export const emptyDirectory: HouseholdDirectory = { selected: null, households: [] };
 export const emptyHouseholdQueue: HouseholdQueue = { cursor: 0, confirmed: [], pending: [] };
 
@@ -120,4 +135,29 @@ export function updateHouseholdCache(
 ): Promise<StoredHousehold> {
   return entry<StoredHousehold>(`household-v1:${userId}:${householdId}`, update)
     .then((current) => current!);
+}
+
+/** Copie locale d'un ancien foyer : lue uniquement depuis l'appareil, jamais depuis le serveur. */
+export async function readFormerHouseholdCopy(userId: string, householdId: string): Promise<StoredHousehold | undefined> {
+  const directory = await householdDirectory(userId);
+  if (!directory.former?.some(({ id }) => id === householdId)) return undefined;
+  if (directory.households.some(({ id }) => id === householdId)) return undefined;
+  const copy = await readHouseholdCache(userId, householdId);
+  return copy && copy.userId === userId && copy.householdId === householdId ? copy : undefined;
+}
+
+/**
+ * Effacement volontaire de la copie d'un ancien foyer. Refusé pour un foyer encore actif.
+ * Seules l'entrée de ce foyer et sa ligne dans la liste des anciens foyers sont supprimées.
+ */
+export async function eraseFormerHouseholdCopy(userId: string, householdId: string): Promise<HouseholdDirectory> {
+  const directory = await householdDirectory(userId);
+  if (directory.households.some(({ id }) => id === householdId) || !directory.former?.some(({ id }) => id === householdId)) {
+    throw new Error('Seule la copie d’un ancien foyer peut être effacée.');
+  }
+  await removeEntry(`household-v1:${userId}:${householdId}`);
+  return householdDirectory(userId, (current) => {
+    const former = (current.former ?? []).filter(({ id }) => id !== householdId);
+    return { ...current, former: former.length > 0 ? former : undefined };
+  });
 }

@@ -37,6 +37,8 @@ interface Workspace {
   /** Quitte le foyer ouvert : la synchronisation s'arrête, la copie chiffrée reste sur l'appareil. */
   leave: () => Promise<void>;
   stopSharing: (memberId: string) => Promise<void>;
+  /** Relit l'annuaire local (après l'effacement d'une copie, par exemple), sans appel réseau. */
+  reloadStored: () => void;
 }
 
 const Context = createContext<Workspace>({
@@ -46,6 +48,7 @@ const Context = createContext<Workspace>({
   join: () => Promise.resolve(),
   leave: () => Promise.resolve(),
   stopSharing: () => Promise.resolve(),
+  reloadStored: () => undefined,
 });
 const noStoredSession = () => null;
 const storedSession = () => readStoredSessionUserId(localStorage);
@@ -184,7 +187,7 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
       userId, inHouseholdShell, active, memberId, directory,
       loading: !!userId && directoryView?.userId !== userId && errorView?.userId !== userId,
       error: userId && errorView?.userId === userId ? errorView.message : '',
-      create, select, join, leave, stopSharing,
+      create, select, join, leave, stopSharing, reloadStored: reloadStoredDirectory,
     }}>
       {active && userId && selected ? (
         <HouseholdBudget key={`${userId}:${selected}`} userId={userId} householdId={selected}
