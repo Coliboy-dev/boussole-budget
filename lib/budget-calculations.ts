@@ -1,5 +1,5 @@
 import { availableBreakdown, nextCertainIncome } from './available-breakdown.ts';
-import { goalReserveOnAccount } from './goals.ts';
+import { goalContributionCents, goalReserveOnAccount, remainingGoalCents, scheduleGoalContributions, type GoalContributionPlan } from './goals.ts';
 import type {
   Income,
   Expense,
@@ -12,9 +12,10 @@ import type {
   Frequency,
   GoalStatus,
   MediationStep,
+  Schedule,
   Spending,
 } from './types.ts';
-import { addDays, addMonths, daysBetween, isLocalDate, monthsBetween, parseLocalDate, todayInBrussels } from './local-date.ts';
+import { addDays, daysBetween, isLocalDate, parseLocalDate, todayInBrussels } from './local-date.ts';
 import { fromCents, monthlyCents, toCents } from './money.ts';
 import { forecastOccurrences } from './occurrences.ts';
 import { AVAILABLE_HORIZON, buildProjection } from './projection.ts';
@@ -23,26 +24,30 @@ export function toMonthlyAmount(amount: number, frequency: Frequency): number {
   return fromCents(monthlyCents(amount, frequency));
 }
 
-function monthlyIncomeCents(incomes: Income[]): number {
-  return incomes.reduce((sum, income) => sum + monthlyCents(income.amount, income.frequency), 0);
+function activeSchedule(schedule: Schedule, today: string): boolean {
+  return !isLocalDate(schedule.endDate) || schedule.endDate >= today;
 }
 
-function expenseMonthlyCents(expense: Expense): number {
-  return monthlyCents(expense.amount, expense.isRecurring ? expense.frequency : 'one_time');
+function monthlyIncomeCents(incomes: Income[], today: string): number {
+  return incomes.reduce((sum, income) => sum + (activeSchedule(income, today) ? monthlyCents(income.amount, income.frequency) : 0), 0);
 }
 
-function monthlyExpenseCents(expenses: Expense[]): number {
-  return expenses.reduce((sum, expense) => sum + expenseMonthlyCents(expense), 0);
+function expenseMonthlyCents(expense: Expense, today: string): number {
+  return expense.isRecurring && activeSchedule(expense, today) ? monthlyCents(expense.amount, expense.frequency) : 0;
+}
+
+function monthlyExpenseCents(expenses: Expense[], today: string): number {
+  return expenses.reduce((sum, expense) => sum + expenseMonthlyCents(expense, today), 0);
 }
 
 /**
  * Charges programmées ramenées au mois, par catégorie, du plus grand au plus petit.
  * Même normalisation que le résumé : la somme est égale à totalMonthlyExpenses.
  */
-export function monthlyChargesByCategory(expenses: Expense[]): { category: Expense['category']; cents: number }[] {
+export function monthlyChargesByCategory(expenses: Expense[], today = todayInBrussels()): { category: Expense['category']; cents: number }[] {
   const totals = new Map<Expense['category'], number>();
   for (const expense of expenses) {
-    totals.set(expense.category, (totals.get(expense.category) ?? 0) + expenseMonthlyCents(expense));
+    totals.set(expense.category, (totals.get(expense.category) ?? 0) + expenseMonthlyCents(expense, today));
   }
   return [...totals].filter(([, cents]) => cents > 0)
     .map(([category, cents]) => ({ category, cents }))
@@ -56,12 +61,12 @@ function monthlyDebtCents(debts: Debt[]): number {
   }, 0);
 }
 
-export function calculateTotalMonthlyIncome(incomes: Income[]): number {
-  return fromCents(monthlyIncomeCents(incomes));
+export function calculateTotalMonthlyIncome(incomes: Income[], today = todayInBrussels()): number {
+  return fromCents(monthlyIncomeCents(incomes, today));
 }
 
-export function calculateTotalMonthlyExpenses(expenses: Expense[]): number {
-  return fromCents(monthlyExpenseCents(expenses));
+export function calculateTotalMonthlyExpenses(expenses: Expense[], today = todayInBrussels()): number {
+  return fromCents(monthlyExpenseCents(expenses, today));
 }
 
 export function calculateTotalMonthlyDebts(debts: Debt[]): number {
@@ -75,11 +80,11 @@ export function hasUndatedPayments(expenses: Expense[], debts: Debt[]): boolean 
       && !isLocalDate(debt.nextDueDate));
 }
 
-function monthlyGoalContributionCents(goals: readonly Pick<Goal, 'monthlyContribution'>[]): number {
-  return goals.reduce((sum, goal) => sum + toCents(goal.monthlyContribution ?? 0), 0);
+function monthlyGoalContributionCents(goals: readonly GoalContributionPlan[]): number {
+  return goals.reduce((sum, goal) => sum + goalContributionCents(goal), 0);
 }
 
-export function calculateSavingsCapacity(monthlyMargin: number, goals: readonly Pick<Goal, 'monthlyContribution'>[]): number {
+export function calculateSavingsCapacity(monthlyMargin: number, goals: readonly GoalContributionPlan[]): number {
   return fromCents(Math.max(0, toCents(monthlyMargin) - monthlyGoalContributionCents(goals)));
 }
 
@@ -91,7 +96,7 @@ export function calculateGoalTotals(goals: Goal[]) {
   };
 }
 
-type GoalPlan = Pick<Goal, 'monthlyContribution' | 'targetAmount' | 'savedAmount' | 'targetDate'>;
+type GoalPlan = GoalContributionPlan & Pick<Goal, 'targetDate'>;
 
 export type GoalFeasibility =
   | { status: 'realistic'; reason?: never }
@@ -99,8 +104,8 @@ export type GoalFeasibility =
 
 export function assessGoalFeasibility(goal: GoalPlan, monthlySavings: number, today = todayInBrussels()): GoalFeasibility {
   const savings = toCents(monthlySavings);
-  const contribution = toCents(goal.monthlyContribution ?? 0);
-  const remaining = toCents(goal.targetAmount) - toCents(goal.savedAmount);
+  const contribution = goalContributionCents(goal);
+  const remaining = remainingGoalCents(goal);
   if (remaining <= 0) return { status: 'realistic' };
 
   if (savings <= 0) {
@@ -112,7 +117,7 @@ export function assessGoalFeasibility(goal: GoalPlan, monthlySavings: number, to
       reason: `Indique une mise de côté mensuelle pour évaluer cet objectif avec les ${formatCurrency(monthlySavings)} disponibles par mois.`,
     };
   }
-  if (contribution > savings * 0.8) {
+  if (contribution > savings - Math.ceil(savings / 5)) {
     const planned = `${formatCurrency(fromCents(contribution))}/mois`;
     const available = `${formatCurrency(monthlySavings)}/mois`;
     return {
@@ -130,9 +135,8 @@ export function assessGoalFeasibility(goal: GoalPlan, monthlySavings: number, to
       return { status: 'fragile', reason: `Il reste ${remainingAmount} à épargner et la date cible du ${target} est passée.` };
     }
 
-    let months = monthsBetween(today, goal.targetDate);
-    if (months > 0 && addMonths(today, months) > goal.targetDate) months -= 1;
-    const projected = contribution * months;
+    const projected = scheduleGoalContributions(goal, today, goal.targetDate)
+      .reduce((sum, { amountCents }) => sum + amountCents, 0);
     if (projected < remaining) {
       return {
         status: 'fragile',
@@ -148,6 +152,15 @@ export function calculateGoalFeasibility(goal: GoalPlan, monthlySavings: number,
   return assessGoalFeasibility(goal, monthlySavings, today).status;
 }
 
+/** Le diagnostic d’un objectif tient compte des mensualités des autres, avec la marge signée. */
+export function assessBudgetGoals(goals: readonly Goal[], monthlyMargin: number, today: string) {
+  const remainingCents = toCents(monthlyMargin) - monthlyGoalContributionCents(goals);
+  return goals.map((goal) => ({
+    goal,
+    feasibility: assessGoalFeasibility(goal, fromCents(remainingCents + goalContributionCents(goal)), today),
+  }));
+}
+
 export function calculateBudgetSummary(
   currentBalance: number,
   incomes: Income[],
@@ -159,12 +172,12 @@ export function calculateBudgetSummary(
   today = todayInBrussels(),
   { envelopes = [], spendings = [], balanceDate }: { envelopes?: Envelope[]; spendings?: Spending[]; balanceDate?: string } = {},
 ): BudgetSummary {
-  const totalMonthlyIncome = monthlyIncomeCents(incomes);
-  const totalMonthlyExpenses = monthlyExpenseCents(expenses);
+  const totalMonthlyIncome = monthlyIncomeCents(incomes, today);
+  const totalMonthlyExpenses = monthlyExpenseCents(expenses, today);
   const totalMonthlyDebts = monthlyDebtCents(debts);
   const totalMonthlyEnvelopes = envelopes.reduce((sum, envelope) => sum + toCents(envelope.monthlyAmount), 0);
-  const monthlyMargin = monthlyIncomeCents(incomes.filter((income) => income.isConfirmed))
-    - totalMonthlyExpenses - totalMonthlyDebts - totalMonthlyEnvelopes;
+  const monthlyMargin = fromCents(monthlyIncomeCents(incomes.filter((income) => income.isConfirmed), today)
+    - totalMonthlyExpenses - totalMonthlyDebts - totalMonthlyEnvelopes);
 
   const forecast = buildProjection(currentBalance, incomes, expenses, debts, childExpenses, safetyReserve, {
     today,
@@ -187,7 +200,8 @@ export function calculateBudgetSummary(
     totalMonthlyChildExpenses: 0,
     safetyReserve,
     trueAvailable: empty ? 0 : forecast.available,
-    savingsCapacity: calculateSavingsCapacity(fromCents(monthlyMargin), goals),
+    monthlyMargin,
+    savingsCapacity: calculateSavingsCapacity(monthlyMargin, goals),
     emptyBudget: empty,
     riskLevel: empty ? 'safe' : forecast.lowestRisk,
     availableForecast: {

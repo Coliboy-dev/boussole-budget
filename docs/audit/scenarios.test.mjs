@@ -423,12 +423,11 @@ test('P2-7 — un objectif fragile indique l’écart entre mise de côté et ca
 });
 
 test('P2-7 — un objectif est fragile si le délai laisse trop peu de versements', () => {
-  const goal = { targetAmount: 500, savedAmount: 400, monthlyContribution: 80, targetDate: '2027-01-19' };
-  // Le versement du 20 janvier est après l’échéance du 19. Les 400 € déjà épargnés
-  // réduisent le reste à 100 € et ne comptent pas une deuxième fois.
+  const goal = { targetAmount: 500, savedAmount: 300, monthlyContribution: 80, targetDate: '2027-01-19', lastContributionMonth: '2026-11' };
+  // Novembre est déjà fait. Les versements du 1er décembre et du 1er janvier couvrent 160 € sur les 200 € restants.
   const feasibility = assessGoalFeasibility(goal, 200, '2026-11-20');
   assert.equal(feasibility.status, 'fragile');
-  assert.match(feasibility.reason, /80,00\s*€.*100,00\s*€/);
+  assert.match(feasibility.reason, /160,00\s*€.*200,00\s*€/);
 });
 
 test('P2-7 — un objectif est à reporter sans capacité ou sans mise de côté', () => {

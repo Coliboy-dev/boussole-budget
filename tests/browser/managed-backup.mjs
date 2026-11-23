@@ -1,4 +1,4 @@
-// Build avec les inscriptions et les clés gérées activées. Les API sont simulées dans Chromium.
+// Build avec les inscriptions et les clés gérées activées. Exporte le même drapeau d’inscription pour les tests. Les API sont simulées dans Chromium.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
@@ -9,6 +9,7 @@ import { deriveKey, encryptText, newSalt } from '../../lib/cloud-crypto.ts';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const baseURL = process.env.BOUSSOLE_TEST_URL ?? 'http://localhost:3000';
 const origin = 'https://c0-test.supabase.test';
+const signupEnabled = process.env.NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED === 'true';
 const userId = '11111111-1111-4111-8111-111111111111';
 const material = Buffer.alloc(32, 93).toString('base64');
 const budgetKey = 'boussole-budget-v2';
@@ -161,7 +162,12 @@ test('le risque lié au mot de passe et à la messagerie figure dans la confiden
   const notice = page.getByText(/Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne/);
   await page.goto('/dashboard');
   await startGuestBudget(page);
-  await page.getByRole('link', { name: 'Sauvegarder en ligne', exact: true }).click();
+  const onlineBackup = page.getByRole('link', { name: 'Sauvegarder en ligne', exact: true });
+  if (!signupEnabled) {
+    assert.equal(await onlineBackup.count(), 0);
+    return;
+  }
+  await onlineBackup.click();
   await heading(page, 'Créer mon compte').waitFor();
   await notice.waitFor();
   await button(page, 'J’ai déjà un compte').click();
@@ -169,7 +175,7 @@ test('le risque lié au mot de passe et à la messagerie figure dans la confiden
   assert.equal(await notice.count(), 0);
 });
 
-test('inscription par code puis mot de passe, et connexion par mot de passe sur un autre appareil, sans code local imposé', async (t) => {
+test('inscription par code puis mot de passe, et connexion par mot de passe sur un autre appareil, sans code local imposé', { skip: !signupEnabled }, async (t) => {
   const copy = { otp: [], keyRequests: 0 };
   const first = await device(t, copy);
   await first.goto('/dashboard');
@@ -318,7 +324,7 @@ async function withAuthenticator(page) {
   return { cdp, authenticatorId };
 }
 
-test('Face ID et le code sont proposés une fois après la connexion, puis activés', async (t) => {
+test('Face ID et le code sont proposés une fois après la connexion, puis activés', { skip: !signupEnabled }, async (t) => {
   const copy = { otp: [], keyRequests: 0 };
   const page = await device(t, copy);
   const { cdp, authenticatorId } = await withAuthenticator(page);

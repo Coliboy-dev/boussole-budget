@@ -42,9 +42,9 @@ function BreakdownSegment({ label, amount, share, className }: {
 }
 
 function MonthBreakdown() {
-  const { incomes, summary } = useApp();
-  const certain = calculateTotalMonthlyIncome(incomes.filter((income) => income.isConfirmed));
-  const uncertain = calculateTotalMonthlyIncome(incomes.filter((income) => !income.isConfirmed));
+  const { incomes, summary, today } = useApp();
+  const certain = calculateTotalMonthlyIncome(incomes.filter((income) => income.isConfirmed), today);
+  const uncertain = calculateTotalMonthlyIncome(incomes.filter((income) => !income.isConfirmed), today);
   const charges = toCents(summary.totalMonthlyExpenses);
   const debts = toCents(summary.totalMonthlyDebts);
   const envelopes = toCents(summary.totalMonthlyEnvelopes);

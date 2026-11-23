@@ -4,6 +4,8 @@ import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import ProgressBar from '@/components/ui/ProgressBar';
 import { formatCurrency, formatShortDate, type GoalFeasibility } from '@/lib/budget-calculations';
+import { goalContributionCents, remainingGoalCents } from '@/lib/goals';
+import { fromCents, toCents } from '@/lib/money';
 import type { Goal, GoalStatus } from '@/lib/types';
 
 interface GoalCardProps {
@@ -26,17 +28,17 @@ const statusConfig: Record<
     progressColor: 'primary' | 'success' | 'warning' | 'danger' | 'accent';
   }
 > = {
-  realistic: { label: 'Réalisable', variant: 'success', progressColor: 'success' },
+  realistic: { label: 'Réaliste', variant: 'success', progressColor: 'success' },
   fragile: { label: 'Fragile', variant: 'warning', progressColor: 'warning' },
   to_postpone: { label: 'À reporter', variant: 'neutral', progressColor: 'primary' },
 };
 
 export default function GoalCard({ goal, feasibility, onEdit, onDelete, onContribute, currentMonth, transferDeducted = true }: GoalCardProps) {
   const status = statusConfig[feasibility.status];
-  const percent =
-    goal.targetAmount > 0 ? Math.min(100, (goal.savedAmount / goal.targetAmount) * 100) : 0;
-  const remaining = goal.targetAmount - goal.savedAmount;
-  const contribution = Math.min(goal.monthlyContribution ?? 0, Math.max(0, remaining));
+  const targetCents = toCents(goal.targetAmount);
+  const percent = targetCents > 0 ? Math.min(100, (toCents(goal.savedAmount) / targetCents) * 100) : 0;
+  const remaining = fromCents(remainingGoalCents(goal));
+  const contribution = fromCents(goalContributionCents(goal));
   const contributedThisMonth = goal.lastContributionMonth !== undefined && goal.lastContributionMonth === currentMonth;
 
   return (
@@ -69,9 +71,9 @@ export default function GoalCard({ goal, feasibility, onEdit, onDelete, onContri
 
       <div className="mt-3 flex items-center justify-between text-xs text-gray-600 flex-wrap gap-2">
         <span>Il reste {formatCurrency(remaining)}</span>
-        {goal.monthlyContribution && (
+        {contribution > 0 && (
           <span className="font-medium text-teal-800">
-            + {formatCurrency(goal.monthlyContribution)}/mois
+            + {formatCurrency(contribution)}/mois
           </span>
         )}
       </div>

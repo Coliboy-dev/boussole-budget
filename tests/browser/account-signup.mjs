@@ -1,4 +1,4 @@
-// Build avec NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED=true et la même origine Supabase simulée que account-guard.mjs.
+// Exporte le même NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED qu’au build. Utilise l’API simulée de account-guard.mjs.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
@@ -9,6 +9,7 @@ import { decryptText, deriveKey, encryptText, fingerprint, newSalt } from '../..
 const { chromium } = createRequire(import.meta.url)('playwright');
 const baseURL = process.env.BOUSSOLE_TEST_URL ?? 'http://localhost:3000';
 const origin = 'https://c0-test.supabase.test';
+const signupEnabled = process.env.NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED === 'true';
 const userId = '11111111-1111-4111-8111-111111111111';
 const authKey = 'boussole-auth';
 const ownerKey = 'boussole-budget-owner-v1';
@@ -104,7 +105,12 @@ test('C1 — le budget se crée avant de choisir la sauvegarde en ligne', async 
   assert.equal(await button(page, 'Voir mon tableau de bord').count(), 1);
   assert.equal(await page.getByRole('link', { name: /^Verrouiller (Boussole|Capiste) avec un code$/ }).count(), 1);
 
-  await page.getByRole('link', { name: 'Sauvegarder en ligne', exact: true }).click();
+  const onlineBackup = page.getByRole('link', { name: 'Sauvegarder en ligne', exact: true });
+  if (!signupEnabled) {
+    assert.equal(await onlineBackup.count(), 0);
+    return;
+  }
+  await onlineBackup.click();
   await heading(page, 'Créer mon compte').waitFor();
   assert.equal(await stored(page, budgetKey), budget);
   assert.deepEqual(authRequests, []);
@@ -114,7 +120,7 @@ test('C1 — le budget se crée avant de choisir la sauvegarde en ligne', async 
   assert.deepEqual(authRequests.map((request) => request.create_user), [true]);
 });
 
-test('C1 — inscription explicite puis réponse du premier coffre perdue, dépense ajoutée et rechargement', { timeout: 40000 }, async (t) => {
+test('C1 — inscription explicite puis réponse du premier coffre perdue, dépense ajoutée et rechargement', { timeout: 40000, skip: !signupEnabled }, async (t) => {
   const { context, page } = await fixture(t);
   let vault;
   let readBarrier;
@@ -340,7 +346,7 @@ test('C1 — une transition interrompue reprend et demande un choix si un second
   assert.equal(await stored(page, memoryKey), null);
 });
 
-test('C1 — l’inscription depuis un budget existant attend une confirmation d’association', async (t) => {
+test('C1 — l’inscription depuis un budget existant attend une confirmation d’association', { skip: !signupEnabled }, async (t) => {
   const { context, page } = await fixture(t, { [budgetKey]: local });
   const writes = [];
   await context.route(origin + '/**', async (route) => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { fromCents, toCents } from '@/lib/money';
 import { useApp } from '@/lib/context/AppContext';
 import Modal from '@/components/ui/Modal';
 import IncomeForm from '@/components/forms/IncomeForm';
@@ -11,14 +12,14 @@ import { calculateTotalMonthlyIncome, formatCurrency } from '@/lib/budget-calcul
 import type { Income } from '@/lib/types';
 
 export default function RevenusPage() {
-  const { incomes, addIncome, updateIncome, deleteIncome } = useApp();
+  const { incomes, today, addIncome, updateIncome, deleteIncome } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Income | null>(null);
   const regularIncomes = incomes.filter(({ type }) => type !== 'household_contribution' && type !== 'household_transfer');
 
-  const totalMonthly = calculateTotalMonthlyIncome(regularIncomes);
-  const confirmedTotal = calculateTotalMonthlyIncome(regularIncomes.filter((i) => i.isConfirmed));
-  const unconfirmedTotal = totalMonthly - confirmedTotal;
+  const totalMonthly = calculateTotalMonthlyIncome(regularIncomes, today);
+  const confirmedTotal = calculateTotalMonthlyIncome(regularIncomes.filter((i) => i.isConfirmed), today);
+  const unconfirmedTotal = fromCents(toCents(totalMonthly) - toCents(confirmedTotal));
 
   function handleEdit(income: Income) {
     setEditItem(income);

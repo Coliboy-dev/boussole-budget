@@ -1,5 +1,6 @@
 import type { AdviceItem, BudgetSummary, Debt, Income } from './types.ts';
 import { calculateUncertainIncome, formatCurrency } from './budget-calculations.ts';
+import { fromCents, toCents } from './money.ts';
 import { todayInBrussels } from './local-date.ts';
 import { debtOccurrences } from './occurrences.ts';
 
@@ -71,12 +72,13 @@ export function generateAdvice(
     });
   }
 
-  const amountToSave = Math.floor(Math.min(savingsCapacity, trueAvailable * 0.3));
-  if (summary.riskLevel !== 'danger' && amountToSave > 10) {
+  const availableCents = Math.floor(toCents(trueAvailable) * 3 / 10);
+  const amountToSaveCents = Math.floor(Math.min(toCents(savingsCapacity), availableCents) / 100) * 100;
+  if (summary.riskLevel !== 'danger' && amountToSaveCents > 1000) {
     advice.push({
       id: 'adv-savings',
       title: 'Capacité d’épargne',
-      message: `Ta capacité d’épargne est de ${formatCurrency(savingsCapacity)}/mois et ton vrai disponible de ${formatCurrency(trueAvailable)}. Tu peux envisager de mettre ${formatCurrency(amountToSave)} de côté sur cette période.`,
+      message: `Il te reste ${formatCurrency(savingsCapacity)}/mois pour un nouvel objectif. Ton vrai disponible est de ${formatCurrency(trueAvailable)}. Tu peux envisager de mettre ${formatCurrency(fromCents(amountToSaveCents))} de côté sur cette période.`,
       type: 'positive',
       priority: 3,
     });

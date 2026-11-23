@@ -24,13 +24,13 @@ export function categoryPresentation(category: AnalysisCategory) {
 
 /** Charges programmées par catégorie, ramenées au mois. */
 export function ChargesDonut({ links = false }: { links?: boolean }) {
-  const { expenses } = useApp();
-  const rows = monthlyChargesByCategory(expenses);
+  const { expenses, today } = useApp();
+  const rows = monthlyChargesByCategory(expenses, today);
   const parts = chartParts(rows, ({ category }) => expenseCategoryLabels[category]);
   if (parts.length === 0) {
     return (
       <section aria-label="Répartition des charges" className={`space-y-2 ${surface}`}>
-        <p className="text-sm text-cap-text-muted">Aucune charge encodée : ajoute ton loyer, ton énergie ou tes assurances pour voir leur répartition.</p>
+        <p className="text-sm text-cap-text-muted">Aucune charge récurrente en cours à répartir. Tu peux encoder ton loyer, ton énergie ou tes assurances.</p>
         {links && <Link href="/charges" className={linkClass}>Ajouter mes charges</Link>}
       </section>
     );
