@@ -214,4 +214,3 @@ export async function openHousehold(page) {
   }
   await page.getByRole('heading', { name: 'Membres du foyer' }).waitFor();
 }
-
