@@ -41,7 +41,7 @@ export interface Income extends Schedule {
 
 // Expense types
 export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions'
-  | 'alimony' | 'taxes' | 'childcare' | 'other' | 'household';
+  | 'alimony' | 'taxes' | 'childcare' | 'activities' | 'other' | 'household';
 
 export interface Expense extends Schedule {
   id: string;

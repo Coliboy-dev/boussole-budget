@@ -177,7 +177,7 @@ function budgetCheck(unit: Unit): Check {
       ...schedule,
       label: text,
       category: oneOf('rent', 'energy', 'phone', 'insurance', 'groceries', 'transport', 'health', 'school', 'subscriptions',
-        'alimony', 'taxes', 'childcare', 'other', 'household'),
+        'alimony', 'taxes', 'childcare', 'activities', 'other', 'household'),
       amount: money,
       frequency,
       dueDate: optional(date),

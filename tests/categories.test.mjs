@@ -5,7 +5,7 @@ import { selectableSpendingCategories, spendingCategoryLabels, withCurrent } fro
 import { scenarios } from './browser/budget-scenarios.mjs';
 
 const newSpending = ['pets', 'gifts', 'beauty', 'travel'];
-const newCharges = ['alimony', 'taxes', 'childcare'];
+const newCharges = ['alimony', 'taxes', 'childcare', 'activities'];
 
 test('Catégories · toutes les catégories de dépenses et de charges sont lues (stockage, copie en ligne, Foyer)', () => {
   const base = scenarios['sans-echeance'];
@@ -23,7 +23,7 @@ test('Catégories · toutes les catégories de dépenses et de charges sont lues
   };
   const restored = deserializeBudget(serializeBudget(state));
   assert.deepEqual(restored.spendings.map(({ category }) => category), spendingCategories);
-  assert.deepEqual(restored.expenses.slice(-3).map(({ category }) => category), newCharges);
+  assert.deepEqual(restored.expenses.slice(-newCharges.length).map(({ category }) => category), newCharges);
   for (const category of newSpending) assert.ok(spendingCategories.includes(category), category);
 });
 
