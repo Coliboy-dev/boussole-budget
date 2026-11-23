@@ -81,3 +81,20 @@ test('La réception traverse la limite de 1 000 lignes en suivant les séquences
   assert.equal(sync.cursor, 1001);
   assert.equal(sync.rows.length, 1001);
 });
+
+test('PR 5a · un élément illisible est écarté et signalé, les autres restent lisibles', async () => {
+  const [base, spending, other] = await encodeHouseholdWrites(key, scope, [checkpoint, expense(6500), { ...expense(1000), id: 'autre' }]);
+  const altered = { ...other, ciphertext: other.ciphertext.slice(0, -4) + (other.ciphertext.endsWith('AAAA') ? 'BBBB' : 'AAAA') };
+  const foreign = { ...spending, record_id: other.record_id === spending.record_id ? spending.record_id : crypto.randomUUID() };
+  let skipped = -1;
+  const rows = await decodeHouseholdView(key, householdId, {
+    cursor: 3, confirmed: [{ ...base, seq: 1 }, { ...altered, seq: 2 }, { ...foreign, seq: 3 }], pending: [],
+  }, (count) => { skipped = count; });
+  assert.equal(skipped, 2, 'contenu altéré et élément déplacé');
+  assert.deepEqual(rows.map(({ record }) => record.kind), ['checkpoint']);
+  assert.equal(materializeHousehold(rows).currentBalance, 500);
+
+  let none = -1;
+  await decodeHouseholdView(key, householdId, { ...empty, pending: [base, spending] }, (count) => { none = count; });
+  assert.equal(none, 0);
+});

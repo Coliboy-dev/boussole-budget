@@ -41,14 +41,26 @@ export function encodeHouseholdWrites(
   }));
 }
 
+/**
+ * Déchiffre la vue du foyer. Un élément illisible (type inconnu d'une version plus récente, contenu altéré)
+ * est écarté et compté, au lieu de rendre tout le foyer illisible.
+ */
 export async function decodeHouseholdView(
   key: CryptoKey, householdId: string, { confirmed, pending, cursor }: HouseholdQueue,
+  onUnreadable?: (count: number) => void,
 ): Promise<SequencedHouseholdRecord[]> {
+  let unreadable = 0;
   const visible = new Map<string, ConfirmedHouseholdRecord>();
   for (const row of confirmed) visible.set(row.record_id, row);
   pending.forEach((row, index) => visible.set(row.record_id, { ...row, seq: cursor + index + 1 }));
   const rows = await Promise.all([...visible.values()].map(async (row) => {
-    const record = await decryptHouseholdRecord(key, householdId, row);
+    let record: HouseholdRecord;
+    try {
+      record = await decryptHouseholdRecord(key, householdId, row);
+    } catch {
+      unreadable++;
+      return undefined;
+    }
     if ((record.kind === 'transfer' || record.kind === 'transfer-response')
       && await householdRecordId(householdId, record.kind, record.id) !== row.record_id) return undefined;
     return {
@@ -59,6 +71,7 @@ export async function decodeHouseholdView(
       ...(row.exclusive === true && { exclusive: true }),
     };
   }));
+  onUnreadable?.(unreadable);
   return rows.filter((row) => row !== undefined);
 }
 

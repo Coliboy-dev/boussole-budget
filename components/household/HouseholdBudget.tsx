@@ -18,7 +18,9 @@ import type { HouseholdRecord, SequencedHouseholdRecord } from '@/lib/household-
 import { householdCopy, householdMessages } from '@/lib/household-copy';
 import { fetchHouseholdKey } from '@/lib/household-key';
 import { assertHouseholdAccount, HouseholdAccessRevoked, householdRemote } from '@/lib/household-remote';
-import { emptyHouseholdQueue, readHouseholdCache, updateHouseholdCache, type StoredHousehold } from '@/lib/household-storage';
+import {
+  emptyHouseholdQueue, keepFormerHouseholdCopy, readHouseholdCache, updateHouseholdCache, type StoredHousehold,
+} from '@/lib/household-storage';
 import { decodeHouseholdView, encodeHouseholdWrites, reconcileHouseholdSync, syncHousehold } from '@/lib/household-sync';
 import { envelopesOf, spendingsOf } from '@/lib/spending';
 import { useBudgetAccess } from '@/lib/budget-access';
@@ -41,8 +43,10 @@ type Options = {
   extraRecords?: (rows: SequencedHouseholdRecord[], cursor: number) => Promise<HouseholdRecord[]>;
 };
 
-export default function HouseholdBudget({ userId, householdId, memberId, activeMemberIds, onExit, children }: {
+export default function HouseholdBudget({ userId, householdId, memberId, activeMemberIds, onExit, onRevoked, children }: {
   userId: string; householdId: string; onExit: () => void; children: ReactNode;
+  /** Appelé une fois la copie mise de côté après un refus d'accès : l'espace referme ce foyer sans attendre le serveur. */
+  onRevoked?: () => void;
   memberId?: string;
   activeMemberIds?: string[];
 }) {
@@ -50,12 +54,15 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
   const personalBudgetAccessible = useBudgetAccess();
   const [view, setView] = useState<SavedView | null>(null);
   const [revoked, setRevoked] = useState(false);
+  const [unreadable, setUnreadable] = useState(0);
   const [network, setNetwork] = useState<'loading' | 'syncing' | 'offline' | 'saved' | 'error'>('loading');
   const [failure, setFailure] = useState('');
   const [lastSpending, setLastSpending] = useState<string>();
   const [dismissedOffers, setDismissedOffers] = useState<ReadonlySet<number>>(() => new Set());
   const initialized = useRef(false);
   const inProgress = useRef(false);
+  // Un refus d'accès est définitif pour ce composant : plus aucune lecture ni écriture, quels que soient les événements.
+  const accessRevoked = useRef(false);
   const retrySync = useRef(false);
   const renderVersion = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
@@ -63,7 +70,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
   const spendingUndo = useRef<string | null>(null);
   const automaticMirrors = view?.mirrors?.automatic;
   const movementChanges = view?.movementMirrors;
-  const canWriteMirrors = personalBudgetAccessible && !isBudgetLoading && !storageBlocked;
+  const canWriteMirrors = personalBudgetAccessible && !isBudgetLoading && !storageBlocked && unreadable === 0;
   useEffect(() => {
     if (memberId && automaticMirrors?.length && canWriteMirrors) {
       syncContributionMirrors(userId, householdId, memberId, automaticMirrors, today);
@@ -77,7 +84,8 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     const version = ++renderVersion.current;
     assertHouseholdAccount(userId);
     if (cache.userId !== userId || cache.householdId !== householdId) throw new Error(householdCopy.unavailable);
-    const rows = cache.revoked ? [] : await decodeHouseholdView(cache.key, householdId, cache);
+    let skipped = 0;
+    const rows = cache.revoked ? [] : await decodeHouseholdView(cache.key, householdId, cache, (count) => { skipped = count; });
     const budget = cache.revoked ? null : materializeHousehold(rows);
     const transfers = memberId ? await resolveHouseholdTransfers(rows, memberId, cache.cursor) : [];
     const names: Record<string, string> = Object.create(null);
@@ -88,6 +96,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     assertHouseholdAccount(userId);
     if (!initialized.current || version !== renderVersion.current) return;
     setRevoked(!!cache.revoked);
+    setUnreadable(skipped);
     setView(budget ? {
       budget, pending: cache.pending.length,
       mirrors: memberId ? contributionMirrorPlan(budget.incomes, rows, userId, memberId, cache.cursor) : undefined,
@@ -97,7 +106,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
   }, [householdId, memberId, userId]);
 
   const synchronize = useCallback(async function synchronize() {
-    if (!initialized.current) return;
+    if (!initialized.current || accessRevoked.current) return;
     if (inProgress.current) {
       retrySync.current = true;
       return;
@@ -129,12 +138,13 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     } catch (error) {
       if (!initialized.current) return;
       if (error instanceof HouseholdAccessRevoked) {
+        accessRevoked.current = true;
+        retrySync.current = false;
         setRevoked(true);
         setView(null);
-        const cached = await readHouseholdCache(userId, householdId).catch(() => undefined);
-        if (cached) {
-          await updateHouseholdCache(userId, householdId, current => ({ ...(current ?? cached), revoked: true })).catch(() => undefined);
-        }
+        // L'accès a été retiré : la synchronisation s'arrête et la copie chiffrée reste sur l'appareil.
+        await keepFormerHouseholdCopy(userId, householdId, new Date().toISOString()).catch(() => undefined);
+        onRevoked?.();
       }
       setNetwork(navigator.onLine ? 'error' : 'offline');
     } finally {
@@ -144,7 +154,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
         void synchronize();
       }
     }
-  }, [display, householdId, userId]);
+  }, [display, householdId, onRevoked, userId]);
 
   useEffect(() => {
     initialized.current = true;
@@ -351,7 +361,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     },
   };
   const notice = failure || (revoked ? householdCopy.revoked : network === 'offline' ? householdCopy.offline :
-    network === 'error' ? householdCopy.unavailable : view?.pending ? householdCopy.pending :
+    network === 'error' ? householdCopy.unavailable : unreadable > 0 ? householdCopy.unreadableItems : view?.pending ? householdCopy.pending :
     !view ? householdCopy.loading : network === 'syncing' ? householdCopy.syncing :
     !view.budget.balanceDate && view.budget.hasJointAccount !== false ? householdCopy.enterBalance : '');
 

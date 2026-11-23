@@ -9,8 +9,12 @@ import { AUTH_STORAGE_KEY, readStoredSessionUserId } from '@/lib/account-guard';
 import { useBudgetAccess } from '@/lib/budget-access';
 import { householdCopy } from '@/lib/household-copy';
 import { householdEnabled } from '@/lib/household-feature';
-import { assertHouseholdAccount, createHousehold, listHouseholds } from '@/lib/household-remote';
-import { emptyDirectory, householdDirectory, type HouseholdDirectory } from '@/lib/household-storage';
+import {
+  acceptInvitation, assertHouseholdAccount, createHousehold, leaveHousehold, listHouseholds, stopSharingWith,
+} from '@/lib/household-remote';
+import {
+  emptyDirectory, householdDirectory, keepFormerHouseholdCopy, mergeHouseholdDirectory, type HouseholdDirectory,
+} from '@/lib/household-storage';
 import HouseholdBudget from './HouseholdBudget';
 
 const sharedRoutes = new Set([
@@ -28,12 +32,20 @@ interface Workspace {
   error: string;
   create: () => Promise<void>;
   select: (id: string | null, navigate?: boolean) => Promise<void>;
+  /** Accepte une invitation puis ouvre le foyer rejoint. */
+  join: (invitationId: string, token: string) => Promise<void>;
+  /** Quitte le foyer ouvert : la synchronisation s'arrête, la copie chiffrée reste sur l'appareil. */
+  leave: () => Promise<void>;
+  stopSharing: (memberId: string) => Promise<void>;
 }
 
 const Context = createContext<Workspace>({
   userId: null, inHouseholdShell: false, active: false, directory: emptyDirectory, loading: false, error: '',
   create: () => Promise.resolve(),
   select: () => Promise.resolve(),
+  join: () => Promise.resolve(),
+  leave: () => Promise.resolve(),
+  stopSharing: () => Promise.resolve(),
 });
 const noStoredSession = () => null;
 const storedSession = () => readStoredSessionUserId(localStorage);
@@ -80,7 +92,7 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
     const households = await listHouseholds(id);
     const directory = await householdDirectory(id, current => {
       assertHouseholdAccount(id);
-      return { households, selected: households.some(item => item.id === current.selected) ? current.selected : null };
+      return mergeHouseholdDirectory(current, households, new Date().toISOString());
     });
     readDirectory(id, directory);
     setError(undefined);
@@ -140,16 +152,44 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
     }
   }
 
+  // Après un refus d'accès, l'annuaire local a déjà été mis à jour : on le relit sans attendre la liste du serveur.
+  const reloadStoredDirectory = useCallback(() => {
+    if (!userId) return;
+    void householdDirectory(userId).then(directory => readDirectory(userId, directory)).catch(() => undefined);
+  }, [readDirectory, userId]);
+
+  // Les actions de partage laissent l'appelant afficher l'erreur dans son propre formulaire.
+  async function join(invitationId: string, token: string) {
+    if (!userId) throw new Error(householdCopy.joinSignIn);
+    const id = await acceptInvitation(userId, invitationId, token);
+    await refresh(userId);
+    await select(id);
+  }
+
+  async function leave() {
+    if (!userId || !selected) return;
+    await leaveHousehold(userId, selected);
+    readDirectory(userId, await keepFormerHouseholdCopy(userId, selected, new Date().toISOString()));
+    await refresh(userId).catch(() => undefined);
+  }
+
+  async function stopSharing(otherMemberId: string) {
+    if (!userId || !selected) return;
+    await stopSharingWith(userId, selected, otherMemberId);
+    await refresh(userId);
+  }
+
   return (
     <Context.Provider value={{
       userId, inHouseholdShell, active, memberId, directory,
       loading: !!userId && directoryView?.userId !== userId && errorView?.userId !== userId,
       error: userId && errorView?.userId === userId ? errorView.message : '',
-      create, select,
+      create, select, join, leave, stopSharing,
     }}>
       {active && userId && selected ? (
         <HouseholdBudget key={`${userId}:${selected}`} userId={userId} householdId={selected}
-          memberId={memberId} activeMemberIds={membership?.activeMemberIds} onExit={() => { void select(null); }}>
+          memberId={memberId} activeMemberIds={membership?.activeMemberIds} onExit={() => { void select(null); }}
+          onRevoked={reloadStoredDirectory}>
           {pathname === '/conseils' ? (
             <main id="contenu" className="mx-auto max-w-2xl px-4 py-6">
               <p>{householdCopy.advicePersonal}</p>
