@@ -1,5 +1,4 @@
 // Serveur Supabase et route de clé simulés pour les parcours du Foyer (PR 5a et 5b).
-import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { after, before } from 'node:test';

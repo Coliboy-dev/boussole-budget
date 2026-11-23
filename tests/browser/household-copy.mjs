@@ -8,7 +8,7 @@ import { deserializeBudget } from '../../lib/budget-state.ts';
 import { A, B, H, button, fixture, idb, mA, mB, openHousehold, origin, waitForEntry } from './household-mock.mjs';
 
 /** A enregistre un solde commun de 500 €, attend qu'il soit envoyé, puis quitte le foyer. */
-async function formerHousehold(t) {
+async function formerHousehold(t, removedByPartner = false) {
   const { page, server } = await fixture(t, A, [[mA, A], [mB, B]]);
   await openHousehold(page);
   await page.goto('/dashboard');
@@ -18,13 +18,20 @@ async function formerHousehold(t) {
   await waitForEntry(page, `household-v1:${A}:${H}`, 'confirmed');
 
   await page.goto('/foyer');
-  await button(page, 'Quitter le foyer').click();
-  // Le départ se termine par une relecture de la liste des adhésions : on l'attend avant d'observer le réseau.
-  const listed = page.waitForResponse((response) => response.url().endsWith('/rpc/list_my_households')
-    && response.request().timing().startTime > 0);
-  await button(page, 'Quitter ce foyer').click();
-  await page.getByText(/^Accès au foyer terminé le /).waitFor();
+  await page.getByRole('heading', { name: 'Membres du foyer' }).waitFor();
+  if (!removedByPartner) await button(page, 'Quitter le foyer').click();
+
+  // Attendre la confirmation de l’absence d’adhésion par le serveur avant d’observer le réseau.
+  const listed = page.waitForResponse(async (response) => response.url().endsWith('/rpc/list_my_households')
+    && response.ok() && (await response.json()).length === 0);
+  if (removedByPartner) {
+    server.members.delete(mA);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  } else {
+    await button(page, 'Quitter ce foyer').click();
+  }
   await listed;
+  await page.getByText(/^Accès au foyer terminé le /).waitFor();
   return { page, server };
 }
 
@@ -145,4 +152,24 @@ test('5b · l’effacement est refusé si un autre onglet a réintégré le foye
   assert.deepEqual(await idb(page, `household-v1:${A}:${H}`), stored, 'la copie du foyer actif est intacte');
   assert.deepEqual(await personalSnapshot(page), personal, 'le budget Personnel reste inchangé après refus');
   assert.deepEqual(requests, [], 'le refus reste local');
+});
+
+test('5b · après un retrait distant, la consultation, l’export et l’effacement restent locaux', async (t) => {
+  const { page } = await formerHousehold(t, true);
+  const personal = await personalSnapshot(page);
+  const requests = watchNetwork(page);
+
+  await button(page, 'Consulter la copie').click();
+  await page.getByRole('heading', { name: /^Copie en lecture seule, arrêtée le / }).waitFor();
+  assert.deepEqual(await personalSnapshot(page), personal);
+  const downloaded = page.waitForEvent('download');
+  await button(page, 'Télécharger la copie').click();
+  await downloaded;
+  assert.deepEqual(await personalSnapshot(page), personal);
+  await button(page, 'Effacer la copie de cet appareil').click();
+  await button(page, 'Effacer la copie').click();
+  await page.getByText(/^Accès au foyer terminé le /).waitFor({ state: 'detached' });
+  assert.equal(await idb(page, `household-v1:${A}:${H}`), null);
+  assert.deepEqual(await personalSnapshot(page), personal);
+  assert.deepEqual(requests, [], 'aucun appel après la révocation, même en ligne');
 });
