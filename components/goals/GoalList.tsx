@@ -10,9 +10,11 @@ interface GoalListProps {
   goals: { goal: Goal; feasibility: GoalFeasibility }[];
   onEdit?: (goal: Goal) => void;
   onDelete?: (id: string) => void;
+  onContribute?: (goal: Goal) => void;
+  currentMonth?: string;
 }
 
-export default function GoalList({ goals, onEdit, onDelete }: GoalListProps) {
+export default function GoalList({ goals, onEdit, onDelete, onContribute, currentMonth }: GoalListProps) {
   if (goals.length === 0) {
     return (
       <div className="text-center py-8 text-gray-600">
@@ -25,7 +27,8 @@ export default function GoalList({ goals, onEdit, onDelete }: GoalListProps) {
   return (
     <div className="space-y-3">
       {goals.map(({ goal, feasibility }) => (
-        <GoalCard key={goal.id} goal={goal} feasibility={feasibility} onEdit={onEdit} onDelete={onDelete} />
+        <GoalCard key={goal.id} goal={goal} feasibility={feasibility} onEdit={onEdit} onDelete={onDelete}
+          onContribute={onContribute} currentMonth={currentMonth} />
       ))}
     </div>
   );

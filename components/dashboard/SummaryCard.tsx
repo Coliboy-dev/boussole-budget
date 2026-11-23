@@ -62,7 +62,8 @@ export default function SummaryCard({
           <p className="relative text-sm leading-relaxed text-white/90">
             Point bas prévu le <time dateTime={forecast.date}>{formatShortDate(forecast.date)}</time> à{' '}
             {formatCurrency(forecast.balance)}{causes && ` après ${causes}`}, moins {formatCurrency(summary.safetyReserve)} de réserve
-            {forecast.annualProvision > 0 && ` et ${formatCurrency(forecast.annualProvision)} de provisions annuelles`}.
+            {forecast.annualProvision > 0 && ` et ${formatCurrency(forecast.annualProvision)} de provisions annuelles`}
+            {forecast.goalSavings > 0 && ` et ${formatCurrency(forecast.goalSavings)} d’épargne pour tes objectifs`}.
           </p>
         )}
         {inHousehold && (!summary.emptyBudget || hasRecordedBalance) && (

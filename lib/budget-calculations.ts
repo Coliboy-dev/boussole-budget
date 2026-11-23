@@ -169,6 +169,7 @@ export function calculateBudgetSummary(
     horizon: AVAILABLE_HORIZON,
     envelopes,
     spendings,
+    goals,
   });
   const empty = currentBalance === 0 && incomes.length === 0 && expenses.length === 0
     && debts.length === 0 && childExpenses.length === 0 && envelopes.length === 0 && spendings.length === 0;
@@ -192,6 +193,7 @@ export function calculateBudgetSummary(
       horizon: AVAILABLE_HORIZON,
       dailyBalances: forecast.dailyBalances,
       annualProvision: forecast.annualProvision,
+      goalSavings: forecast.goalSavings,
       reservedAmount: forecast.reservedAmount,
       optimisticAvailable: empty ? 0 : forecast.optimisticAvailable,
     },

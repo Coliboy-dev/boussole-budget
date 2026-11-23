@@ -14,10 +14,11 @@ import {
   calculateSavingsCapacity,
   formatCurrency,
 } from '@/lib/budget-calculations';
+import { recordGoalContribution } from '@/lib/goals';
 import type { Goal } from '@/lib/types';
 
 export default function ObjectifsPage() {
-  const { goals, summary, today, addGoal, updateGoal, deleteGoal } = useApp();
+  const { goals, summary, today, addGoal, updateGoal, deleteGoal, storageBlocked } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Goal | null>(null);
 
@@ -85,7 +86,7 @@ export default function ObjectifsPage() {
               <p className="text-lg font-bold text-gray-700">{formatCurrency(totals.target)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-600 mb-1">/mois réservé</p>
+              <p className="text-xs text-gray-600 mb-1">À mettre de côté /mois</p>
               <p className="text-lg font-bold text-teal-800">{formatCurrency(totals.monthly)}</p>
             </div>
           </div>
@@ -97,7 +98,8 @@ export default function ObjectifsPage() {
           </AlertBanner>
         )}
 
-        <GoalList goals={assessedGoals} onEdit={handleEdit} onDelete={deleteGoal} />
+        <GoalList goals={assessedGoals} onEdit={handleEdit} onDelete={deleteGoal} currentMonth={today.slice(0, 7)}
+          onContribute={storageBlocked ? undefined : (goal) => updateGoal(goal.id, recordGoalContribution(goal, today))} />
 
         {goals.length === 0 && (
           <button

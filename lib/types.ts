@@ -166,6 +166,10 @@ export interface Goal {
   targetDate?: string; // ISO date
   weeklyContribution?: number;
   monthlyContribution?: number;
+  /** L'épargne reste sur le compte courant : elle fait partie du solde, Capiste la réserve. */
+  onCurrentAccount?: boolean;
+  /** Mois (AAAA-MM) de la dernière mise de côté indiquée avec « J'ai mis de côté ». */
+  lastContributionMonth?: string;
   status: GoalStatus;
   notes?: string;
 }
@@ -208,6 +212,8 @@ export interface BudgetSummary {
     horizon: number;
     dailyBalances: DailyBalance[];
     annualProvision: number;
+    /** Épargne des objectifs gardée sur le compte courant, comprise dans reservedAmount. */
+    goalSavings: number;
     reservedAmount: number;
     optimisticAvailable: number;
   };

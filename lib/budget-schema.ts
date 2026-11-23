@@ -214,6 +214,9 @@ function budgetCheck(unit: Unit): Check {
       targetDate: optional(date),
       weeklyContribution: optional(money),
       monthlyContribution: optional(money),
+      // Champs facultatifs : une version plus ancienne les ignore sans refuser le budget.
+      onCurrentAccount: optional(flag),
+      lastContributionMonth: optional(checkValue((value) => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value))),
       status: oneOf('realistic', 'fragile', 'to_postpone'),
       notes: optional(text),
     }),
