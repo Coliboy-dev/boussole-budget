@@ -15,7 +15,7 @@ Kit de la refonte graphique, **sans aucun écran de l’app modifié**. Ouvrir `
 - **Une couleur, un rôle.** Les composants utilisent les noms (`text-muted`, `primary-text`…), jamais une teinte. Le thème sombre réutilisera les mêmes noms.
 - **Texte teal ou mauve :** uniquement les variantes `-text`. `primary` (#087F78) et `secondary` (#8274D8) ne passent pas 4,5:1 sur ivoire ou blanc.
 - **Ambre :** décoratif, jamais seul pour signaler un risque.
-- **Graphiques :** charges programmées en famille teal, dépenses enregistrées en famille mauve, enveloppes en ambre. Chaque graphique écrit son périmètre en titre, et chaque part a son libellé et son montant.
+- **Graphiques :** quatre teintes bien distinctes dans un ordre fixe (teal `#00897B`, ambre `#E69500`, violet `#5B4FD6`, rose `#E0457B`), puis gris `#AAB2BB` pour « Autres ». Les nuances d'une même famille ne se distinguaient pas à l'œil (retour du fondateur) : c'est le titre du graphique qui dit s'il s'agit de charges ou de dépenses, pas la couleur. Chaque part a son libellé, son montant et sa part. Palette validée (écart normal ≥ 22, daltonisme ≥ 7,4 avec légende obligatoire).
 - **Illustrations :** fond ivoire intégré, toujours dans un cadre ivoire arrondi (`#FEF5F1`), `alt=""` car décoratives, à côté d’un texte qui dit l’état réel. Jamais comme preuve d’un état financier ni de progrès.
 - **Mouvement :** 180 à 320 ms, seulement pour guider ; rien si `prefers-reduced-motion: reduce`.
 

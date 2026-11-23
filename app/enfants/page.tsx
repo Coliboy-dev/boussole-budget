@@ -9,6 +9,7 @@ import Badge from '@/components/ui/Badge';
 import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
 import type { ChildExpense, ChildExpenseStatus, ChildExpenseCategory } from '@/lib/types';
 import { Icon, childCategoryIcons } from '@/components/ui/icons';
+import QuickSpendingSheet from '@/components/spending/QuickSpendingSheet';
 
 const statusConfig: Record<
   ChildExpenseStatus,
@@ -30,9 +31,13 @@ const categoryConfig: Record<ChildExpenseCategory, { label: string }> = {
 };
 
 export default function EnfantsPage() {
-  const { childExpenses, addChildExpense, updateChildExpense, deleteChildExpense } = useApp();
+  const { childExpenses, addChildExpense, updateChildExpense, deleteChildExpense, addSpending, storageBlocked } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<ChildExpense | null>(null);
+  // Ce suivi ne retire rien du budget : après un nouveau frais, on propose de l'encoder aussi comme dépense.
+  const [offer, setOffer] = useState<Omit<ChildExpense, 'id'>>();
+  const [spendingOpen, setSpendingOpen] = useState(false);
+  const [spendingAdded, setSpendingAdded] = useState(false);
 
   const total = childExpenses.reduce((s, e) => s + e.paidByUser, 0);
   const pendingReimbursement = childExpenses
@@ -56,6 +61,8 @@ export default function EnfantsPage() {
       updateChildExpense(editItem.id, data);
     } else {
       addChildExpense(data);
+      setOffer(data.paidByUser > 0 ? data : undefined);
+      setSpendingAdded(false);
     }
     setShowForm(false);
     setEditItem(null);
@@ -70,7 +77,7 @@ export default function EnfantsPage() {
     <>
       {showForm && (
         <Modal
-          title={editItem ? 'Modifier le frais' : 'Ajouter un frais enfant'}
+          title={editItem ? 'Modifier le frais' : 'Ajouter un frais à partager'}
           onClose={handleClose}
         >
           <ChildExpenseForm
@@ -84,16 +91,46 @@ export default function EnfantsPage() {
       <div className="px-4 py-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">Frais enfants</h1>
-            <p className="text-sm text-gray-600 mt-0.5">Dépenses pour tes enfants</p>
+            <h1 className="text-xl font-bold text-gray-800">Frais à partager</h1>
+            <p className="text-sm text-gray-600 mt-0.5">Frais d’enfants que l’autre parent te rembourse</p>
           </div>
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="flex items-center gap-1.5 bg-teal-700 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-800 transition-colors shadow-sm"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap bg-teal-700 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-teal-800 transition-colors shadow-sm"
           >
             + Ajouter
           </button>
         </div>
+
+        <p className="rounded-xl bg-cap-surface-soft p-3 text-sm text-cap-text">
+          Ce suivi sert aux remboursements et ne retire rien de ton budget : l’achat lui-même est une dépense.
+          Un frais sans remboursement (vêtements, cantine…) s’encode seulement en dépense « Enfants (quotidien) »,
+          ou en charge s’il revient chaque mois (crèche, garderie, contribution alimentaire).
+        </p>
+
+        {offer && !spendingAdded && (
+          <div role="status" className="space-y-2 rounded-xl border border-cap-border bg-cap-surface p-3 text-sm text-cap-text">
+            <p>Frais enregistré. L’as-tu aussi payé de ton compte ? Encode-le comme dépense pour qu’il compte dans ton budget.</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={storageBlocked} onClick={() => setSpendingOpen(true)}
+                className="inline-flex min-h-11 items-center rounded-xl bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">
+                Ajouter aussi comme dépense
+              </button>
+              <button type="button" onClick={() => setOffer(undefined)}
+                className="inline-flex min-h-11 items-center rounded-xl border border-cap-border px-3 text-sm font-semibold text-cap-text">
+                Non merci
+              </button>
+            </div>
+          </div>
+        )}
+        {offer && spendingAdded && <p role="status" className="text-sm text-cap-text">Dépense ajoutée à tes dépenses du mois.</p>}
+        {spendingOpen && offer && (
+          <QuickSpendingSheet
+            prefill={{ amount: offer.paidByUser, category: 'children', label: offer.label, date: offer.date }}
+            onClose={() => setSpendingOpen(false)}
+            onSave={(spending) => { addSpending(spending); setSpendingOpen(false); setSpendingAdded(true); }}
+          />
+        )}
 
         <Card className="bg-purple-50 border-purple-200">
           <div className="grid grid-cols-2 gap-4">
@@ -190,7 +227,7 @@ export default function EnfantsPage() {
             onClick={() => { setEditItem(null); setShowForm(true); }}
             className="w-full border-2 border-dashed border-purple-200 rounded-2xl py-6 text-center text-purple-800 font-semibold hover:bg-purple-50 transition-colors"
           >
-            + Ajouter un premier frais enfant
+            + Ajouter un premier frais à partager
           </button>
         )}
       </div>

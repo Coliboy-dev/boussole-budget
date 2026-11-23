@@ -63,6 +63,11 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
 
   return (
     <form onSubmit={handleSubmit} onChange={clearFieldError} noValidate>
+      <p className="mb-4 text-sm text-gray-700">
+        Une charge est une sortie prévue, avec une date : loyer, énergie, assurance, paiement unique annoncé.
+        Un achat du quotidien est une dépense (bouton « Dépense » en bas de l’écran). Un versement sur une dette déjà suivie
+        se fait avec « Paiement ponctuel » dans la fiche de la dette.
+      </p>
       <FormField label="Intitulé" required error={errors.label}>
         <input
           className={cls}
@@ -84,7 +89,8 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
           <option value="energy">Énergie</option>
           <option value="phone">Téléphone / Internet</option>
           <option value="insurance">Assurance</option>
-          <option value="groceries">Courses alimentaires</option>
+          {/* Les courses se suivent avec une enveloppe et des dépenses ; l'option reste pour les charges déjà encodées. */}
+          {initial?.category === 'groceries' && <option value="groceries">Courses alimentaires</option>}
           <option value="transport">Transport</option>
           <option value="health">Santé / Mutuelle</option>
           <option value="school">Scolarité</option>

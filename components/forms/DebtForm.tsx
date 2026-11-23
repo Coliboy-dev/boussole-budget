@@ -61,6 +61,10 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
 
   return (
     <form onSubmit={handleSubmit} onChange={clearFieldError} noValidate>
+      <p className="mb-4 text-sm text-gray-700">
+        Une dette est un montant dû qui diminue à chaque remboursement : crédit, facture étalée, huissier, plan de médiation.
+        Un paiement unique sans dette à suivre est une dépense ; s’il est annoncé pour plus tard, encode-le en charge unique.
+      </p>
       <FormField label="Créancier" required hint="Nom de la banque, entreprise ou personne" error={errors.creditor}>
         <input
           className={cls}

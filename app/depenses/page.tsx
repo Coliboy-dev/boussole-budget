@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { ChartPie, HandCoins, Plus } from 'lucide-react';
 import { CompactRows, DetailFact, DetailSheet, type CompactRow } from '@/components/budget/CompactRows';
 import EnvelopeForm from '@/components/spending/EnvelopeForm';
-import NewSpendingAction from '@/components/spending/NewSpendingAction';
 import QuickSpendingSheet from '@/components/spending/QuickSpendingSheet';
 import SpendingMonthSelector, { formatSpendingMonth } from '@/components/spending/SpendingMonthSelector';
 import { spendingCategoryIcons } from '@/components/spending/category-icons';
@@ -96,9 +95,8 @@ export default function SpendingPage() {
 
   return (
     <div className={`space-y-4 px-4 py-4 ${lastAddedSpendingId ? 'pb-28' : ''}`}>
-      <header className="flex flex-wrap items-center justify-between gap-2">
+      <header>
         <h1 className="text-xl font-bold text-gray-900">Dépenses du mois</h1>
-        <NewSpendingAction />
       </header>
       {storageBlocked && (
         <AlertBanner variant="warning" title="Stockage indisponible">
@@ -129,8 +127,9 @@ export default function SpendingPage() {
             <CompactRows rows={rows} onOpen={(id) => setPanel({ type: 'spending', id })} />
           </div>
         ))}
-        {byDay.size === 0 && <p className="text-sm text-slate-600">Aucune dépense encodée ce mois-ci.</p>}
-        <NewSpendingAction showTrigger={byDay.size === 0} />
+        {byDay.size === 0 && (
+          <p className="text-sm text-slate-600">Aucune dépense encodée ce mois-ci. Touche « Dépense » en bas de l’écran pour en ajouter une.</p>
+        )}
       </section>
 
       <Link href="/analyse"

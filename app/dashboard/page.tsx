@@ -15,7 +15,7 @@ import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import BackupStatus from '@/components/dashboard/BackupStatus';
 import BalanceRows from '@/components/dashboard/BalanceRows';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
-import NewSpendingAction, { quickActionTile } from '@/components/spending/NewSpendingAction';
+import { NEW_SPENDING_EVENT, quickActionTile, UNDO_TOAST_MS } from '@/components/spending/NewSpendingAction';
 import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
 import { getUpcomingReminders, formatCurrency, formatDate, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
@@ -59,6 +59,20 @@ function SavedBudgetDashboard() {
   useEffect(() => {
     if (paymentFeedback?.paid) undoButton.current?.focus({ preventScroll: true });
   }, [paymentFeedback]);
+
+  // Comme pour une dépense, la bulle « Paiement enregistré · Annuler » se ferme seule.
+  useEffect(() => {
+    if (!paymentFeedback) return;
+    const timer = setTimeout(() => setPaymentFeedback(undefined), UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [paymentFeedback]);
+
+  // Une seule annonce à la fois en bas d'écran : ouvrir la saisie d'une dépense ferme celle du paiement.
+  useEffect(() => {
+    const clear = () => { setPaymentFeedback(undefined); setPaymentError(''); };
+    window.addEventListener(NEW_SPENDING_EVENT, clear);
+    return () => window.removeEventListener(NEW_SPENDING_EVENT, clear);
+  }, []);
 
   const forecast = summary.availableForecast;
   const reminders = getUpcomingReminders(expenses, debts, [], today, forecast.horizon);
@@ -132,22 +146,20 @@ function SavedBudgetDashboard() {
         </div>
       )}
 
-      <nav aria-label="Actions rapides" className="grid grid-cols-3 gap-2">
-        <NewSpendingAction variant="tile" onOpen={() => { setPaymentFeedback(undefined); setPaymentError(''); }} />
-        {joint && hasProjection && (
+      {/* « Ajouter une dépense » vit au centre de la barre du bas, sur tous les écrans. */}
+      {joint && <nav aria-label="Actions rapides" className="grid grid-cols-2 gap-2">
+        {hasProjection && (
           <Link href="/simulation" className={`${quickActionTile} bg-cap-secondary-soft text-cap-secondary-text hover:bg-cap-border`}>
             <Icon icon={Calculator} className="size-6" />
             Simuler un achat
           </Link>
         )}
         {/* Sans compte commun, le foyer n'a pas d'écran Échéances (même règle que la navigation). */}
-        {joint && (
-          <Link href="/projection" className={`${quickActionTile} bg-cap-warning-soft text-cap-warning-text hover:bg-cap-border`}>
-            <Icon icon={CalendarDays} className="size-6" />
-            Voir les échéances
-          </Link>
-        )}
-      </nav>
+        <Link href="/projection" className={`${quickActionTile} bg-cap-warning-soft text-cap-warning-text hover:bg-cap-border`}>
+          <Icon icon={CalendarDays} className="size-6" />
+          Voir les échéances
+        </Link>
+      </nav>}
 
       {household && joint && <HouseholdContributionList />}
       {joint && !summary.emptyBudget && (

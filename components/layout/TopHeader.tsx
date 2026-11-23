@@ -1,21 +1,17 @@
 'use client';
 
-import Link from 'next/link';
-import { LockKeyhole, Settings } from 'lucide-react';
+import { LockKeyhole } from 'lucide-react';
 import BrandLogo from '@/components/ui/BrandLogo';
 import { Icon } from '@/components/ui/icons';
-import { useApp } from '@/lib/context/AppContext';
 import { useLock } from '@/components/security/LockProvider';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 import { householdCopy } from '@/lib/household-copy';
 import { useRouter } from 'next/navigation';
 
 export default function TopHeader() {
-  const { userProfile } = useApp();
   const lock = useLock();
   const workspace = useHouseholdWorkspace();
   const router = useRouter();
-  const initial = workspace.inHouseholdShell ? undefined : Array.from(userProfile.firstName?.trim() ?? '')[0]?.toLocaleUpperCase('fr-BE');
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
@@ -34,17 +30,7 @@ export default function TopHeader() {
             <Icon icon={LockKeyhole} className="size-5" />
           </button>
         )}
-        <Link
-          href={workspace.inHouseholdShell ? '/foyer' : '/reglages'}
-          aria-label="Réglages"
-          className="flex size-11 items-center justify-center rounded-full text-sm font-bold text-teal-800 hover:bg-teal-50"
-        >
-          {initial ? (
-            <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-full bg-teal-100">{initial}</span>
-          ) : (
-            <Icon icon={Settings} className="size-5 text-slate-600" />
-          )}
-        </Link>
+        {/* Réglages et Foyer sont dans « Plus » : pas de doublon ici. */}
         </div>
       </div>
       {workspace.userId && <div role="group" aria-label={householdCopy.switcher} className="mx-auto flex max-w-2xl gap-2 px-4 pb-2">
