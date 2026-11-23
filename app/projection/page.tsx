@@ -126,7 +126,7 @@ export default function ProjectionPage() {
           </div>
           <div className={surface}>
             <dt className="text-xs font-semibold text-cap-text-muted">Vrai disponible</dt>
-            <dd className="wrap-break-word font-display text-xl font-bold text-cap-primary-text tabular-nums">{formatCurrency(summary.trueAvailable)}</dd>
+            <dd className={`wrap-break-word font-display text-xl font-bold tabular-nums ${summary.trueAvailable < 0 ? 'text-cap-danger-text' : 'text-cap-primary-text'}`}>{formatCurrency(summary.trueAvailable)}</dd>
             <dd className="text-xs text-cap-text-muted">
               Jusqu’au <time dateTime={availableThrough}>{formatShortDate(availableThrough)}</time>
             </dd>
