@@ -63,8 +63,12 @@ test('B04 · le deuxième onglet annonce le conflit et permet de reprendre le mo
 
 test('Découvert · le premier budget accepte un montant sans signe', async (t) => {
   const { page } = await open(t);
-  await button(page, 'Commencer mon budget').click();
-  await page.getByLabel('Solde bancaire (€)').fill('25,30');
+  // Avec l'inscription activée, un choix précède le premier budget ; sans elle, le formulaire s'ouvre directement.
+  const start = button(page, 'Commencer mon budget');
+  const balance = page.getByLabel('Solde bancaire (€)');
+  await start.or(balance).first().waitFor();
+  if (await start.isVisible()) await start.click();
+  await balance.fill('25,30');
   await overdraft(page).check();
   await button(page, 'Continuer').click();
   await button(page, 'Pas de rentrée confirmée').click();
