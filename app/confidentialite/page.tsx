@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { managedBackupsEnabled } from '@/lib/cloud-remote';
+import { householdEnabled } from '@/lib/household-feature';
 
 export const metadata: Metadata = { title: 'Confidentialité · Capiste' };
 
@@ -52,6 +53,49 @@ export default function PrivacyPage() {
           Synchroniser mes appareils : la suppression est immédiate et définitive sur le serveur.
         </p>
       </section>
+
+      {/* Foyer : décrit seulement là où il est actif (docs/plans/P4-foyer.md §6.4, vérifié contre les migrations). */}
+      {householdEnabled && (
+        <section aria-labelledby="confidentialite-foyer" className="space-y-2">
+          <h2 id="confidentialite-foyer" className="font-semibold text-gray-900">Foyer : budget partagé</h2>
+          <p>
+            Quand tu crées un Foyer ou que tu en rejoins un, les éléments communs (montants, libellés, dates et prénoms
+            des membres) sont chiffrés sur ton appareil avant d’être envoyés chez Supabase, en Irlande. Ton budget
+            Personnel n’est jamais partagé. Les données personnelles de chaque membre restent privées.
+          </p>
+          <p>
+            Pour faire fonctionner le partage, le serveur conserve en clair : quels comptes sont membres de quel Foyer et
+            depuis quand, quel compte a créé ou modifié chaque élément et à quel moment, et pour chaque invitation, une
+            empreinte du lien et sa date d’expiration.
+          </p>
+          <p>
+            Start’OnLab gère les clés du Foyer et peut déchiffrer ses données pour les restituer à ses membres. Une
+            personne qui peut se connecter à ton compte, par exemple avec ton mot de passe ou via ta boîte e-mail, peut
+            aussi ouvrir ton Foyer. Le service qui fournit la clé du Foyer est hébergé chez Vercel ; il vérifie que ton
+            compte est bien membre avant de la donner.
+          </p>
+          <p>
+            Un lien d’invitation est valable 7 jours, une seule fois. Toute personne qui obtient un lien encore valide peut
+            rejoindre le Foyer avec son propre compte : envoie-le uniquement à la personne avec qui tu partages ce Foyer,
+            et annule-le si tu l’as envoyé par erreur.
+          </p>
+          <p>
+            Quand un membre quitte le Foyer ou que le partage avec lui est arrêté, ses accès au serveur sont coupés : les
+            nouvelles informations du Foyer ne lui sont plus partagées. Certaines informations déjà consultées ou
+            enregistrées par un ancien membre peuvent rester en sa possession : son appareil garde une copie chiffrée en
+            lecture seule, qu’il peut consulter, télécharger ou effacer. Le fichier téléchargé n’est pas chiffré.
+          </p>
+          <p>
+            Si tu supprimes ton compte, ton adhésion disparaît. Les entrées communes restent accessibles à l’autre membre
+            et ton nom est retiré de leur attribution. Si tu es le dernier membre, le Foyer et ses entrées sont supprimés
+            côté serveur.
+          </p>
+          <p>
+            La base légale est l’exécution du service de partage demandé par les membres. Les données d’un Foyer sont
+            conservées tant qu’au moins un membre y reste.
+          </p>
+        </section>
+      )}
 
       <section className="space-y-2">
         <h2 className="font-semibold text-gray-900">{managedBackupsEnabled ? 'Verrouillage de l’application' : 'Verrouillage de l’application (facultatif)'}</h2>
