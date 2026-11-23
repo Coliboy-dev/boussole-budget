@@ -280,7 +280,7 @@ export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinu
       </h1>
       {onlineCopy && <p role="status" className="text-sm font-semibold text-teal-800">Copie en ligne créée.</p>}
       {!summary.emptyBudget && <FirstInsight />}
-      <SummaryCard summary={summary} hasUndatedPayments={false} hasRecordedBalance={Boolean(balanceDate)} explainOpen />
+      <SummaryCard summary={summary} hasUndatedPayments={false} hasRecordedBalance={Boolean(balanceDate)} balanceDate={balanceDate} explainOpen />
       <p className="text-sm text-gray-600">
         Ce premier calcul utilise les échéances que tu as saisies. Tu peux compléter ton budget ensuite.
       </p>

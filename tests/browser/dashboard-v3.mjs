@@ -61,7 +61,7 @@ for (const [name, state] of Object.entries(scenarios)) {
       const until = clean(formatDate(forecast.dailyBalances.at(-1).date));
       assert.ok(card.includes(summary.trueAvailable < 0
         ? `Il te manque ${euro(-summary.trueAvailable)} pour couvrir tout ce qui est prévu jusqu’au ${until}.`
-        : `Ce que tu peux dépenser sans risque jusqu’au ${until}.`), `définition — « ${card} »`);
+        : `Ce que tu peux dépenser jusqu’au ${until} en couvrant tes paiements prévus.`), `définition — « ${card} »`);
       assert.ok(card.includes(status[summary.riskLevel]), `statut ${summary.riskLevel}`);
       // L'escalier, replié par défaut sur l'accueil : chaque ligne affichée vient du moteur.
       await cardLocator.getByText('Comment c’est calculé').click();
@@ -84,6 +84,10 @@ for (const [name, state] of Object.entries(scenarios)) {
       for (const [index, line] of expected.entries()) assert.ok(lines[index].startsWith(line), `« ${lines[index]} » ≠ « ${line} »`);
       assert.equal(b.available, summary.trueAvailable);
       card = clean(await cardLocator.innerText());
+      // Pas de connexion bancaire : le calcul dit d'où viennent ses chiffres.
+      assert.ok(card.includes(state.balanceDate ? `D’après ton solde du ${clean(formatShortDate(state.balanceDate))} et ce que tu as encodé.`
+        : 'D’après ton solde et ce que tu as encodé.'), card);
+      assert.ok(!card.includes('sans risque'), 'pas de promesse absolue');
     }
     assert.equal(card.includes('Projection partielle'), hasUndatedPayments(state.expenses, state.debts));
     assert.equal(body.includes('Projection à compléter'), hasUndatedPayments(state.expenses, state.debts));

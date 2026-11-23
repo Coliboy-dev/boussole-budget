@@ -121,7 +121,7 @@ function SavedBudgetDashboard() {
       )}
 
       {joint && <SummaryCard summary={summary} hasUndatedPayments={partial}
-        hasRecordedBalance={Boolean(balanceDate)} inHousehold={household}>
+        hasRecordedBalance={Boolean(balanceDate)} balanceDate={balanceDate} inHousehold={household}>
         <BalanceRows />
       </SummaryCard>}
       {!joint && <p className="text-sm text-cap-text">{householdCopy.noJointAccount}</p>}

@@ -15,6 +15,8 @@ interface SummaryCardProps {
   children?: ReactNode;
   /** Détail du calcul ouvert d'emblée (premier budget). */
   explainOpen?: boolean;
+  /** Date du solde recopié de la banque : le chiffre en dépend (pas de connexion bancaire). */
+  balanceDate?: string;
 }
 
 /** Une ligne de l'escalier : « − Réserve de sécurité … 50,00 € ». Les montants se lisent avec leur signe. */
@@ -38,7 +40,7 @@ function Step({ label, amount, sign, detail, total = false }: {
  * Le statut est toujours écrit ; un budget vide n'en affiche aucun.
  */
 export default function SummaryCard({
-  summary, hasUndatedPayments, hasRecordedBalance = false, inHousehold = false, children, explainOpen = false,
+  summary, hasUndatedPayments, hasRecordedBalance = false, inHousehold = false, children, explainOpen = false, balanceDate,
 }: SummaryCardProps) {
   const empty = summary.emptyBudget && !hasRecordedBalance;
   const forecast = summary.availableForecast;
@@ -68,7 +70,7 @@ export default function SummaryCard({
                 <>Il te manque <strong className="text-white">{formatCurrency(-summary.trueAvailable)}</strong> pour couvrir tout ce qui est prévu
                   jusqu’au <time dateTime={end.date}>{formatDate(end.date)}</time>.</>
               ) : (
-                <>Ce que tu peux dépenser sans risque jusqu’au <time dateTime={end.date}>{formatDate(end.date)}</time>.</>
+                <>Ce que tu peux dépenser jusqu’au <time dateTime={end.date}>{formatDate(end.date)}</time> en couvrant tes paiements prévus.</>
               )}
             </p>
           )}
@@ -114,7 +116,9 @@ export default function SummaryCard({
               <Step total label={negative ? 'Il te manque' : 'Tu peux dépenser'} amount={Math.abs(steps.available)} />
             </dl>
             <p className="mt-2 text-xs text-white/75">
-              Calculé au jour le plus serré de la période. Les revenus incertains ne sont pas comptés.
+              {/* Capiste n'est pas relié à la banque : le chiffre vaut ce que valent le solde et les données encodées. */}
+              D’après {balanceDate ? <>ton solde du <time dateTime={balanceDate}>{formatShortDate(balanceDate)}</time></> : 'ton solde'} et
+              ce que tu as encodé. Calculé au jour le plus serré de la période ; les revenus incertains ne sont pas comptés.
             </p>
           </details>
         )}
