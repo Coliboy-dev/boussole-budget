@@ -51,16 +51,39 @@ for (const [name, state] of Object.entries(scenarios)) {
     const forecast = summary.availableForecast;
     const body = clean(await page.locator('main').innerText());
 
-    // Carte du vrai disponible.
-    const card = clean(await page.locator('section').filter({ has: page.getByRole('heading', { name: 'Vrai disponible' }) }).first().innerText());
+    // Carte du vrai disponible : chiffre, définition en toutes lettres, calcul en escalier.
+    const cardLocator = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Vrai disponible' }) }).first();
+    let card = clean(await cardLocator.innerText());
     assert.ok(card.includes(euro(summary.trueAvailable)), `vrai disponible ${summary.trueAvailable}`);
     if (summary.emptyBudget) {
       assert.doesNotMatch(card, /Stable|Fragile|Critique/);
     } else {
-      assert.ok(card.includes(`Jusqu’au ${clean(formatDate(forecast.dailyBalances.at(-1).date))}`));
+      const until = clean(formatDate(forecast.dailyBalances.at(-1).date));
+      assert.ok(card.includes(summary.trueAvailable < 0
+        ? `Il te manque ${euro(-summary.trueAvailable)} pour couvrir tout ce qui est prévu jusqu’au ${until}.`
+        : `Ce que tu peux dépenser sans risque jusqu’au ${until}.`), `définition — « ${card} »`);
       assert.ok(card.includes(status[summary.riskLevel]), `statut ${summary.riskLevel}`);
-      assert.ok(card.includes(`Point bas prévu le ${clean(formatShortDate(forecast.date))} à ${euro(forecast.balance)}`));
-      assert.ok(card.includes(euro(summary.safetyReserve)));
+      // L'escalier, replié par défaut sur l'accueil : chaque ligne affichée vient du moteur.
+      await cardLocator.getByText('Comment c’est calculé').click();
+      const steps = cardLocator.locator('dl > div');
+      const lines = (await steps.allInnerTexts()).map(clean);
+      const b = forecast.breakdown;
+      const lowestDay = b.lowestDate === today ? 'aujourd’hui' : `le ${clean(formatShortDate(b.lowestDate))}`;
+      const expected = [
+        `Ton solde aujourd’hui ${euro(b.balance)}`,
+        b.incomes > 0 && `Revenus certains d’ici ${lowestDay} + ${euro(b.incomes)}`,
+        b.charges > 0 && `Charges et mensualités d’ici ${lowestDay} − ${euro(b.charges)}`,
+        b.envelopes > 0 && `Enveloppes (dépenses du quotidien) − ${euro(b.envelopes)}`,
+        b.incomes + b.charges + b.envelopes + b.savingsTransfers > 0
+          && `Ce qui te reste au plus bas, ${lowestDay} ${b.lowest < 0 ? `−${euro(-b.lowest)}` : euro(b.lowest)}`,
+        `Réserve de sécurité − ${euro(b.safetyReserve)}`,
+        b.annualProvision > 0 && `Provisions pour charges annuelles − ${euro(b.annualProvision)}`,
+        `${b.available < 0 ? 'Il te manque' : 'Tu peux dépenser'} ${euro(Math.abs(b.available))}`,
+      ].filter(Boolean);
+      assert.equal(lines.length, expected.length, lines.join(' | '));
+      for (const [index, line] of expected.entries()) assert.ok(lines[index].startsWith(line), `« ${lines[index]} » ≠ « ${line} »`);
+      assert.equal(b.available, summary.trueAvailable);
+      card = clean(await cardLocator.innerText());
     }
     assert.equal(card.includes('Projection partielle'), hasUndatedPayments(state.expenses, state.debts));
     assert.equal(body.includes('Projection à compléter'), hasUndatedPayments(state.expenses, state.debts));

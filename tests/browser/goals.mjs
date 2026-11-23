@@ -37,6 +37,11 @@ async function open(t, state, route) {
   return page;
 }
 const card = (page) => page.locator('section').filter({ has: page.getByRole('heading', { name: 'Vrai disponible' }) }).first();
+/** Texte de la carte, détail du calcul ouvert. */
+async function explained(page) {
+  await card(page).getByText('Comment c’est calculé').click();
+  return clean(await card(page).innerText());
+}
 
 test('La mise de côté du mois est retirée du vrai disponible et apparaît dans les échéances', async (t) => {
   const page = await open(t, base, '/dashboard');
@@ -75,8 +80,8 @@ test('Nouvel objectif : la question « Où gardes-tu cet argent ? » est obligat
   const goal = (await stored(page)).goals[0];
   assert.deepEqual([goal.label, goal.onCurrentAccount, goal.savedAmount], ['Soldes de janvier', true, 6000]);
   await page.goto('/dashboard');
-  const text = clean(await card(page).innerText());
-  assert.ok(text.includes(`et ${euro(60)} mis de côté pour tes objectifs`), text);
+  const text = await explained(page);
+  assert.ok(text.includes(`Épargne pour tes objectifs − ${euro(60)}`), text);
 });
 
 test('Cas du fondateur : 50 € sur le compte, 250 € « épargnés sur le compte courant » : calcul détaillé et incohérence signalée', async (t) => {
@@ -87,9 +92,12 @@ test('Cas du fondateur : 50 € sur le compte, 250 € « épargnés sur le comp
   const page = await open(t, state, '/dashboard');
   // 50 € (point bas) − 50 € de réserve − 250 € épargnés − 30 € de mise de côté du mois = −280 €.
   assert.equal(available(state), -280);
-  const text = clean(await card(page).innerText());
+  const text = await explained(page);
   assert.ok(text.includes(euro(-280)), text);
-  assert.ok(text.includes(`et ${euro(280)} mis de côté pour tes objectifs (${euro(250)} déjà épargnés + ${euro(30)} à mettre de côté ce mois-ci)`), text);
+  assert.ok(text.includes(`Il te manque ${euro(280)} pour couvrir tout ce qui est prévu`), text);
+  assert.ok(text.includes(`Ton solde aujourd’hui ${euro(50)}`), text);
+  assert.ok(text.includes(`Réserve de sécurité − ${euro(50)}`), text);
+  assert.ok(text.includes(`Épargne pour tes objectifs − ${euro(280)} ${euro(250)} déjà épargnés + ${euro(30)} à mettre de côté ce mois-ci`), text);
   assert.ok(text.includes(`Ton solde (${euro(50)}) est plus bas que l’épargne que tu dis garder sur ton compte courant (${euro(250)})`), text);
   const goals = await open(t, state, '/objectifs');
   await goals.getByText('Épargne plus élevée que ton solde').waitFor();

@@ -9,7 +9,7 @@ import { useFormValidation } from '@/components/forms/useFormValidation';
 import Card from '@/components/ui/Card';
 import { useLock } from '@/components/security/LockProvider';
 import { managedBackupsEnabled } from '@/lib/cloud-remote';
-import { formatShortDate } from '@/lib/budget-calculations';
+import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
 import { isBudgetAmount } from '@/lib/budget-schema';
 import { useApp } from '@/lib/context/AppContext';
 import { addDays, isLocalDate } from '@/lib/local-date';
@@ -228,6 +228,41 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
   );
 }
 
+/**
+ * Le moment « ah, c'est ça » : la banque montre le solde, Capiste montre ce qu'on peut vraiment dépenser,
+ * et dit d'où vient la différence.
+ */
+function FirstInsight() {
+  const { summary } = useApp();
+  const steps = summary.availableForecast.breakdown;
+  const negative = steps.available < 0;
+  const promised = [
+    steps.charges > 0 && `${formatCurrency(steps.charges)} de charges et mensualités`,
+    steps.envelopes > 0 && `${formatCurrency(steps.envelopes)} d’enveloppes`,
+    steps.savingsTransfers > 0 && `${formatCurrency(steps.savingsTransfers)} de virements vers ton épargne`,
+  ].filter(Boolean) as string[];
+  const kept = steps.safetyReserve + steps.annualProvision + steps.goalSavings;
+  const keptParts = ['ta réserve de sécurité', steps.annualProvision > 0 && 'tes provisions pour charges annuelles',
+    steps.goalSavings > 0 && 'ton épargne pour tes objectifs'].filter(Boolean) as string[];
+  const keptFor = keptParts.length > 1 ? `${keptParts.slice(0, -1).join(', ')} et ${keptParts.at(-1)}` : `${keptParts[0]}, pour les imprévus`;
+  return (
+    <section aria-labelledby="first-insight" className="space-y-2 rounded-2xl border border-cap-border bg-cap-surface p-4 text-sm text-cap-text">
+      <h2 id="first-insight" className="text-base font-bold">
+        Ta banque te montre {formatCurrency(steps.balance)}.{' '}
+        {negative
+          ? <>Il te manque {formatCurrency(-steps.available)} pour couvrir ce qui est prévu.</>
+          : <>Tu peux vraiment en dépenser {formatCurrency(steps.available)}.</>}
+      </h2>
+      <p>
+        {promised.length > 0 && <>D’ici le jour le plus serré, {promised.join(' et ')} sont déjà prévus
+          {steps.incomes > 0 && <>, en comptant {formatCurrency(steps.incomes)} de revenus certains</>}. </>}
+        Capiste garde aussi {formatCurrency(kept)} de côté : {keptFor}.
+      </p>
+      <p className="text-cap-text-muted">C’est ce « vrai disponible » que l’accueil te montrera chaque jour.</p>
+    </section>
+  );
+}
+
 export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinue: () => void; onlineCopy?: boolean }) {
   const { summary, balanceDate } = useApp();
   const { phase, beginSignIn } = useCloudSync();
@@ -244,7 +279,8 @@ export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinu
         Ton premier budget
       </h1>
       {onlineCopy && <p role="status" className="text-sm font-semibold text-teal-800">Copie en ligne créée.</p>}
-      <SummaryCard summary={summary} hasUndatedPayments={false} hasRecordedBalance={Boolean(balanceDate)} />
+      {!summary.emptyBudget && <FirstInsight />}
+      <SummaryCard summary={summary} hasUndatedPayments={false} hasRecordedBalance={Boolean(balanceDate)} explainOpen />
       <p className="text-sm text-gray-600">
         Ce premier calcul utilise les échéances que tu as saisies. Tu peux compléter ton budget ensuite.
       </p>
