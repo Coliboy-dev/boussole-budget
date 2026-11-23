@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import SummaryCard from '@/components/dashboard/SummaryCard';
+import { accountSignupEnabled, useCloudSync } from '@/components/sync/CloudSyncProvider';
 import FormField from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Card from '@/components/ui/Card';
 import { useLock } from '@/components/security/LockProvider';
+import { managedBackupsEnabled } from '@/lib/cloud-remote';
 import { formatShortDate } from '@/lib/budget-calculations';
 import { isBudgetAmount } from '@/lib/budget-schema';
 import { useApp } from '@/lib/context/AppContext';
@@ -228,6 +230,7 @@ export default function BudgetOnboarding({ onComplete, onFinish, onCancel }: {
 
 export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinue: () => void; onlineCopy?: boolean }) {
   const { summary, balanceDate } = useApp();
+  const { phase, beginSignIn } = useCloudSync();
   const { enabled: lockEnabled } = useLock();
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -250,6 +253,20 @@ export function OnboardingResult({ onContinue, onlineCopy = false }: { onContinu
         Tu veux empêcher une autre personne de voir ton budget sur ce téléphone ?{' '}
         <Link href="/synchronisation#verrouillage" className="font-semibold text-teal-800 underline">Verrouiller Capiste avec un code</Link>
       </p>}
+      {accountSignupEnabled && phase === 'signed-out' && !onlineCopy && (
+        <div className="space-y-1 text-sm text-gray-700">
+          <p>
+            Ton budget est enregistré sur cet appareil uniquement.{' '}
+            {managedBackupsEnabled
+              ? 'Avec un compte, une copie chiffrée en ligne te permet de le retrouver sur un autre appareil avec ton e-mail et ton mot de passe.'
+              : 'Avec un compte, une copie chiffrée avec ta phrase secrète te permet de le retrouver sur un autre appareil.'}
+          </p>
+          <Link href="/synchronisation" onClick={() => beginSignIn(true)}
+            className="inline-flex min-h-11 items-center font-semibold text-teal-800 underline">
+            Sauvegarder en ligne
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

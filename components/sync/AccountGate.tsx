@@ -1,21 +1,16 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useBudgetAccess } from '@/lib/budget-access';
-import { managedBackupsEnabled } from '@/lib/cloud-remote';
 import { useApp } from '@/lib/context/AppContext';
 import { deviceAuthenticatorAvailable } from '@/lib/webauthn-lock';
-import { accountSignupEnabled, useCloudSync } from './CloudSyncProvider';
+import { useCloudSync } from './CloudSyncProvider';
 import CloudAccountSection, { ChoosePassword } from './CloudAccountSection';
 import BudgetOnboarding from '@/components/onboarding/BudgetOnboarding';
 import { useLock } from '@/components/security/LockProvider';
 import { InitialLockSetup } from '@/components/security/LockSettings';
 
-const primary = 'min-h-11 rounded-xl bg-teal-700 px-4 text-sm font-semibold text-white';
 const secondary = 'min-h-11 rounded-xl border border-teal-700 px-4 text-sm font-semibold text-teal-800';
-const publicRoutes = new Set(['/demo', '/confidentialite', '/mentions-legales']);
 
 /**
  * Proposé une fois après une connexion sur un appareil qui sait vérifier son propriétaire (Face ID, empreinte…).
@@ -58,37 +53,17 @@ function DeviceLockOffer({ children }: { children: ReactNode }) {
 
 export default function AccountGate({ children }: { children: ReactNode }) {
   const allowed = useBudgetAccess();
-  const pathname = usePathname();
-  const { phase, finishAccountBudget, signOut, beginSignIn, otpEmail, passwordRequired, offerDeviceLock } = useCloudSync();
-  const { isCurrentBudget, isBudgetLoading, needsOnboarding } = useApp();
-  const [chosen, setChosen] = useState(false);
+  const { phase, finishAccountBudget, signOut, passwordRequired, offerDeviceLock } = useCloudSync();
+  const { isCurrentBudget, isBudgetLoading } = useApp();
   const stale = allowed && !isBudgetLoading && !isCurrentBudget();
-  const managedSignupRoute = managedBackupsEnabled && accountSignupEnabled && !publicRoutes.has(pathname);
-  const startingAccount = allowed && phase === 'signed-out' && needsOnboarding && managedSignupRoute;
 
   // Après un code e-mail (inscription ou récupération), le mot de passe est choisi avant tout le reste.
   if (passwordRequired) {
     return <main id="contenu" className="mx-auto max-w-lg px-4 py-6"><ChoosePassword /></main>;
   }
-  if (allowed && isBudgetLoading && managedSignupRoute) return <p role="status" className="px-4 py-6 text-sm">Chargement du budget…</p>;
-  if (allowed && !stale && !startingAccount) {
+  // Le budget se crée d’abord sur l’appareil ; le compte est proposé ensuite (« Sauvegarder en ligne »).
+  if (allowed && !stale) {
     return offerDeviceLock ? <DeviceLockOffer>{children}</DeviceLockOffer> : children;
-  }
-  if (startingAccount && !chosen && !otpEmail) {
-    return (
-      <main id="contenu" className="mx-auto max-w-lg space-y-4 px-4 py-6">
-        <h1 className="text-xl font-bold text-slate-900">Commence ton budget</h1>
-        <p className="text-sm text-slate-700">Ton compte sauvegarde automatiquement ton budget. Tu pourras le retrouver sur un autre appareil avec ton e-mail et ton mot de passe.</p>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={primary} onClick={() => { beginSignIn(true); setChosen(true); }}>Créer mon compte</button>
-          <button type="button" className={secondary} onClick={() => { beginSignIn(false); setChosen(true); }}>J’ai déjà un compte</button>
-        </div>
-        <p className="flex flex-wrap gap-4 text-sm text-teal-800">
-          <Link href="/demo" className="underline">Voir la démo</Link>
-          <Link href="/confidentialite" className="underline">Confidentialité</Link>
-        </p>
-      </main>
-    );
   }
   if (phase === 'first-budget') {
     return <main id="contenu"><BudgetOnboarding onFinish={finishAccountBudget} onCancel={signOut} /></main>;
@@ -108,7 +83,7 @@ export default function AccountGate({ children }: { children: ReactNode }) {
       ) : phase === 'syncing' || phase === 'synced' || phase === 'conflict' || phase === 'error' || phase === 'off' ? (
         <p role="status" className="text-sm text-slate-700">Vérification du compte…</p>
       ) : (
-        <CloudAccountSection protectedBudget startingAccount={startingAccount} />
+        <CloudAccountSection protectedBudget />
       )}
     </main>
   );
