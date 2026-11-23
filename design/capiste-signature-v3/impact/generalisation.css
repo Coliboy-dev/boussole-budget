@@ -1,0 +1,59 @@
+/*
+ * Proposition de généralisation Élan V3, NON chargée par l’application.
+ * Elle remplace les teintes Tailwind utilisées par les écrans par les couleurs à rôle d’Élan V3,
+ * sans toucher aux composants. Sert uniquement aux captures avant/après du lot 1.
+ * Règle : chaque remplacement garde au moins le contraste de la teinte d’origine (texte >= 4,5:1).
+ */
+:root {
+  --background: #F5F3EE;
+  --foreground: #172C37;
+  --card-bg: #FFFFFF;
+  --line: #E4E0D7;
+  --primary: #076E68;
+  --primary-dark: #0B5F5D;
+  --primary-soft: #EEF7F4;
+
+  /* Teal : actions et liens (texte teal toujours en #076E68 ou plus foncé) */
+  --color-teal-50: #EEF7F4;
+  --color-teal-100: #DDF1ED;
+  --color-teal-200: #C8EBE3;
+  --color-teal-400: #2BA698;
+  --color-teal-700: #076E68;
+  --color-teal-800: #076E68;
+  --color-teal-900: #0B5F5D;
+  --color-teal-950: #083F3E;
+
+  /* Neutres : bleu nuit et ivoire */
+  --color-slate-900: #172C37;
+  --color-gray-900: #172C37;
+  --color-slate-800: #22394A;
+  --color-gray-800: #22394A;
+  --color-slate-700: #364A58;
+  --color-gray-700: #364A58;
+  --color-slate-600: #4F6270;
+  --color-gray-600: #4F6270;
+  --color-slate-500: #586B78;
+  --color-gray-400: #8A949B;
+  --color-slate-300: #CFCAC0;
+  --color-gray-300: #CFCAC0;
+  --color-slate-200: #E4E0D7;
+  --color-gray-200: #E4E0D7;
+  --color-slate-100: #F0EDE6;
+  --color-gray-100: #F0EDE6;
+  --color-gray-50: #F7F5F0;
+
+  /* Avertissements, erreurs, mauve secondaire */
+  --color-amber-50: #FDF3E1;
+  --color-amber-100: #FBE8C6;
+  --color-amber-200: #F2D29A;
+  --color-amber-800: #8A5A00;
+  --color-amber-900: #6E4800;
+  --color-amber-950: #573900;
+  --color-red-50: #FBECEE;
+  --color-red-200: #EBC2C8;
+  --color-red-700: #A53D4B;
+  --color-red-800: #8E3340;
+  --color-indigo-50: #F5F3FD;
+  --color-indigo-100: #EFEDFB;
+  --color-indigo-700: #6758AC;
+}
