@@ -31,7 +31,10 @@ function householdView(state: AppState): Map<string, HouseholdRecord> {
     }
   }
   for (const [id, data] of Object.entries(cents.merchantCategories ?? {})) add({ kind: 'merchant', id, data });
-  add({ kind: 'settings', id: 'settings', data: { safetyReserve: cents.userProfile.safetyReserve } });
+  add({ kind: 'settings', id: 'settings', data: {
+    safetyReserve: cents.userProfile.safetyReserve,
+    ...(cents.hasJointAccount !== undefined && { hasJointAccount: cents.hasJointAccount }),
+  } });
   return records;
 }
 
@@ -57,10 +60,11 @@ export function diffHousehold(previous: AppState, next: AppState, context: DiffC
     if (record.kind === 'spending') {
       const spending = record.data as Spending;
       const attached = stored.get(key)?.balanceEffect?.checkpointId ?? checkpoint?.checkpointId;
-      if (spending.debited && !attached) throw new Error('Recopie le solde du foyer avant de saisir une dépense débitée.');
+      const debited = spending.debited && spending.paidFrom !== 'personal';
+      if (debited && !attached) throw new Error('Recopie le solde du foyer avant de saisir une dépense débitée.');
       record.data = { ...spending, balanceRevision: 0 };
       if (old?.data) old.data = { ...old.data as Spending, balanceRevision: 0 };
-      if (spending.debited && attached) record.balanceEffect = { checkpointId: attached, deltaCents: -spending.amount };
+      if (debited && attached) record.balanceEffect = { checkpointId: attached, deltaCents: -spending.amount };
     }
     if (JSON.stringify(old?.data) === JSON.stringify(record.data)) continue;
 

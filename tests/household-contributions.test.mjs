@@ -175,6 +175,18 @@ test('F6 · un versement proposé par l’autre compte attend un accord pour sa 
   assert.equal(applyContributionMirrorChanges(updated, 'foyer-1', sam, [offer], today), updated);
 });
 
+test('F6 · le dernier membre attesté décide du miroir, y compris quand le cache contient un ancien identifiant de compte', () => {
+  const income = contribution(sam, 600);
+  const entry = { seq: 4, record: { kind: 'income', id: income.id, data: income } };
+  const plan = (editorMemberId, updatedBy) => contributionMirrorPlan(
+    [income], [{ ...entry, editorMemberId, updatedBy }], 'compte-sam', sam, 4,
+  );
+  assert.equal(plan(sam, undefined).automatic.length, 1);
+  assert.equal(plan(marc, 'compte-sam').automatic.length, 0);
+  assert.equal(plan(marc, 'compte-sam').proposals.length, 1);
+  assert.equal(plan(null, 'compte-sam').automatic.length, 0);
+});
+
 test('F6 · suppression ou réattribution clôture le miroir et laisse le paiement dans l’analyse', () => {
   const income = contribution(sam, 800, '2026-10-25');
   const record = (seq, data) => ({ seq, updatedBy: 'compte-sam', record: { kind: 'income', id: income.id, data } });

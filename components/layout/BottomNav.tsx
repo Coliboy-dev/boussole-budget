@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { CalendarDays, Ellipsis, House, Wallet } from 'lucide-react';
 import { Icon } from '@/components/ui/icons';
+import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
+import { useApp } from '@/lib/context/AppContext';
 
 const items = [
   { href: '/dashboard', label: 'Aujourd’hui', icon: House, routes: ['/'] },
@@ -15,6 +17,9 @@ const items = [
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const household = useHouseholdMovements();
+  const { hasJointAccount } = useApp();
+  const noJointAccount = !!household && hasJointAccount === false;
   const previousPath = useRef(pathname);
 
   useEffect(() => {
@@ -26,8 +31,8 @@ export default function BottomNav() {
 
   return (
     <nav aria-label="Navigation principale" className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white shadow-lg">
-      <div className="mx-auto grid h-16 max-w-2xl grid-cols-4 px-2">
-        {items.map(({ href, label, icon, routes }) => {
+      <div className={`mx-auto grid h-16 max-w-2xl px-2 ${noJointAccount ? 'grid-cols-3' : 'grid-cols-4'}`}>
+        {items.filter(({ href }) => !noJointAccount || href !== '/projection').map(({ href, label, icon, routes }) => {
           const active = pathname === href || routes.some((route) => route === pathname);
 
           return (

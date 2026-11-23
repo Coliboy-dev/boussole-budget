@@ -140,7 +140,16 @@ Tous les textes viennent de `household-copy.ts`, énoncent un fait financier vé
 
 **F4 — Avance (M3).** `Spending` du foyer avec `paidFrom: 'personal'` et `paidBy: memberId`. `addSpending` ne débite **pas** le solde commun pour `paidFrom: 'personal'` (même si `balanceIncluded` est faux). La dépense compte dans `spentInMonth` (donc réduit la réservation d’enveloppe) et dans `analyzeMonth`. Elle est **exclue** du calcul « Non encodé » (R5 de P3) : elle n’a jamais touché le compte commun.
 
-**F5 — Transfert (M4).** Entité `MemberTransfer { id, fromMemberId, toMemberId, amount, date, status: 'declared' | 'confirmed' | 'not_received', declaredAt, confirmedAt? }`. Seul le destinataire peut passer `declared` → `confirmed` ou `not_received`. Aucun effet sur le solde commun ni sur l’analyse du foyer.
+**F5 — Transfert (M4).** Le transfert affiché se reconstruit à partir de deux éléments chiffrés.
+
+- L’émetteur écrit la déclaration `{ transferId, fromMemberId, toMemberId, amount, date }`.
+- Le destinataire écrit une réponse `{ transferId, declarationHash, status: 'confirmed' | 'not_received' }` sous un nouvel UUID aléatoire. L’empreinte SHA‑256 porte sur le contenu déchiffré de la déclaration, encodé de façon canonique. Le contenu chiffré porte aussi un identifiant de révision aléatoire renouvelé lors d’une modification. Rétablir un ancien montant crée ainsi une nouvelle version à confirmer.
+- L’appareil accepte la déclaration si son `author_member_id`, attesté par le serveur, correspond à `fromMemberId`. Il accepte une réponse si son `author_member_id` correspond à `toMemberId` et si l’empreinte correspond à la révision actuelle de la déclaration. Parmi les réponses valides, il retient celle au plus grand `seq`. Une identité de compte est inutile pour vérifier ces pièces.
+- Lorsqu’une modification change l’empreinte de la déclaration, elle laisse la réponse précédente dans l’historique et le transfert repasse à « À confirmer ». Le destinataire peut alors répondre sur le nouveau montant.
+
+Le transfert n’affecte ni le solde commun ni l’analyse du Foyer.
+
+L’identifiant de membre survit à la suppression du compte. Un nouvel appareil peut ainsi vérifier la confirmation d’une personne dont l’adhésion et le profil ont disparu. Dans ce cas, la confirmation apparaît avec la mention « Confirmé par Ancien membre ».
 
 **F6 — Lignes miroir personnelles.** Créées **par l’appareil de la personne concernée**, dans **son** espace Personnel, jamais par l’autre :
 - M2 : `Expense { category: 'household', label: 'Versement au compte commun', amount, frequency, dueDate, isRecurring: true, linkedRecordId }`. La création ou la modification est automatique pour un versement saisi par le membre concerné. Si l’autre membre l’a saisi ou modifié, le membre concerné peut accepter le montant affiché ou choisir « Pas maintenant ». Une suppression ou une réattribution confirmée clôture le miroir à la date du jour, retire ses échéances ouvertes et garde l’historique payé ;
@@ -213,6 +222,15 @@ La PR 2 ajoute `household_writes` dans une nouvelle migration. La table associe 
 
 Le client vérifie `household_sync_version() = 2` avant d’utiliser le service. La migration des reçus fournit cette fonction aux comptes authentifiés. Un déploiement de l’application avant la migration laisse donc la file locale en attente.
 
+La migration `20261122212700_household_record_authors.sql` de la PR 4 ajoute deux colonnes à `household_records`.
+
+- `author_member_id uuid` reçoit, lors de la création de chaque élément, le `member_id` que le serveur lit dans l’adhésion active de l’appelant. L’API ignore toute valeur fournie par l’appareil. L’identifiant est immuable et sans clé étrangère vers les comptes ou les adhésions. Les lignes antérieures conservent une valeur nulle.
+- `exclusive boolean not null default false` vaut `true` pour les déclarations et réponses de transfert. Sa valeur est fixée à la création. Une contrainte refuse tout élément exclusif dépourvu d’auteur.
+- Sous le verrou du foyer, seul le membre dont le `member_id` correspond à `author_member_id` peut modifier ou supprimer un élément exclusif. Un membre réinvité retrouve ses droits grâce à son identifiant d’adhésion conservé. Après suppression de son compte, ses éléments exclusifs restent figés.
+- Les écritures ordinaires restent partagées et les reçus idempotents sont conservés. Le serveur contrôle les métadonnées d’accès. Le montant, la date du transfert, l’état de la réponse et l’empreinte de déclaration restent chiffrés.
+
+`20261123003000_household_member_reads.sql` ajoute `editor_member_id`. Le serveur le déduit de l’adhésion du dernier compte ayant écrit l’élément et le conserve après une suppression de compte. Les miroirs M2 et M3 s’appuient sur cette attribution. Les identifiants Supabase `created_by`, `updated_by` et `household_members.user_id` restent au serveur. La lecture directe est limitée aux colonnes autorisées. `pull_records` renvoie une projection sans ces identifiants. `list_my_households` renvoie au compte connecté ses foyers, sa propre adhésion et les identifiants des membres actifs. Les politiques RLS et la vérification d’adhésion active continuent de s’appliquer.
+
 Fonctions (`security definer`, `search_path = ''`, `revoke` à `public`/`anon`, `grant execute` à `authenticated`) :
 - `create_household() returns table(household_id uuid, member_id uuid)` — crée le foyer et le premier membre dans la même transaction.
 - `create_invitation(h uuid, token_hash text) returns uuid` — membre actif ; refusé si le foyer compte déjà 2 membres actifs ; invalide les invitations non utilisées précédentes du foyer.
@@ -230,13 +248,15 @@ Quand une adhésion est supprimée avec le compte, le déclencheur efface aussi 
 Le verrou sur `households` garantit que l’ordre des `seq` est l’ordre de validation : un client qui tire `seq > dernier_vu` ne manque jamais un élément.
 
 ### 5.3 Éléments chiffrés
-Chaque élément contient `{ kind, id, data, balanceEffect? }`, chiffré en AES-GCM 256 avec la clé du foyer. Les **données additionnelles authentifiées** `"${household_id}|${record_id}|${key_version}"` empêchent de déplacer un élément d’un foyer ou d’un identifiant à l’autre. Le contenu chiffré conserve l’identifiant du moteur. L’UUID de synchronisation `record_id` est calculé par ``derivedRecordId(householdId, `${kind}|${engineId}`)``. L’attribution des écritures vient des colonnes renseignées par le serveur au §5.2.
+Chaque élément contient `{ kind, id, data, balanceEffect? }`, chiffré en AES-GCM 256 avec la clé du foyer. Les **données additionnelles authentifiées** `"${household_id}|${record_id}|${key_version}"` empêchent de déplacer un élément d’un foyer ou d’un identifiant à l’autre. Le contenu chiffré conserve l’identifiant du moteur. L’UUID de synchronisation `record_id` est calculé par ``derivedRecordId(householdId, `${kind}|${engineId}`)``, sauf pour une réponse à un transfert, dont l’UUID est généré aléatoirement. L’attribution des écritures vient des colonnes renseignées par le serveur au §5.2.
 
 | `kind` | Contenu | Fusion |
 |---|---|---|
 | `settings` | nom du foyer, réserve, `hasJointAccount` (id fixe dérivé du foyer, voir ci-dessous) | dernière écriture gagne |
 | `member` | `memberId`, prénom affiché. Clé de dérivation composée de `member`, d’une barre verticale et du `memberId`, comme dans le déclencheur SQL de suppression de compte | dernière écriture gagne |
-| `income`, `expense`, `debt`, `envelope`, `goal`, `spending`, `transfer`, `gap` | l’entité, montants en centimes, **sans** `occurrenceStatuses` | dernière écriture gagne par élément |
+| `income`, `expense`, `debt`, `envelope`, `goal`, `spending`, `gap` | l’entité, montants en centimes, **sans** `occurrenceStatuses` | dernière écriture gagne par élément |
+| `transfer` | déclaration de l’émetteur, montant en centimes | écriture exclusive à son créateur |
+| `transfer-response` | réponse du destinataire et empreinte de la déclaration | ajout sous UUID aléatoire, écriture exclusive à son créateur, validation selon F5 |
 | `occurrence` | `{ entityKind, entityId, dueDate, status, paymentDate? }`, identifiant du moteur composé du type, de l’identifiant de l’entité et de la date, séparés par des barres verticales | dernière écriture gagne ; suppression = statut retiré |
 | `child-expense`, `merchant` | frais des enfants saisis dans le Foyer en centimes, et catégories de commerces mémorisées à partir des dépenses du Foyer | dernière écriture gagne par élément |
 | `debt-payment` | paiement de dette hors échéance, avec son identifiant, sa date et son effet | dernière écriture gagne par opération |
@@ -315,7 +335,7 @@ La page Confidentialité explique que Capiste héberge les données chiffrées e
 - **Aujourd’hui (Foyer)** : « Disponible confirmé », « Avec les versements attendus », prochains mouvements (versements « Réception à confirmer », échéances), point d’attention F3, enveloppes. Exemple de maquette validé dans la relecture du 21 novembre.
 - **Saisie rapide (Foyer)** : case « Payé avec mon argent personnel » (M3).
 - **`/foyer/mouvements`** : versements du mois par personne, transferts (déclarer, confirmer, « Pas reçu »), récapitulatif des avances avec la phrase de neutralité. Non affiché sur l’accueil.
-- **Chaque élément** du foyer affiche « Ajouté par <prénom> » dans son détail. Le détail indique aussi qui l’a modifié lorsque c’est pertinent. Quand le compte de l’auteur a été supprimé, utiliser « Ancien membre » pour l’attribution et pour ses mouvements conservés.
+- **Chaque élément** du foyer affiche « Ajouté par <prénom> » dans son détail. L’interface retrouve le prénom à partir de `author_member_id`. En l’absence d’adhésion active et de profil, elle affiche « Ancien membre ». Le détail indique aussi qui a modifié l’élément lorsque c’est pertinent.
 - Tous les textes depuis `lib/household-copy.ts`.
 
 ---
@@ -359,6 +379,18 @@ Le 20/11/2026, compte commun 1 000 € (recopié le 10/11), enveloppe Courses du
 - Personnel de Marc : −40 € à l’avance, −50 € dès la déclaration.
 - Analyses personnelles : ni les avances ni le transfert dans le total des dépenses ; `transfersCents` Sam = 13 500 (avance) et entrée de 5 000 en section « Transferts » ; Marc = 9 000.
 - Variante « Pas reçu » : Sam choisit « Pas reçu » → statut `not_received`, aucune entrée chez Sam, la sortie de Marc reste (c’est son geste ; il peut supprimer sa déclaration, ce qui supprime sa ligne miroir).
+
+Tests de confirmation F5 sur une base de test.
+
+- Après la confirmation de Sam, une modification de la déclaration faite hors ligne arrive. Sur un appareil neuf, le nouveau montant est « À confirmer » et la réponse de Sam est conservée dans l’historique.
+- Après une première confirmation à 50 €, passer à 80 € puis revenir à 50 € exige une nouvelle confirmation.
+- Une réponse « confirmed » signée par le compte de l’émetteur est ignorée par l’appareil.
+- L’émetteur ne peut ni modifier ni supprimer la réponse du destinataire. Le destinataire ne peut ni modifier ni supprimer la déclaration.
+- Le drapeau est immuable sur un élément existant. Les écritures ordinaires restent partagées. Le montant, la date, le statut et l’empreinte ne sont présents que dans le contenu chiffré.
+- Les deux membres peuvent lire les identifiants de foyer de l’auteur et du dernier membre ayant modifié un élément. Les lectures authentifiées sur les tables et les fonctions ne révèlent aucune correspondance vers les identifiants Supabase.
+- Toute tentative de fournir `author_member_id` depuis l’appareil est ignorée sur les éléments exclusifs et ordinaires.
+- Un membre réinvité avec le même compte peut de nouveau modifier ses propres éléments exclusifs.
+- Sam confirme puis supprime son compte. Sur un nouvel appareil, Marc voit « Confirmé par Ancien membre ». La réponse conserve son auteur de foyer et aucun membre actif ne peut la modifier ou la supprimer.
 
 **F-C. Versement lié sans double comptage (correction B).**
 Personnel de Sam : solde 2 000 €, versement mensuel de 800 € au compte commun le 28. Ligne miroir : charge `household` de 800 €, **certaine** dans le vrai disponible personnel. Analyse personnelle de novembre après paiement : total des dépenses **sans** les 800 € ; ligne « Virements et avances pour le foyer : 800 € ». Foyer : rentrée attendue de 800 €, comptée seulement dans « Avec les versements attendus ».

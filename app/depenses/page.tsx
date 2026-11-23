@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ChartPie, Plus } from 'lucide-react';
+import { ChartPie, HandCoins, Plus } from 'lucide-react';
 import { CompactRows, DetailFact, DetailSheet, type CompactRow } from '@/components/budget/CompactRows';
 import EnvelopeForm from '@/components/spending/EnvelopeForm';
 import NewSpendingAction from '@/components/spending/NewSpendingAction';
@@ -18,6 +18,8 @@ import { spentInMonth } from '@/lib/envelopes';
 import { fromCents, toCents } from '@/lib/money';
 import { envelopesOf, spendingCategoryLabels, spendingsOf } from '@/lib/spending';
 import type { Envelope, Spending } from '@/lib/types';
+import { householdCopy, householdMessages } from '@/lib/household-copy';
+import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
 
 type Panel =
   | { type: 'spending' | 'edit-spending'; id: string }
@@ -25,7 +27,11 @@ type Panel =
   | { type: 'new-envelope' };
 
 function spendingTitle(spending: Spending): string {
-  return spending.label || spendingCategoryLabels[spending.category];
+  return spending.label || spendingCategory(spending);
+}
+
+function spendingCategory(spending: Spending): string {
+  return spending.category === 'household' ? householdCopy.transfers : spendingCategoryLabels[spending.category];
 }
 
 function envelopeRow(envelope: Envelope, spentCents: number): CompactRow {
@@ -54,6 +60,7 @@ function envelopeRow(envelope: Envelope, spentCents: number): CompactRow {
 
 export default function SpendingPage() {
   const state = useApp();
+  const household = useHouseholdMovements();
   const { today, storageBlocked, isBudgetLoading, lastAddedSpendingId } = state;
   const [selectedMonth, setSelectedMonth] = useState<string>();
   const [panel, setPanel] = useState<Panel>();
@@ -69,14 +76,18 @@ export default function SpendingPage() {
     rows.push({
       id: item.id,
       title: spendingTitle(item),
-      icon: spendingCategoryIcons[item.category],
-      meta: item.label ? spendingCategoryLabels[item.category] : undefined,
+      icon: item.category === 'household' ? HandCoins : spendingCategoryIcons[item.category],
+      meta: item.paidBy && household
+        ? householdMessages.advancePaidBy(household.memberName(item.paidBy))
+        : item.label ? spendingCategory(item) : undefined,
       amount: formatCurrency(item.amount),
     });
     byDay.set(item.date, rows);
   }
   const envelope = panel && 'id' in panel ? envelopes.find(({ id }) => id === panel.id) : undefined;
   const spending = panel && 'id' in panel ? spendings.find(({ id }) => id === panel.id) : undefined;
+  const canEditSpending = !storageBlocked && !!spending && !spending.linkedRecordId
+    && (!spending.paidBy || spending.paidBy === household?.memberId);
   const close = () => setPanel(undefined);
 
   if (isBudgetLoading) {
@@ -149,15 +160,18 @@ export default function SpendingPage() {
       )}
       {panel?.type === 'spending' && spending && (
         <DetailSheet title={spendingTitle(spending)} onClose={close}
-          onEdit={storageBlocked ? undefined : () => setPanel({ type: 'edit-spending', id: spending.id })}
-          onDelete={storageBlocked ? undefined : () => { state.deleteSpending(spending.id); close(); }}
+          onEdit={canEditSpending ? () => setPanel({ type: 'edit-spending', id: spending.id }) : undefined}
+          onDelete={canEditSpending ? () => { state.deleteSpending(spending.id); close(); } : undefined}
           deleteLabel="Supprimer cette dépense ?">
           <dl className="space-y-2">
             <DetailFact label="Montant">{formatCurrency(spending.amount)}</DetailFact>
-            <DetailFact label="Catégorie">{spendingCategoryLabels[spending.category]}</DetailFact>
+            <DetailFact label="Catégorie">{spendingCategory(spending)}</DetailFact>
             <DetailFact label="Date">{formatDate(spending.date)}</DetailFact>
             {spending.balanceIncluded && <DetailFact label="Déjà comprise dans ton solde">Oui</DetailFact>}
           </dl>
+          {spending.paidBy && household && <p className="text-sm text-slate-700">
+            {householdMessages.advancePaidBy(household.memberName(spending.paidBy))}
+          </p>}
         </DetailSheet>
       )}
     </div>

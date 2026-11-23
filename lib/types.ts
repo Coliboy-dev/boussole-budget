@@ -11,7 +11,7 @@ export interface UserProfile {
 }
 
 // Income types
-export type IncomeType = 'mutual_insurance' | 'allocation' | 'alimony' | 'salary' | 'freelance' | 'other' | 'household_contribution';
+export type IncomeType = 'mutual_insurance' | 'allocation' | 'alimony' | 'salary' | 'freelance' | 'other' | 'household_contribution' | 'household_transfer';
 export type Frequency = 'monthly' | 'weekly' | 'bi_monthly' | 'quarterly' | 'annual' | 'one_time';
 
 export type OccurrenceStatus = 'planned' | 'paid' | 'late' | 'cancelled';
@@ -32,6 +32,10 @@ export interface Income extends Schedule {
   expectedDate?: string; // ISO date
   isConfirmed: boolean;
   contributionMemberId?: string;
+  linkedRecordId?: string;
+  linkedRecordSeq?: number;
+  linkedRevision?: string;
+  balanceRevision?: number;
   notes?: string;
 }
 
@@ -66,11 +70,15 @@ export interface Spending {
   id: string;
   date: string;
   amount: number;
-  category: SpendingCategory;
+  category: SpendingCategory | 'household';
   label?: string;
   balanceIncluded: boolean;
   debited: boolean;
   balanceRevision: number;
+  paidFrom?: 'personal';
+  paidBy?: string;
+  linkedRecordId?: string;
+  linkedRecordSeq?: number;
 }
 
 export interface BalanceGap {
