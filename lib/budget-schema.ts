@@ -109,6 +109,12 @@ const schedule = {
       status(entry, `${path}.${day}`);
     }
   }),
+  occurrenceAmountsCents: optional((value, path) => {
+    for (const [day, cents] of Object.entries(asObject(value, path))) {
+      if (!isLocalDate(day)) invalid(path);
+      nonNegativeInteger(cents, `${path}.${day}`);
+    }
+  }),
 };
 
 function budgetCheck(unit: Unit): Check {
@@ -148,22 +154,25 @@ function budgetCheck(unit: Unit): Check {
     incomes: entities({
       ...schedule,
       label: text,
-      type: oneOf('mutual_insurance', 'salary', 'allocation', 'alimony', 'freelance', 'other'),
+      type: oneOf('mutual_insurance', 'salary', 'allocation', 'alimony', 'freelance', 'other', 'household_contribution'),
       amount: money,
       frequency,
       expectedDate: optional(date),
       isConfirmed: flag,
+      contributionMemberId: optional(identifier),
       notes: optional(text),
     }),
     expenses: entities({
       ...schedule,
       label: text,
-      category: oneOf('rent', 'energy', 'phone', 'insurance', 'groceries', 'transport', 'health', 'school', 'subscriptions', 'other'),
+      category: oneOf('rent', 'energy', 'phone', 'insurance', 'groceries', 'transport', 'health', 'school', 'subscriptions', 'other', 'household'),
       amount: money,
       frequency,
       dueDate: optional(date),
       isPaid: flag,
       isRecurring: flag,
+      linkedRecordId: optional(identifier),
+      linkedRecordSeq: optional(nonNegativeInteger),
       notes: optional(text),
     }),
     debts: entities({

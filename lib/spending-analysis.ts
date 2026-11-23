@@ -4,7 +4,7 @@ import { fromCents, toCents } from './money.ts';
 import { balanceGapsOf, spendingCategoryLabels, spendingsOf } from './spending.ts';
 import type { ExpenseCategory, SpendingCategory } from './types.ts';
 
-export type AnalysisCategory = SpendingCategory | ExpenseCategory | 'debts' | 'unrecorded';
+export type AnalysisCategory = SpendingCategory | Exclude<ExpenseCategory, 'household'> | 'debts' | 'unrecorded';
 
 export function isSpendingCategory(category: AnalysisCategory): category is SpendingCategory {
   return Object.hasOwn(spendingCategoryLabels, category);
@@ -35,6 +35,7 @@ export interface MonthAnalysis {
   rows: { category: AnalysisCategory; cents: number; previousCents: number; averageCents: number | null }[];
   unrecordedCents: number;
   recordedCount: number;
+  transfersCents?: number;
 }
 
 function paidDates(statuses: Record<string, 'paid' | 'cancelled'> | undefined, month: string): string[] {
@@ -52,6 +53,7 @@ function itemsInMonth(state: AppState, month: string): CategorizedItem[] {
   }
 
   for (const expense of state.expenses) {
+    if (expense.category === 'household') continue;
     const dates = new Set(paidDates(expense.occurrenceStatuses, month));
     if (expense.isPaid && expense.dueDate?.slice(0, 7) === month) dates.add(expense.dueDate);
     for (const date of dates) {
@@ -98,6 +100,9 @@ export function analyzeMonth(state: AppState, month: string): MonthAnalysis {
   const totals = categoryTotals(items);
   const previous = [1, 2, 3].map((offset) => categoryTotals(itemsInMonth(state, addMonths(start, -offset).slice(0, 7))));
   const sampled = previous.filter((period) => period.size > 0);
+  const transfersCents = state.expenses.filter(({ category }) => category === 'household')
+    .reduce((sum, expense) => paidDates(expense.occurrenceStatuses, month).reduce((subtotal, date) =>
+      subtotal + (expense.occurrenceAmountsCents?.[date] ?? toCents(expense.amount)), sum), 0);
 
   return {
     month,
@@ -112,6 +117,7 @@ export function analyzeMonth(state: AppState, month: string): MonthAnalysis {
     totalCents: items.reduce((sum, { cents }) => sum + cents, 0),
     unrecordedCents: totals.get('unrecorded') ?? 0,
     recordedCount: items.filter(({ source }) => source === 'spending').length,
+    ...(transfersCents > 0 ? { transfersCents } : {}),
   };
 }
 

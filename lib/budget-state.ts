@@ -80,7 +80,7 @@ export const emptyBudgetState: AppState = {
   documents: [],
 };
 
-function convertAmounts(state: AppState, convert: (amount: number) => number): AppState {
+export function convertAmounts(state: AppState, convert: (amount: number) => number): AppState {
   const plan = state.mediationFile.proposedPlan;
   const envelopes = envelopesOf(state);
   const spendings = spendingsOf(state);
@@ -205,7 +205,8 @@ export function openPaymentOccurrence(state: AppState, { type, id, dueDate, toda
   const income = type === 'income' ? state.incomes.find((item) => item.id === id) : undefined;
   const expense = type === 'expense' ? state.expenses.find((item) => item.id === id) : undefined;
   const debt = type === 'debt' ? state.debts.find((item) => item.id === id) : undefined;
-  const occurrences = income ? incomeOccurrences(income, today, through)
+  const start = income?.type === 'household_contribution' && dueDate < today ? dueDate : today;
+  const occurrences = income ? incomeOccurrences(income, start, through)
     : expense ? expenseOccurrences(expense, today, through) : debt ? debtOccurrences(debt, today, through) : [];
   return occurrences.find((item) => item.dueDate === dueDate && isOpenOccurrence(item));
 }
@@ -222,10 +223,16 @@ export function recordPayment(state: AppState, payment: Payment): AppState {
     balanceDate: balanceIncludesPayment ? state.balanceDate : today,
     currentBalance: balanceIncludesPayment ? state.currentBalance : fromCents(balanceCents + occurrence.amountCents),
     incomes: type === 'income' ? state.incomes.map((item) => item.id === id
-      ? { ...item, occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' } }
+      ? { ...item, occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' },
+        ...(item.type === 'household_contribution' && {
+          occurrenceAmountsCents: { ...item.occurrenceAmountsCents, [dueDate]: occurrence.amountCents },
+        }) }
       : item) : state.incomes,
     expenses: type === 'expense' ? state.expenses.map((item) => item.id === id
-      ? { ...item, occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' } }
+      ? { ...item, occurrenceStatuses: { ...item.occurrenceStatuses, [dueDate]: 'paid' },
+        ...(item.category === 'household' && {
+          occurrenceAmountsCents: { ...item.occurrenceAmountsCents, [dueDate]: -occurrence.amountCents },
+        }) }
       : item) : state.expenses,
     debts: type === 'debt' ? state.debts.map((item) => {
       if (item.id !== id) return item;

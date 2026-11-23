@@ -145,6 +145,10 @@ Après le code e-mail, Boussole propose une phrase secrète générée. La perso
 
 Une session propriétaire expirée peut ouvrir le budget local pendant le renouvellement si le compte, la clé et le rattachement concordent. Le coffre reste en pause jusqu’à la validation en ligne. Avec une absence de session confirmée, un rattachement illisible peut repasser en mode invité sous le verrou de transition. `tests/browser/account-signup.mjs` couvre ces parcours avec Chromium et une API Supabase simulée.
 
+## Mot de passe du compte et verrou proposé (P5, révision 6.1)
+
+La connexion se fait par e-mail et mot de passe (Supabase Auth, 12 caractères minimum dans l’app et côté serveur). Le code e-mail sert à confirmer l’adresse à l’inscription et à récupérer un compte (« Mot de passe oublié ou pas encore créé ? ») ; après un code, le choix du mot de passe passe avant tout autre écran. Le code à 6 chiffres et Face ID ne sont plus imposés : ils sont proposés une fois après la connexion, avec « Plus tard ». `tests/browser/managed-backup.mjs` couvre l’inscription, la connexion sur un second appareil, le mauvais mot de passe, la récupération, le coffre historique et la proposition du verrou.
+
 ## Dépenses et enveloppes : modèle et calcul
 
 Le format de sauvegarde reste en version 2. Les anciennes sauvegardes gardent leur structure. Le moteur traite les champs absents comme des listes vides, une mémoire de commerces vide et une révision de solde à zéro.
@@ -164,6 +168,36 @@ Dans **Dépenses du mois**, choisis un mois pour consulter les dépenses par jou
 Depuis **Budget** ou **Dépenses du mois**, ouvre **Où part mon argent** pour consulter le total du mois, sa répartition par catégorie et l’écart avec le mois précédent. Ouvre une ligne pour voir ses opérations. **Non encodé** représente le reste des sorties inexpliquées depuis tes relevés de solde. Pour réduire ce montant, ajoute une dépense oubliée et coche **Déjà comprise dans mon solde** si elle y figure.
 
 Dans une catégorie de dépenses du quotidien, tu peux tester un nouveau montant d’enveloppe et voir son effet sur ton vrai disponible avant d’appuyer sur **Appliquer**. Pour créer une enveloppe, Boussole propose une moyenne des mois précédents renseignés, arrondie aux 5 € supérieurs. Au premier mois renseigné, tu choisis le montant.
+
+## Foyer partagé (P4, PR 1)
+
+Les éléments du foyer sont chiffrés sur l’appareil. Leur identifiant, celui du foyer et la version de clé sont vérifiés au déchiffrement. La route `POST /api/household-key` rend la clé gérée aux membres actifs après vérification du compte et de l’adhésion sous les règles d’accès Supabase. Les invitations expirent après sept jours et sont à usage unique.
+
+La suppression d’un compte efface son adhésion et son profil. Les entrées du foyer restent accessibles à l’autre membre et les références à l’auteur supprimé sont retirées. Au départ du dernier membre, le foyer et ses entrées sont supprimés côté serveur.
+
+Les tests unitaires font partie de `npm test`. Pour relancer la recette d’intégration, applique les migrations sur une instance Supabase locale et renseigne `SUPABASE_LOCAL_URL`, `SUPABASE_LOCAL_PUBLISHABLE_KEY` et `SUPABASE_LOCAL_SECRET_KEY` avec sa configuration. Depuis la racine du dépôt, lance `node --experimental-strip-types --test tests/integration/households.mjs`. Les scénarios utilisent des comptes fictifs et couvrent les accès, les invitations concurrentes, l’ordre des modifications et la suppression de compte.
+
+## Synchronisation du Foyer (P4, PR 2)
+
+Dans **Plus → Notre foyer**, un compte connecté peut créer un foyer et ouvrir son budget commun depuis le sélecteur de l’en-tête. Le même compte permet d’ouvrir le foyer sur un second appareil. Le mode Foyer utilise le réducteur et le moteur de calcul du budget, avec son propre stockage chiffré. Le budget personnel reste dans son espace.
+
+Le Foyer est désactivé par défaut. Pour la recette, définis `NEXT_PUBLIC_HOUSEHOLD_ENABLED=true` au build, puis utilise la même valeur au lancement de `tests/browser/household-sync.mjs`. Sans cette variable, la recette vérifie le masquage du lien et du sélecteur, la page « Bientôt disponible » et la protection du budget personnel. L’activation de production attend la PR 5 et les prérequis du plan P4.
+
+Le registre `household_writes` conserve les identifiants des écritures acceptées. Le renvoi d’un lot après coupure rend le numéro d’origine et préserve les modifications validées entre-temps. Chaque recopie de solde a un UUID distinct. Le calcul sélectionne la dernière recopie validée par le serveur et rattache les dépenses et leurs effets à leur recopie. L’identifiant du moteur reste dans le contenu chiffré et l’UUID de synchronisation est dérivé par foyer, type et identifiant d’origine.
+
+Le débit ou le crédit est chiffré avec l’opération qui le produit. Parmi plusieurs versions d’une échéance, seule la version retenue peut affecter le solde. Une annulation retire cet effet et un nouveau relevé repart de son montant. Le test Supabase fait enregistrer la même échéance par deux comptes et vérifie que le solde passe de 500 € à 400 €, puis revient à 500 € à l’annulation.
+
+Sur l’appareil, les modifications hors ligne restent chiffrées dans la file IndexedDB. Le client les envoie à la reconnexion après avoir vérifié la version de synchronisation dans Supabase. La recette `tests/browser/household-sync.mjs` vérifie le parcours sur deux navigateurs en largeur 390 px avec Supabase local. Lance le build avec l’URL et la clé publique locales dans les variables publiques Supabase et une valeur de test pour `BUDGET_VAULT_MANAGED_KEY_V1`. Renseigne ensuite les variables de la recette d’intégration et `BOUSSOLE_TEST_URL`, puis lance `node --experimental-strip-types --test tests/browser/household-sync.mjs`.
+
+## Versements au compte commun (P4, PR 3)
+
+Chaque membre peut programmer son versement depuis « Notre foyer ». Un versement attendu alimente uniquement la projection optimiste. La réception crédite le solde commun et retire cette échéance de la liste des versements attendus. Une même échéance reçue sur deux appareils n’est créditée qu’une fois.
+
+Le budget Personnel du membre concerné reprend le versement comme charge certaine. Après paiement, son montant figure séparément dans l’analyse et reste exclu du total des dépenses. Les scénarios F-A et F-C vérifient les montants, la réception et l’idempotence de la ligne miroir.
+
+Une proposition ou modification du partenaire attend une confirmation du membre concerné. La suppression ou la réattribution confirmée clôture la ligne miroir et conserve ses paiements. Une version plus ancienne du Foyer ne peut pas réactiver une ligne déjà clôturée.
+
+L’accueil du Foyer affiche le disponible confirmé et le disponible avec les versements attendus. L’alerte F3 distingue une échéance dépendante d’un versement, un solde sous zéro et une réserve entamée. La recette navigateur couvre la saisie, la réception et la ligne miroir sur un écran de 390 px.
 
 ## Hygiène technique et formulaires
 

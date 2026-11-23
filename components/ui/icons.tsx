@@ -22,6 +22,7 @@ import {
   type LucideProps,
 } from 'lucide-react';
 import type { ChildExpenseCategory, ExpenseCategory } from '@/lib/types';
+import { householdCopy } from '@/lib/household-copy';
 
 export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
   rent: 'Logement',
@@ -34,6 +35,7 @@ export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
   school: 'Scolarité',
   subscriptions: 'Abonnements',
   other: 'Autre',
+  household: householdCopy.transfers,
 };
 
 export const expenseCategoryIcons: Record<ExpenseCategory, LucideIcon> = {
@@ -47,6 +49,7 @@ export const expenseCategoryIcons: Record<ExpenseCategory, LucideIcon> = {
   school: BookOpen,
   subscriptions: Tv,
   other: Banknote,
+  household: Banknote,
 };
 
 export const childCategoryIcons: Record<ChildExpenseCategory, LucideIcon> = {

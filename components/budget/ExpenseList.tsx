@@ -88,8 +88,8 @@ export default function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListP
         <DetailSheet
           title={opened.label}
           onClose={() => setOpenId(null)}
-          onEdit={onEdit && (() => { setOpenId(null); onEdit(opened); })}
-          onDelete={onDelete && (() => { setOpenId(null); onDelete(opened.id); })}
+          onEdit={opened.category !== 'household' && onEdit ? () => { setOpenId(null); onEdit(opened); } : undefined}
+          onDelete={opened.category !== 'household' && onDelete ? () => { setOpenId(null); onDelete(opened.id); } : undefined}
           deleteLabel="Supprimer cette charge et toutes ses échéances ?"
         >
           <dl className="space-y-2">

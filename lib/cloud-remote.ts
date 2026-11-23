@@ -1,11 +1,12 @@
 // Accès à Supabase et au trousseau de l’appareil. Navigateur uniquement.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { EncryptedBudget } from './cloud-crypto.ts';
+import { deriveKey, fingerprint, KDF_ITERATIONS, type EncryptedBudget } from './cloud-crypto.ts';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 export const cloudConfigured = Boolean(url && publishableKey);
+export const managedBackupsEnabled = cloudConfigured && process.env.NEXT_PUBLIC_MANAGED_BUDGET_BACKUPS === 'true';
 
 let client: SupabaseClient | null = null;
 
@@ -17,8 +18,11 @@ export function cloudClient(): SupabaseClient {
   return client;
 }
 
+export type VaultKeyMode = 'legacy' | 'managed_v1';
+
 export interface RemoteVault extends EncryptedBudget {
   version: number;
+  keyMode: VaultKeyMode;
   salt: string;
   kdfIterations: number;
   updatedAt: string;
@@ -26,6 +30,7 @@ export interface RemoteVault extends EncryptedBudget {
 
 interface VaultRow {
   version: number;
+  key_mode?: VaultKeyMode;
   ciphertext: string;
   iv: string;
   salt: string;
@@ -38,15 +43,17 @@ function networkError(message: string): Error {
 }
 
 export async function fetchVault(userId: string): Promise<RemoteVault | null> {
+  const fields = 'version, ciphertext, iv, salt, kdf_iterations, updated_at';
   const { data, error } = await cloudClient()
     .from('budget_vaults')
-    .select('version, ciphertext, iv, salt, kdf_iterations, updated_at')
+    .select(managedBackupsEnabled ? `${fields}, key_mode` : fields)
     .eq('user_id', userId)
     .maybeSingle<VaultRow>();
   if (error) throw networkError('La copie en ligne n’a pas pu être lue.');
   if (!data) return null;
   return {
     version: data.version,
+    keyMode: data.key_mode ?? 'legacy',
     ciphertext: data.ciphertext,
     iv: data.iv,
     salt: data.salt,
@@ -57,10 +64,11 @@ export async function fetchVault(userId: string): Promise<RemoteVault | null> {
 
 /** Première copie en ligne. Renvoie null si une autre copie a été créée entre-temps. */
 export async function createVault(
-  userId: string, encrypted: EncryptedBudget, salt: string, kdfIterations: number,
+  userId: string, encrypted: EncryptedBudget, salt: string, kdfIterations: number, keyMode: VaultKeyMode = 'legacy',
 ): Promise<number | null> {
   const { error } = await cloudClient().from('budget_vaults').insert({
     user_id: userId, version: 1, ciphertext: encrypted.ciphertext, iv: encrypted.iv, salt, kdf_iterations: kdfIterations,
+    ...(keyMode === 'managed_v1' ? { key_mode: keyMode } : {}),
   });
   if (error?.code === '23505') return null;
   if (error) throw networkError('La copie en ligne n’a pas pu être créée.');
@@ -90,8 +98,28 @@ export async function deleteCloudAccount(): Promise<void> {
 export interface StoredKey {
   userId: string;
   key: CryptoKey;
+  keyMode?: VaultKeyMode;
   salt: string;
   kdfIterations: number;
+}
+
+export async function fetchManagedVaultKey(userId: string, remote: RemoteVault | null): Promise<StoredKey> {
+  const { data, error } = await cloudClient().auth.getSession();
+  if (error || data.session?.user.id !== userId) throw new Error('Reconnecte-toi pour ouvrir ton budget.');
+  const failure = 'La clé de ta copie en ligne est indisponible. Réessaie dans un instant.';
+  const response = await fetch('/api/budget-key', {
+    method: 'POST', cache: 'no-store', credentials: 'omit', redirect: 'error',
+    headers: { Authorization: `Bearer ${data.session.access_token}` },
+  }).catch(() => { throw new Error(failure); });
+  if (!response.ok) throw new Error(failure);
+  const { material, version } = await response.json();
+  if (typeof material !== 'string' || !/^[A-Za-z0-9+/]{43}=$/.test(material) || version !== 1) throw new Error(failure);
+
+  // Un sel stable pour la première copie évite deux clés concurrentes pour le même compte.
+  const salt = remote?.salt ?? await fingerprint(`capiste-budget-vault:v1:${userId}`);
+  const kdfIterations = remote?.kdfIterations ?? KDF_ITERATIONS;
+  const key = await deriveKey(material, salt, kdfIterations);
+  return { userId, key, keyMode: 'managed_v1', salt, kdfIterations };
 }
 
 const DB_NAME = 'boussole-cloud';

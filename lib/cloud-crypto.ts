@@ -1,6 +1,5 @@
-// Chiffrement de bout en bout du budget avant tout envoi vers le serveur.
-// AES-GCM 256 bits, clé dérivée de la phrase secrète par PBKDF2-SHA-256.
-// La phrase secrète et la clé ne quittent jamais l’appareil.
+// Chiffrement du budget sur l’appareil avec AES-GCM 256 bits.
+// PBKDF2-SHA-256 dérive la clé depuis la phrase historique ou le secret géré du compte.
 
 export const KDF_ITERATIONS = 600_000;
 export const MIN_PASSPHRASE_LENGTH = 12;
@@ -48,8 +47,8 @@ export function passphraseProblem(passphrase: string): string | undefined {
 }
 
 /** Clé non exportable : elle peut être gardée sur l’appareil sans pouvoir être lue. */
-export async function deriveKey(passphrase: string, salt: string, iterations = KDF_ITERATIONS): Promise<CryptoKey> {
-  const material = await subtle().importKey('raw', encoder.encode(passphrase.normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
+export async function deriveKey(secret: string, salt: string, iterations = KDF_ITERATIONS): Promise<CryptoKey> {
+  const material = await subtle().importKey('raw', encoder.encode(secret.normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
   return subtle().deriveKey(
     { name: 'PBKDF2', hash: 'SHA-256', salt: fromBase64(salt), iterations },
     material,

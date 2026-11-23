@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react';
 import { formatCurrency, formatDate, formatShortDate } from '@/lib/budget-calculations';
+import { householdCopy } from '@/lib/household-copy';
 import type { BudgetSummary } from '@/lib/types';
 
 interface SummaryCardProps {
   summary: BudgetSummary;
   hasUndatedPayments: boolean;
   hasRecordedBalance?: boolean;
+  inHousehold?: boolean;
   /** Réglages affichés sous le chiffre (solde, réserve). */
   children?: ReactNode;
 }
@@ -17,7 +19,9 @@ const riskConfig = {
   danger: { color: 'text-red-950', border: 'border-red-200', background: 'bg-red-50' },
 };
 
-export default function SummaryCard({ summary, hasUndatedPayments, hasRecordedBalance = false, children }: SummaryCardProps) {
+export default function SummaryCard({
+  summary, hasUndatedPayments, hasRecordedBalance = false, inHousehold = false, children,
+}: SummaryCardProps) {
   const risk = riskConfig[summary.emptyBudget && !hasRecordedBalance ? 'empty' : summary.riskLevel];
   const forecast = summary.availableForecast;
   const end = forecast.dailyBalances.at(-1);
@@ -27,7 +31,7 @@ export default function SummaryCard({ summary, hasUndatedPayments, hasRecordedBa
     <section className={`overflow-hidden rounded-2xl border shadow-sm ${risk.border} ${risk.background}`}>
       <div className="space-y-3 p-4">
         <div className={risk.color}>
-          <h2 className="text-sm font-semibold">Vrai disponible</h2>
+          <h2 className="text-sm font-semibold">{inHousehold ? householdCopy.confirmedAvailable : 'Vrai disponible'}</h2>
           <p className="mt-1 font-display text-4xl font-bold leading-tight tracking-tight tabular-nums wrap-anywhere sm:text-5xl">
             {formatCurrency(summary.trueAvailable)}
           </p>
@@ -53,7 +57,13 @@ export default function SummaryCard({ summary, hasUndatedPayments, hasRecordedBa
             Projection partielle. Renseigne les dates des charges et mensualités pour les inclure.
           </p>
         )}
-        {forecast.optimisticAvailable > summary.trueAvailable && (
+        {inHousehold && (!summary.emptyBudget || hasRecordedBalance) && (
+          <div className="rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-700">
+            <p>{householdCopy.expectedAvailable}</p>
+            <p className="font-bold tabular-nums text-slate-900">{formatCurrency(forecast.optimisticAvailable)}</p>
+          </div>
+        )}
+        {!inHousehold && forecast.optimisticAvailable > summary.trueAvailable && (
           <details className="text-sm text-gray-700">
             <summary className="cursor-pointer font-medium">Si les revenus incertains arrivent</summary>
             <p className="mt-2">Vrai disponible estimé à <strong>{formatCurrency(forecast.optimisticAvailable)}</strong>.</p>

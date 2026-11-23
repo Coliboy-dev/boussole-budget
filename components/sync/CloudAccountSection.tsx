@@ -8,6 +8,8 @@ import FormField from '@/components/forms/FormField';
 import { Icon } from '@/components/ui/icons';
 import { accountSignupEnabled, useCloudSync } from '@/components/sync/CloudSyncProvider';
 import { MIN_PASSPHRASE_LENGTH } from '@/lib/cloud-crypto';
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, passwordProblem } from '@/lib/account-password';
+import { managedBackupsEnabled } from '@/lib/cloud-remote';
 import { generatePassphrase } from '@/lib/passphrase';
 
 const fieldClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
@@ -42,14 +44,123 @@ function Explanation() {
         <Icon icon={ShieldCheck} className="size-5 text-teal-700" />
         Comment tes données sont protégées
       </h2>
-      <p>La copie de ton budget envoyée en ligne est chiffrée sur ton appareil, avec une phrase secrète que toi seul connais, avant d’être envoyée.</p>
-      <p>Le serveur, hébergé dans l’Union européenne, ne reçoit qu’un bloc illisible : ni montant, ni créancier, ni date. Personne chez Start’OnLab ne peut le lire.</p>
-      <p>Si tu oublies ta phrase secrète, la copie en ligne est perdue. Le budget de ton téléphone, lui, reste intact.</p>
+      {managedBackupsEnabled ? (
+        <p>Les nouvelles copies en ligne sont chiffrées avec une clé gérée par Start’OnLab. Ton e-mail et ton mot de passe permettent de les ouvrir sur un autre appareil ; un code reçu par e-mail aussi, si tu as oublié ton mot de passe. Les anciennes copies protégées par une phrase gardent leur mode de récupération.</p>
+      ) : (
+        <>
+          <p>La copie de ton budget envoyée en ligne est chiffrée sur ton appareil, avec une phrase secrète que toi seul connais, avant d’être envoyée.</p>
+          <p>Le serveur, hébergé dans l’Union européenne, ne reçoit qu’un bloc illisible : ni montant, ni créancier, ni date. Personne chez Start’OnLab ne peut le lire.</p>
+          <p>Si tu oublies ta phrase secrète, la copie en ligne est perdue. Le budget de ton téléphone, lui, reste intact.</p>
+        </>
+      )}
+    </Card>
+  );
+}
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function PasswordSignIn({ onForgot }: { onForgot: () => void }) {
+  const { signInWithPassword, error: syncError } = useCloudSync();
+  const { pending, error, run } = useAction();
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const email = String(data.get('email') ?? '').trim();
+    const password = String(data.get('password') ?? '');
+    void run(async () => {
+      if (!emailPattern.test(email)) throw new Error('Saisis une adresse e-mail valide.');
+      if (!password) throw new Error('Saisis ton mot de passe.');
+      await signInWithPassword(email, password);
+    });
+  }
+
+  return (
+    <Card className="space-y-3">
+      <h2 className="text-base font-semibold text-slate-900">Te connecter</h2>
+      <form onSubmit={submit} noValidate className="space-y-3">
+        <FormField label="Adresse e-mail" required>
+          <input name="email" type="email" autoComplete="username" inputMode="email" required className={fieldClass} />
+        </FormField>
+        <FormField label="Mot de passe" required>
+          <input name="password" type="password" autoComplete="current-password" required className={fieldClass} />
+        </FormField>
+        <ErrorText message={error || syncError} />
+        <button type="submit" disabled={pending} className={primaryButton}>{pending ? 'Connexion…' : 'Me connecter'}</button>
+      </form>
+      <button type="button" disabled={pending} onClick={onForgot} className="min-h-11 text-sm font-semibold text-teal-800 underline">
+        Mot de passe oublié ou pas encore créé ?
+      </button>
+    </Card>
+  );
+}
+
+/** Choix du mot de passe après un code e-mail (inscription ou récupération), ou changement volontaire. */
+export function ChoosePassword({ onDone, onCancel }: { onDone?: () => void; onCancel?: () => void }) {
+  const { account, setPassword, signOut } = useCloudSync();
+  const { pending, error, run } = useAction();
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const password = String(data.get('password') ?? '');
+    const confirmation = String(data.get('confirmation') ?? '');
+    void run(async () => {
+      const problem = passwordProblem(password, confirmation);
+      if (problem) throw new Error(problem);
+      await setPassword(password);
+      onDone?.();
+    });
+  }
+
+  return (
+    <Card className="space-y-3">
+      <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+        <Icon icon={KeyRound} className="size-5 text-teal-700" />
+        {onCancel ? 'Changer mon mot de passe' : 'Choisis ton mot de passe'}
+      </h2>
+      <p className="text-sm text-slate-700">
+        Il te servira à te connecter sur un ordinateur ou un nouvel appareil. Sur ce téléphone, tu n’auras plus à le saisir.
+      </p>
+      {managedBackupsEnabled && (
+        <p className="text-sm text-slate-700">
+          Toute personne qui connaît ce mot de passe, ou qui accède à ta boîte e-mail, peut ouvrir ta copie en ligne.
+          Choisis un mot de passe que tu n’utilises nulle part ailleurs.
+        </p>
+      )}
+      <form onSubmit={submit} noValidate className="space-y-3">
+        <FormField label="Adresse e-mail">
+          <input name="username" type="email" autoComplete="username" readOnly value={account?.email ?? ''} className={fieldClass} />
+        </FormField>
+        <FormField label="Mot de passe" required hint={`Au moins ${MIN_PASSWORD_LENGTH} caractères. Ton gestionnaire de mots de passe peut le retenir pour toi.`}>
+          <input name="password" type="password" autoComplete="new-password" required minLength={MIN_PASSWORD_LENGTH}
+            maxLength={MAX_PASSWORD_LENGTH} spellCheck={false} className={fieldClass} />
+        </FormField>
+        <FormField label="Confirme le mot de passe" required>
+          <input name="confirmation" type="password" autoComplete="new-password" required spellCheck={false} className={fieldClass} />
+        </FormField>
+        <ErrorText message={error} />
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={pending} className={primaryButton}>{pending ? 'Enregistrement…' : 'Enregistrer mon mot de passe'}</button>
+          {onCancel ? (
+            <button type="button" disabled={pending} onClick={onCancel} className={secondaryButton}>Annuler</button>
+          ) : (
+            <button type="button" disabled={pending} onClick={() => void run(signOut)} className={secondaryButton}>Se déconnecter</button>
+          )}
+        </div>
+      </form>
     </Card>
   );
 }
 
 function SignIn() {
+  const { signingUp, otpEmail } = useCloudSync();
+  const [byCode, setByCode] = useState(Boolean(otpEmail));
+  if (!signingUp && !byCode && !otpEmail) return <PasswordSignIn onForgot={() => setByCode(true)} />;
+  return <CodeSignIn onPassword={signingUp ? undefined : () => setByCode(false)} />;
+}
+
+function CodeSignIn({ onPassword }: { onPassword?: () => void }) {
   const { sendCode, verifyCode, otpEmail, resetCode, signingUp, error: syncError } = useCloudSync();
   const { pending, error, run } = useAction();
 
@@ -57,7 +168,7 @@ function SignIn() {
     event.preventDefault();
     const value = String(new FormData(event.currentTarget).get('email') ?? '').trim();
     void run(async () => {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new Error('Saisis une adresse e-mail valide.');
+      if (!emailPattern.test(value)) throw new Error('Saisis une adresse e-mail valide.');
       await sendCode(value);
     });
   }
@@ -73,20 +184,33 @@ function SignIn() {
 
   return (
     <Card className="space-y-3">
-      <h2 className="text-base font-semibold text-slate-900">{signingUp ? 'Créer mon compte' : '1. Te connecter'}</h2>
+      <h2 className="text-base font-semibold text-slate-900">{signingUp ? 'Créer mon compte' : 'Recevoir un code par e-mail'}</h2>
+      {signingUp && managedBackupsEnabled && !otpEmail && (
+        <p className="text-sm text-slate-700">
+          Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne. Protège ta messagerie avec un
+          mot de passe unique et active la double authentification.
+        </p>
+      )}
       {!otpEmail ? (
         <form onSubmit={submitEmail} noValidate className="space-y-3">
-          <FormField label="Adresse e-mail" required hint="Tu recevras un code de connexion. Aucun mot de passe à retenir.">
+          <FormField label="Adresse e-mail" required hint={signingUp
+            ? 'Tu recevras un code pour confirmer ton adresse, puis tu choisiras ton mot de passe.'
+            : 'Tu recevras un code pour te connecter, puis tu choisiras un nouveau mot de passe.'}>
             <input name="email" type="email" autoComplete="email" inputMode="email" required className={fieldClass} />
           </FormField>
           <ErrorText message={error || syncError} />
           <button type="submit" disabled={pending} className={primaryButton}>
             {pending ? 'Envoi…' : 'Recevoir un code'}
           </button>
+          {onPassword && (
+            <button type="button" disabled={pending} onClick={onPassword} className="block min-h-11 text-sm font-semibold text-teal-800 underline">
+              J’ai mon mot de passe
+            </button>
+          )}
         </form>
       ) : (
         <form onSubmit={submitCode} noValidate className="space-y-3">
-          <p className="text-sm text-slate-700">Code envoyé à <strong>{otpEmail}</strong>. Il est valable une heure.</p>
+          <p className="text-sm text-slate-700">Code envoyé à <strong>{otpEmail}</strong>. Utilise le dernier code reçu.</p>
           <FormField label="Code reçu par e-mail" required>
             <input name="code" type="text" inputMode="numeric" autoComplete="one-time-code" required
               className={`${fieldClass} tracking-widest`} />
@@ -330,6 +454,8 @@ function Active() {
     syncNow, resolveConflict, signOut, deleteAccount } = useCloudSync();
   const action = useAction();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
 
   return (
     <>
@@ -375,6 +501,15 @@ function Active() {
       <Card className="space-y-3 text-sm text-slate-700">
         <h2 className="text-base font-semibold text-slate-900">Compte</h2>
         {account && <p>Connecté avec <strong>{account.email}</strong></p>}
+        {passwordChanged && <p role="status" className="text-teal-800">Mot de passe enregistré.</p>}
+        {changingPassword ? (
+          <ChoosePassword onDone={() => { setChangingPassword(false); setPasswordChanged(true); }}
+            onCancel={() => setChangingPassword(false)} />
+        ) : (
+          <button type="button" onClick={() => { setChangingPassword(true); setPasswordChanged(false); }} className={secondaryButton}>
+            Changer mon mot de passe
+          </button>
+        )}
         <button type="button" disabled={action.pending} onClick={() => void action.run(signOut)} className={secondaryButton}>
           Se déconnecter de cet appareil
         </button>

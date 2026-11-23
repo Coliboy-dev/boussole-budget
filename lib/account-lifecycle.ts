@@ -2,6 +2,7 @@
 // n’est annoncée après un effacement partiel.
 
 import { ACCOUNT_OWNER_KEY } from './account-guard.ts';
+import { PASSWORD_SETUP_STORAGE_KEY } from './account-password.ts';
 import { BUDGET_STORAGE_KEY, LEGACY_BUDGET_STORAGE_KEY } from './budget-state.ts';
 import { SYNC_MEMORY_KEY } from './cloud-sync.ts';
 import { PENDING_VAULT_KEY } from './vault-pending.ts';
@@ -13,6 +14,7 @@ export const LOCAL_STORAGE_KEYS = [
   SYNC_MEMORY_KEY,
   PENDING_VAULT_KEY,
   ACCOUNT_OWNER_KEY,
+  PASSWORD_SETUP_STORAGE_KEY,
   'boussole-lock-v1',
   'boussole-lock-device-v1',
   'boussole-lock-epoch',
