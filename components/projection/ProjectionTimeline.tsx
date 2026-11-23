@@ -1,33 +1,24 @@
-'use client';
-
-import { formatCurrency } from '@/lib/budget-calculations';
-import type { ProjectionMilestone } from '@/lib/projection';
 import { CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react';
+import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
+import type { ProjectionMilestone } from '@/lib/projection';
 import { Icon } from '@/components/ui/icons';
 
-const riskConfig = {
-  safe: {
-    dot: 'border-green-600 text-green-700',
-    text: 'text-green-700',
-    bg: 'bg-green-50 border-green-200',
-    label: 'Stable',
-    icon: CircleCheck,
-  },
-  fragile: {
-    dot: 'border-amber-500 text-amber-800',
-    text: 'text-amber-800',
-    bg: 'bg-amber-50 border-amber-200',
-    label: 'Fragile',
-    icon: TriangleAlert,
-  },
-  danger: {
-    dot: 'border-red-600 text-red-700',
-    text: 'text-red-700',
-    bg: 'bg-red-50 border-red-200',
-    label: 'Critique',
-    icon: CircleAlert,
-  },
+// Le statut est toujours écrit : la couleur n’en est qu’un renfort.
+export const riskStyles = {
+  safe: { label: 'Stable', icon: CircleCheck, chip: 'bg-cap-surface-soft text-cap-success-text', text: 'text-cap-text' },
+  fragile: { label: 'Fragile', icon: TriangleAlert, chip: 'bg-cap-warning-soft text-cap-warning-text', text: 'text-cap-warning-text' },
+  danger: { label: 'Critique', icon: CircleAlert, chip: 'bg-cap-danger-soft text-cap-danger-text', text: 'text-cap-danger-text' },
 };
+
+export function RiskChip({ risk }: { risk: keyof typeof riskStyles }) {
+  const style = riskStyles[risk];
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${style.chip}`}>
+      <Icon icon={style.icon} className="size-3.5" />
+      {style.label}
+    </span>
+  );
+}
 
 interface Props {
   milestones: ProjectionMilestone[];
@@ -35,40 +26,19 @@ interface Props {
 
 export default function ProjectionTimeline({ milestones }: Props) {
   return (
-    <div className="w-full">
-      {/* Horizontal visual with connecting line */}
-      <div className="relative flex items-start justify-between mb-1 px-1">
-        {/* Background connecting line */}
-        <div className="absolute top-4 left-6 right-6 h-0.5 bg-gray-200" />
-
-        {milestones.map((m, i) => {
-          const cfg = riskConfig[m.riskLevel];
-          return (
-            <div key={i} className="relative flex flex-col items-center w-1/4">
-              {/* Dot */}
-              <div
-                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center z-10 mb-2 ${cfg.dot} bg-white`}
-              >
-                <Icon icon={cfg.icon} className="size-4" />
-              </div>
-              {/* Label */}
-              <p className="text-xs font-semibold text-gray-600 text-center leading-tight mb-1">
-                {m.label}
-              </p>
-              {/* Balance */}
-              <p className={`text-sm font-bold text-center ${cfg.text}`}>
-                {formatCurrency(m.balance)}
-              </p>
-              {/* Risk label */}
-              <span
-                className={`text-xs mt-1 px-1.5 py-0.5 rounded-full border font-medium ${cfg.bg} ${cfg.text}`}
-              >
-                {cfg.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    <ol className="divide-y divide-cap-border">
+      {milestones.map((milestone) => (
+        <li key={milestone.daysFromNow} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5">
+          <p className="text-sm text-cap-text">
+            {milestone.label}
+            <time dateTime={milestone.date} className="ml-1 text-xs text-cap-text-muted">· {formatShortDate(milestone.date)}</time>
+          </p>
+          <p className="flex items-center gap-2">
+            <span className={`text-sm font-bold tabular-nums ${riskStyles[milestone.riskLevel].text}`}>{formatCurrency(milestone.balance)}</span>
+            <RiskChip risk={milestone.riskLevel} />
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }
