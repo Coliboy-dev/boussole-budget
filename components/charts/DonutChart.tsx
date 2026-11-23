@@ -32,7 +32,7 @@ export default function DonutChart({ title, scope, parts, colors, totalCents, to
         <span className="block text-xs text-cap-text-muted">{scope}</span>
       </figcaption>
       <div className="flex flex-wrap items-center gap-4">
-        <div className="relative size-36 shrink-0">
+        <div className="relative mx-auto size-36 shrink-0 sm:mx-0">
           <svg viewBox="0 0 100 100" className="size-full -rotate-90" role="img"
             aria-label={`${title}. ${scope}. Total ${formatCurrency(fromCents(totalCents))}. ${summary}.`}>
             <circle cx="50" cy="50" r={RADIUS} fill="none" stroke="var(--cap-border)" strokeWidth="14" />
@@ -49,7 +49,8 @@ export default function DonutChart({ title, scope, parts, colors, totalCents, to
             <span className="text-[11px] text-cap-text-muted">{totalLabel}</span>
           </div>
         </div>
-        <ul className="min-w-0 flex-1 space-y-1.5 text-sm">
+        {/* Sur téléphone, la légende passe sous l’anneau plutôt que de comprimer les libellés. */}
+        <ul className="min-w-60 flex-1 basis-60 space-y-1.5 text-sm">
           {parts.map(({ label, cents, share }, index) => (
             <li key={label} className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-2 text-cap-text">
