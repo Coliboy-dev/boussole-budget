@@ -43,8 +43,17 @@ for (const [name, state] of Object.entries(scenarios)) {
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(300);
       const slug = route.slice(1);
-      if (width === 390) found[`${slug}-${name}`] = amounts(await page.locator('main').innerText());
+      let text = await page.locator('main').innerText();
       await page.screenshot({ path: `${outDir}/${slug}-${name}-${width}.png`, fullPage: true });
+      // Budget en deux vues (lot 4 bis) : on relève aussi la vue Charges.
+      const charges = page.getByRole('group', { name: 'Vue' }).getByRole('button', { name: 'Charges' });
+      if (route === '/budget' && await charges.count()) {
+        await charges.click();
+        await page.waitForTimeout(300);
+        text += `\n${await page.locator('main').innerText()}`;
+        await page.screenshot({ path: `${outDir}/${slug}-charges-${name}-${width}.png`, fullPage: true });
+      }
+      if (width === 390) found[`${slug}-${name}`] = amounts(text);
     }
     await context.close();
   }
