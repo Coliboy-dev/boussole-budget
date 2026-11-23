@@ -249,8 +249,8 @@ export function startDeviceRegistration(rpId: string, oldId?: string) {
   const userId = crypto.getRandomValues(new Uint8Array(16));
   const publicKey: PublicKeyCredentialCreationOptions = {
     challenge: challenge as BufferSource,
-    rp: { id: rpId, name: 'Boussole Budget' },
-    user: { id: userId as BufferSource, name: 'local', displayName: 'Boussole sur ce téléphone' },
+    rp: { id: rpId, name: 'Capiste' },
+    user: { id: userId as BufferSource, name: 'local', displayName: 'Capiste sur ce téléphone' },
     pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
     timeout: 60000,
     attestation: 'none',

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { managedBackupsEnabled } from '@/lib/cloud-remote';
 
-export const metadata: Metadata = { title: 'Confidentialité · Boussole Budget' };
+export const metadata: Metadata = { title: 'Confidentialité · Capiste' };
 
 export default function PrivacyPage() {
   return (
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
           Le prénom, le solde, les revenus, les charges et les autres données que tu saisis sont enregistrés
           dans ton navigateur ou dans l’application installée. Le calcul et la restauration de sauvegarde se
           font sur ton appareil.
-          {!managedBackupsEnabled && ' Sans synchronisation, Boussole Budget ne transmet pas ton budget à un serveur.'}
+          {!managedBackupsEnabled && ' Sans synchronisation, Capiste ne transmet pas ton budget à un serveur.'}
         </p>
       </section>
 
@@ -55,11 +55,11 @@ export default function PrivacyPage() {
 
       <section className="space-y-2">
         <h2 className="font-semibold text-gray-900">{managedBackupsEnabled ? 'Verrouillage de l’application' : 'Verrouillage de l’application (facultatif)'}</h2>
-        <p>Le verrou empêche une personne qui a ton téléphone en main de voir tes finances dans Boussole. Le code n’est jamais enregistré en clair : seule une empreinte calculée sur le téléphone est gardée.</p>
+        <p>Le verrou empêche une personne qui a ton téléphone en main de voir tes finances dans Capiste. Le code n’est jamais enregistré en clair : seule une empreinte calculée sur le téléphone est gardée.</p>
         <p>Il ne chiffre pas les données enregistrées sur ce téléphone et ne remplace pas le code du téléphone. Une personne capable de lire les données du navigateur, une extension malveillante ou une version modifiée de l’application ne sont pas arrêtées par ce verrou.</p>
-        <p>Boussole masque son interface dès qu’elle perd le focus ou passe en arrière-plan. <strong>Sur iPhone, ce masquage n’atteint pas l’aperçu du sélecteur d’applications</strong> : iOS photographie l’écran avant que Boussole puisse le cacher. Essai du 21 novembre 2026 : l’aperçu montre les montants dans Chrome et dans Boussole installée sur l’écran d’accueil. Safari utilise le même moteur et devrait se comporter de la même façon.</p>
-        <p>Pour un aperçu sans aucun montant, appuie sur le cadenas en haut de l’écran avant de quitter Boussole : l’aperçu montre alors l’écran du code.</p>
-        <p>Sans le code, la seule issue est d’effacer Boussole sur ce téléphone. Une copie en ligne ou un fichier de sauvegarde permettent ensuite de récupérer le budget.</p>
+        <p>Capiste masque son interface dès qu’elle perd le focus ou passe en arrière-plan. <strong>Sur iPhone, ce masquage n’atteint pas l’aperçu du sélecteur d’applications</strong> : iOS photographie l’écran avant que Capiste puisse le cacher. Essai du 21 novembre 2026 : l’aperçu montre les montants dans Chrome et dans Capiste installée sur l’écran d’accueil. Safari utilise le même moteur et devrait se comporter de la même façon.</p>
+        <p>Pour un aperçu sans aucun montant, appuie sur le cadenas en haut de l’écran avant de quitter Capiste : l’aperçu montre alors l’écran du code.</p>
+        <p>Sans le code, la seule issue est d’effacer Capiste sur ce téléphone. Une copie en ligne ou un fichier de sauvegarde permettent ensuite de récupérer le budget.</p>
       </section>
 
       <section className="space-y-2">
@@ -94,7 +94,7 @@ export default function PrivacyPage() {
         <h2 className="font-semibold text-gray-900">Fonctionnement hors ligne</h2>
         <p>
           Le navigateur garde une copie des pages et des ressources de l’application pour pouvoir les ouvrir
-          sans réseau. Ce cache ne contient pas les données de ton budget. Boussole Budget n’utilise ni cookie
+          sans réseau. Ce cache ne contient pas les données de ton budget. Capiste n’utilise ni cookie
           publicitaire ni outil de mesure d’audience.
         </p>
       </section>

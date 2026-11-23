@@ -17,14 +17,14 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Boussole Budget',
+  title: 'Capiste',
   description: 'Reprends le contrôle de ton budget',
   robots: { index: false },
-  appleWebApp: { capable: true, title: 'Boussole' },
-  icons: { apple: '/icons/boussole-180.png' },
+  appleWebApp: { capable: true, title: 'Capiste' },
+  icons: { apple: '/icons/capiste-180.png' },
 };
 
-export const viewport: Viewport = { themeColor: '#115e59' };
+export const viewport: Viewport = { themeColor: '#0b5f5d' };
 
 export default async function RootLayout({
   children,
