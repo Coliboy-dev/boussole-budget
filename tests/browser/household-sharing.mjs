@@ -9,6 +9,7 @@ import { after, before, test } from 'node:test';
 import { emptyBudgetState, serializeBudget } from '../../lib/budget-state.ts';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
+const sharingEnabled = process.env.NEXT_PUBLIC_HOUSEHOLD_ENABLED !== 'false';
 const baseURL = process.env.BOUSSOLE_TEST_URL ?? 'http://localhost:3000';
 const origin = 'https://c0-test.supabase.test';
 const A = '11111111-1111-4111-8111-111111111111';
@@ -207,7 +208,16 @@ async function openHousehold(page) {
   await page.getByRole('heading', { name: 'Membres du foyer' }).waitFor();
 }
 
-test('5a · inviter : le lien porte le jeton dont le serveur ne reçoit que l’empreinte, puis l’annulation', async (t) => {
+test('5a · Foyer désactivé : la page et le lien d’invitation ne déclenchent aucune RPC', { skip: sharingEnabled }, async (t) => {
+  const { page, server } = await fixture(t, A, [[mA, A]]);
+  await page.goto('/foyer');
+  await page.getByText('Bientôt disponible').waitFor();
+  await page.goto(`/foyer/rejoindre#i=${INVITATION}&t=${randomBytes(32).toString('base64url')}`);
+  await page.getByText('Bientôt disponible').waitFor();
+  assert.deepEqual(server.calls, []);
+});
+
+test('5a · inviter : le lien porte le jeton dont le serveur ne reçoit que l’empreinte, puis l’annulation', { skip: !sharingEnabled }, async (t) => {
   const { page, server } = await fixture(t, A, [[mA, A]]);
   await openHousehold(page);
   await page.getByText('Tu es pour l’instant le seul membre de ce foyer.').waitFor();
@@ -227,7 +237,7 @@ test('5a · inviter : le lien porte le jeton dont le serveur ne reçoit que l’
   await button(page, 'Créer un lien d’invitation').waitFor();
 });
 
-test('5a · rejoindre : le lien est accepté avec le compte connecté et retiré de l’adresse', async (t) => {
+test('5a · rejoindre : le lien est accepté avec le compte connecté et retiré de l’adresse', { skip: !sharingEnabled }, async (t) => {
   const { page, server } = await fixture(t, B, [[mA, A]]);
   const token = randomBytes(32).toString('base64url');
   server.invitation = { id: INVITATION, tokenHash: createHash('sha256').update(token).digest('hex') };
@@ -252,7 +262,7 @@ test('5a · rejoindre : le lien est accepté avec le compte connecté et retiré
   await page.getByRole('alert').filter({ hasText: 'Cette invitation n’est plus valable.' }).waitFor();
 });
 
-test('5a · rejoindre sans être connecté : aucun appel, invitation à se connecter', async (t) => {
+test('5a · rejoindre sans être connecté : aucun appel, invitation à se connecter', { skip: !sharingEnabled }, async (t) => {
   const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   t.after(() => context.close());
   const calls = [];
@@ -263,7 +273,7 @@ test('5a · rejoindre sans être connecté : aucun appel, invitation à se conne
   assert.ok(!calls.some((url) => url.includes('accept_invitation')));
 });
 
-test('5a · quitter : textes de la charte, synchronisation arrêtée, copie chiffrée gardée', async (t) => {
+test('5a · quitter : textes de la charte, synchronisation arrêtée, copie chiffrée gardée', { skip: !sharingEnabled }, async (t) => {
   const { page, server } = await fixture(t, A, [[mA, A], [mB, B]]);
   await openHousehold(page);
   await page.getByText('Ce foyer est partagé avec Autre membre.').waitFor();
@@ -300,7 +310,7 @@ test('5a · quitter : textes de la charte, synchronisation arrêtée, copie chif
   assert.equal(syncCalls(server), before);
 });
 
-test('5a · arrêter le partage : l’autre membre est retiré, ce compte garde son accès', async (t) => {
+test('5a · arrêter le partage : l’autre membre est retiré, ce compte garde son accès', { skip: !sharingEnabled }, async (t) => {
   const { page, server } = await fixture(t, A, [[mA, A], [mB, B]]);
   await openHousehold(page);
   await button(page, 'Arrêter le partage avec Autre membre').click();
@@ -313,7 +323,7 @@ test('5a · arrêter le partage : l’autre membre est retiré, ce compte garde 
   assert.equal((await idb(page, `household-v1:${A}:${H}`)).revoked, undefined);
 });
 
-test('5a · accès retiré par l’autre membre : copie gardée, foyer noté comme ancien, plus de synchronisation', async (t) => {
+test('5a · accès retiré par l’autre membre : copie gardée, foyer noté comme ancien, plus de synchronisation', { skip: !sharingEnabled }, async (t) => {
   const { page, server } = await fixture(t, B, [[mA, A], [mB, B]]);
   await openHousehold(page);
   server.members.delete(mB);
@@ -328,7 +338,7 @@ test('5a · accès retiré par l’autre membre : copie gardée, foyer noté com
   assert.equal(syncCalls(server), calls, 'plus aucune lecture ni écriture après le retrait');
 });
 
-test('5a · ordre forcé : refus de lecture alors que la liste dit encore « membre » — aucune synchronisation ensuite', async (t) => {
+test('5a · ordre forcé : refus de lecture alors que la liste dit encore « membre » — aucune synchronisation ensuite', { skip: !sharingEnabled }, async (t) => {
   const { page, server } = await fixture(t, B, [[mA, A], [mB, B]]);
   await openHousehold(page);
   await waitForEntry(page, `household-v1:${B}:${H}`, 'key');
