@@ -38,6 +38,7 @@ import { readBudgetOwner, readStoredSessionUserId } from '@/lib/account-guard';
 import { deleteSpending as removeSpending, envelopesOf, spendingsOf } from '@/lib/spending';
 import { reduceBudget, type AppAction, type RuntimeState, type SpendingChanges, type SpendingInput } from '@/lib/budget-reducer';
 import type { ContributionMirrorChange } from '@/lib/household-contributions';
+import type { MovementMirror } from '@/lib/household-movements';
 
 type BudgetPersistence = {
   snapshot: BudgetStorageSnapshot;
@@ -112,6 +113,7 @@ export interface AppContextType extends AppState {
   syncContributionMirrors: (
     userId: string, householdId: string, memberId: string, changes: ContributionMirrorChange[], today: string,
   ) => void;
+  syncMovementMirrors: (userId: string, changes: MovementMirror[], today: string) => void;
   addDebt: (debt: Omit<Debt, 'id'>) => void;
   updateDebt: (id: string, data: Partial<Debt>) => void;
   deleteDebt: (id: string) => void;
@@ -208,6 +210,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const owner = readBudgetOwner(localStorage);
     if (owner.type !== 'account' || owner.userId !== userId || readStoredSessionUserId(localStorage) !== userId) return;
     dispatchInternal({ type: 'SYNC_CONTRIBUTION_MIRRORS', householdId, memberId, changes, today: date });
+  }, []);
+
+  const syncMovementMirrors = useCallback<AppContextType['syncMovementMirrors']>((userId, changes, date) => {
+    if (!canAccessBudget() || !isSavedBudgetCurrent(persistence.current)) return;
+    const owner = readBudgetOwner(localStorage);
+    if (owner.type !== 'account' || owner.userId !== userId || readStoredSessionUserId(localStorage) !== userId) return;
+    dispatchInternal({ type: 'SYNC_MOVEMENT_MIRRORS', changes, today: date });
   }, []);
 
   const reloadStoredBudget = useCallback(() => {
@@ -405,6 +414,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveProfileSettings,
     clearBudget,
     syncContributionMirrors,
+    syncMovementMirrors,
     // eslint-disable-next-line react-hooks/refs -- Cette fonction construit uniquement les gestionnaires d’événements.
     ...budgetCommands(dispatch, today),
     recordScheduledPayment,

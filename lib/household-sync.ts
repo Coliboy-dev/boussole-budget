@@ -4,7 +4,9 @@ import {
 } from './household-records.ts';
 
 export type HouseholdWrite = EncryptedHouseholdRecord & { write_id: string };
-export type ConfirmedHouseholdRecord = EncryptedHouseholdRecord & { seq: number; updated_by?: string | null };
+export type ConfirmedHouseholdRecord = EncryptedHouseholdRecord & {
+  seq: number; updated_by?: string | null; author_member_id?: string | null; editor_member_id?: string | null;
+};
 
 export interface HouseholdQueue {
   cursor: number;
@@ -34,20 +36,30 @@ export function encodeHouseholdWrites(
   return Promise.all(records.map(async (record) => {
     const recordId = await householdRecordId(scope.householdId, record.kind, record.id);
     const encrypted = await encryptHouseholdRecord(key, { ...scope, recordId }, record);
-    return { ...encrypted, write_id: crypto.randomUUID() };
+    const exclusive = record.kind === 'transfer' || record.kind === 'transfer-response';
+    return { ...encrypted, ...(exclusive && { exclusive }), write_id: crypto.randomUUID() };
   }));
 }
 
-export function decodeHouseholdView(
+export async function decodeHouseholdView(
   key: CryptoKey, householdId: string, { confirmed, pending, cursor }: HouseholdQueue,
 ): Promise<SequencedHouseholdRecord[]> {
   const visible = new Map<string, ConfirmedHouseholdRecord>();
   for (const row of confirmed) visible.set(row.record_id, row);
   pending.forEach((row, index) => visible.set(row.record_id, { ...row, seq: cursor + index + 1 }));
-  return Promise.all([...visible.values()].map(async (row) => ({
-    seq: row.seq, record: await decryptHouseholdRecord(key, householdId, row),
-    ...(row.updated_by !== undefined && { updatedBy: row.updated_by }),
-  })));
+  const rows = await Promise.all([...visible.values()].map(async (row) => {
+    const record = await decryptHouseholdRecord(key, householdId, row);
+    if ((record.kind === 'transfer' || record.kind === 'transfer-response')
+      && await householdRecordId(householdId, record.kind, record.id) !== row.record_id) return undefined;
+    return {
+      seq: row.seq, record,
+      ...(row.editor_member_id !== undefined ? { editorMemberId: row.editor_member_id }
+        : row.updated_by !== undefined && { updatedBy: row.updated_by }),
+      ...(row.author_member_id !== undefined && { authorMemberId: row.author_member_id }),
+      ...(row.exclusive === true && { exclusive: true }),
+    };
+  }));
+  return rows.filter((row) => row !== undefined);
 }
 
 export async function syncHousehold(remote: HouseholdRemote, queue: HouseholdQueue): Promise<HouseholdSyncResult> {

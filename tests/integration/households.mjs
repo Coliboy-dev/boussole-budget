@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { createClient } from '@supabase/supabase-js';
 import { POST } from '../../app/api/household-key/route.ts';
@@ -56,6 +56,12 @@ after(async () => {
 
 const rpc = (actor, name, args) => actor.api.rpc(name, args);
 
+// Les identifiants de compte restent vérifiés dans le stockage interne avec le rôle serveur.
+// La projection publique du foyer a son propre test de confidentialité.
+async function internalRecords(h) {
+  return success(await admin.from('household_records').select('record_id,created_by,updated_by').eq('household_id', h).order('seq'));
+}
+
 test('La version de synchronisation n’est disponible qu’après la migration des reçus', async () => {
   assert.equal(success(await rpc(personA, 'household_sync_version')), 2);
   assert.ok((await anonymous.rpc('household_sync_version')).error);
@@ -104,8 +110,9 @@ test('F-E · Seuls les membres actifs lisent et écrivent les éléments et obti
 
   assert.deepEqual(success(await rpc(personA, 'upsert_records', { h, records: [record] })), [{ record_id: id, seq: 1 }]);
   for (const table of ['households', 'household_members', 'household_records']) {
-    assert.deepEqual(success(await personB.api.from(table).select('*')), []);
-    assert.ok((await anonymous.from(table).select('*')).error);
+    const publicColumn = table === 'households' ? 'id' : 'household_id';
+    assert.deepEqual(success(await personB.api.from(table).select(publicColumn)), []);
+    assert.ok((await anonymous.from(table).select(publicColumn)).error);
   }
   assert.ok((await personA.api.from('household_invitations').select('*')).error);
   assert.ok((await personA.api.from('household_records').insert({ household_id: h, ...record, seq: 3 })).error);
@@ -118,7 +125,8 @@ test('F-E · Seuls les membres actifs lisent et écrivent les éléments et obti
   success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
   const secondKey = await importKey(personB, h);
   const [stored] = success(await rpc(personB, 'pull_records', { h, after_seq: 0 }));
-  assert.equal(stored.created_by, personA.id);
+  const [attribution] = await internalRecords(h);
+  assert.equal(attribution.created_by, personA.id);
   assert.deepEqual(await decryptHouseholdRecord(secondKey, h, stored), { kind: 'spending', id, data: { amount: 6300 } });
 
   const budget = {
@@ -127,12 +135,12 @@ test('F-E · Seuls les membres actifs lisent et écrivent les éléments et obti
   success(await personA.api.from('budget_vaults').insert(budget));
   assert.deepEqual(success(await personB.api.from('budget_vaults').select('*').eq('user_id', personA.id)), []);
 
-  const [memberB] = success(await personA.api.from('household_members').select('member_id').eq('household_id', h).eq('user_id', personB.id));
+  const [memberB] = success(await admin.from('household_members').select('member_id').eq('household_id', h).eq('user_id', personB.id));
   success(await rpc(personA, 'stop_sharing_with', { h, other_member: memberB.member_id }));
   assert.equal((await requestKey(personB, h)).status, 403);
   assert.ok((await rpc(personB, 'pull_records', { h, after_seq: 0 })).error);
   assert.ok((await rpc(personB, 'upsert_records', { h, records: [record] })).error);
-  assert.deepEqual(success(await personB.api.from('household_records').select('*').eq('household_id', h)), []);
+  assert.deepEqual(success(await personB.api.from('household_records').select('record_id').eq('household_id', h)), []);
   assert.equal((await requestKey(personA, h)).status, 200);
   assert.equal(success(await rpc(personA, 'pull_records', { h, after_seq: 0 })).length, 1);
 
@@ -189,7 +197,8 @@ test('Les lots suivent leur ordre, les écritures incompatibles sont annulées e
   ]);
   const edit = await encryptedRecord(key, h, 'spending', first.record_id, { amount: 750 });
   assert.deepEqual(success(await rpc(personB, 'upsert_records', { h, records: [edit] })), [{ record_id: first.record_id, seq: 3 }]);
-  const [edited] = success(await rpc(personA, 'pull_records', { h, after_seq: 2 }));
+  const [row] = success(await rpc(personA, 'pull_records', { h, after_seq: 2 }));
+  const edited = (await internalRecords(h)).find(({ record_id }) => record_id === row.record_id);
   assert.equal(edited.created_by, personA.id);
   assert.equal(edited.updated_by, personB.id);
 });
@@ -210,7 +219,8 @@ test('F-D · Le renvoi de A reçoit son numéro d’origine après une modificat
   assert.deepEqual(success(await rpc(personA, 'upsert_records', { h, records: [first] })), original);
 
   const [latest] = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
-  assert.equal(latest.updated_by, personB.id);
+  const [attribution] = await internalRecords(h);
+  assert.equal(attribution.updated_by, personB.id);
   assert.deepEqual(await decryptHouseholdRecord(key, h, latest), { kind: 'expense', id, data: { amount: 92000 } });
   assert.deepEqual(success(await rpc(personA, 'pull_records', { h, after_seq: 2 })), []);
 
@@ -267,6 +277,117 @@ test('F-D · Deux appareils enregistrent la même échéance chiffrée et Supaba
   assert.equal(materializeHousehold(await load(personA, keys[0])).currentBalance, 500);
 });
 
+test('F5 · Le serveur fixe l’auteur et garde le caractère exclusif d’origine', async () => {
+  const { household_id: h, member_id: author } = await createHousehold(personA);
+  const [{ member_id: partner }] = success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personA, h);
+  const regular = await encryptedRecord(key, h, 'spending', randomUUID(), { amount: 500 });
+  const declaration = await encryptedRecord(key, h, 'transfer', randomUUID(), { amount: 5000 });
+  const original = { ...declaration, exclusive: true, author_member_id: partner };
+  const input = { h, records: [{ ...regular, author_member_id: partner }, original] };
+  const receipts = success(await rpc(personA, 'upsert_records', input));
+  assert.deepEqual(success(await rpc(personA, 'upsert_records', input)), receipts);
+
+  const write = (actor, record, data) => rpc(actor, 'upsert_records', {
+    h, records: [{ ...record, ...data, write_id: randomUUID() }],
+  });
+  success(await write(personB, regular, { exclusive: true, author_member_id: partner }));
+  success(await write(personA, original, { exclusive: false, author_member_id: partner }));
+
+  const result = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
+  const shared = result.find(({ record_id }) => record_id === regular.record_id);
+  const exclusive = result.find(({ record_id }) => record_id === declaration.record_id);
+  assert.equal(shared.author_member_id, author);
+  assert.equal(shared.exclusive, false);
+  assert.equal(exclusive.author_member_id, author);
+  assert.equal(exclusive.exclusive, true);
+  assert.equal(Object.hasOwn(exclusive, 'amount'), false);
+  assert.equal((await decryptHouseholdRecord(key, h, exclusive)).data.amount, 5000);
+  assert.equal((await write(personB, original, { exclusive: false })).error?.code, '42501');
+});
+
+test('F5 · Une déclaration et une réponse exclusives résistent aux modifications et aux suppressions de l’autre membre', async () => {
+  const { household_id: h } = await createHousehold(personA);
+  success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personA, h);
+  const declaration = await encryptedRecord(key, h, 'transfer', randomUUID(), { amount: 5000 });
+  const reply = await encryptedRecord(key, h, 'transfer-response', randomUUID(), { status: 'confirmed' });
+  success(await rpc(personA, 'upsert_records', { h, records: [{ ...declaration, exclusive: true }] }));
+  success(await rpc(personB, 'upsert_records', { h, records: [{ ...reply, exclusive: true }] }));
+
+  for (const [actor, record] of [[personA, reply], [personB, declaration]]) {
+    for (const deleted of [false, true]) {
+      const result = await rpc(actor, 'upsert_records', {
+        h, records: [{ ...record, write_id: randomUUID(), exclusive: false, deleted }],
+      });
+      assert.equal(result.error?.code, '42501');
+    }
+  }
+  const rows = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
+  assert.deepEqual(rows.map(({ seq, deleted }) => ({ seq, deleted })), [
+    { seq: 1, deleted: false }, { seq: 2, deleted: false },
+  ]);
+});
+
+test('F5 · Un membre réinvité retrouve les droits sur son élément exclusif', async () => {
+  const { household_id: h } = await createHousehold(personA);
+  const [{ member_id: partner }] = success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personB, h);
+  const id = randomUUID();
+  const first = await encryptedRecord(key, h, 'transfer', id, { amount: 5000 });
+  success(await rpc(personB, 'upsert_records', { h, records: [{ ...first, exclusive: true }] }));
+
+  success(await rpc(personB, 'leave_household', { h }));
+  const edit = await encryptedRecord(key, h, 'transfer', id, { amount: 6000 });
+  assert.equal((await rpc(personB, 'upsert_records', { h, records: [edit] })).error?.code, '42501');
+
+  const [{ member_id: returned }] = success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  assert.equal(returned, partner);
+  success(await rpc(personB, 'upsert_records', { h, records: [edit] }));
+  const [row] = success(await rpc(personA, 'pull_records', { h, after_seq: 0 }));
+  assert.equal(row.author_member_id, partner);
+  assert.equal(row.exclusive, true);
+  assert.equal((await decryptHouseholdRecord(key, h, row)).data.amount, 6000);
+});
+
+test('F5 · La réponse d’un compte supprimé reste attribuable et figée pour un nouveau lecteur', async () => {
+  const sam = await person();
+  const { household_id: h, member_id: marc } = await createHousehold(personA);
+  const [{ member_id: recipient }] = success(await rpc(sam, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(sam, h);
+  const transferId = randomUUID();
+  const declarationData = {
+    transferId, fromMemberId: marc, toMemberId: recipient, amount: 5000, date: '2026-11-21', revision: randomUUID(),
+  };
+  const declaration = await encryptedRecord(key, h, 'transfer', transferId, declarationData);
+  const declarationHash = createHash('sha256').update(JSON.stringify(declarationData)).digest('hex');
+  const reply = await encryptedRecord(key, h, 'transfer-response', randomUUID(), {
+    transferId, declarationHash, status: 'confirmed',
+  });
+  success(await rpc(personA, 'upsert_records', { h, records: [{ ...declaration, exclusive: true }] }));
+  success(await rpc(sam, 'upsert_records', { h, records: [{ ...reply, exclusive: true }] }));
+  success(await rpc(sam, 'delete_my_account'));
+
+  const fresh = client(publicKey);
+  success(await fresh.auth.setSession({
+    access_token: personA.token,
+    refresh_token: success(await personA.api.auth.getSession()).session.refresh_token,
+  }));
+  const rows = success(await fresh.rpc('pull_records', { h, after_seq: 0 }));
+  const retained = rows.find(({ record_id }) => record_id === reply.record_id);
+  const attribution = (await internalRecords(h)).find(({ record_id }) => record_id === retained.record_id);
+  assert.equal(attribution.created_by, null);
+  assert.equal(retained.author_member_id, recipient);
+  assert.equal(retained.editor_member_id, recipient);
+  assert.equal(retained.ciphertext, reply.ciphertext);
+  assert.deepEqual(success(await fresh.from('household_members').select('member_id').eq('household_id', h)), [{ member_id: marc }]);
+
+  const writing = await fresh.rpc('upsert_records', {
+    h, records: [{ ...reply, write_id: randomUUID(), deleted: true, author_member_id: marc }],
+  });
+  assert.equal(writing.error?.code, '42501');
+});
+
 test('F-E · La suppression d’un compte retire son profil et conserve le budget de l’autre membre', async () => {
   const { household_id: h, member_id: memberA } = await createHousehold(personD);
   const { household_id: onlyMember } = await createHousehold(personD);
@@ -283,13 +404,13 @@ test('F-E · La suppression d’un compte retire son profil et conserve le budge
   assert.deepEqual(success(await admin.from('households').select('id').eq('id', onlyMember)), []);
 
   const rows = success(await rpc(personB, 'pull_records', { h, after_seq: 0 }));
-  assert.deepEqual(rows.map(({ record_id, created_by, updated_by }) => ({ record_id, created_by, updated_by })), [
+  assert.deepEqual(await internalRecords(h), [
     { record_id: one.record_id, created_by: null, updated_by: null },
     { record_id: two.record_id, created_by: personB.id, updated_by: null },
   ]);
   assert.deepEqual(await decryptHouseholdRecord(await importKey(personB, h), h, rows[0]),
     { kind: 'spending', id: one.record_id, data: { amount: 500 } });
-  const members = success(await personB.api.from('household_members').select('user_id').eq('household_id', h));
+  const members = success(await admin.from('household_members').select('user_id').eq('household_id', h));
   assert.deepEqual(members, [{ user_id: personB.id }]);
 
   await invite(personB, h);
@@ -298,4 +419,47 @@ test('F-E · La suppression d’un compte retire son profil et conserve le budge
     const idColumn = table === 'households' ? 'id' : 'household_id';
     assert.deepEqual(success(await admin.from(table).select('*').eq(idColumn, h)), []);
   }
+});
+
+test('Confidentialité · les lectures attestent l’auteur et le dernier membre ayant modifié, sans identifiant Supabase', async () => {
+  const { household_id: h, member_id: author } = await createHousehold(personA);
+  const [{ member_id: editor }] = success(await rpc(personB, 'accept_invitation', await invite(personA, h)));
+  const key = await importKey(personA, h);
+  const id = randomUUID();
+  const first = await encryptedRecord(key, h, 'spending', id, { amount: 5000 });
+  const edit = await encryptedRecord(key, h, 'spending', id, { amount: 5500 });
+  success(await rpc(personA, 'upsert_records', { h, records: [{ ...first, editor_member_id: editor }] }));
+  const [created] = success(await rpc(personB, 'pull_records', { h, after_seq: 0 }));
+  assert.equal(Object.hasOwn(created, 'created_by'), false);
+  assert.equal(Object.hasOwn(created, 'updated_by'), false);
+  assert.equal(created.author_member_id, author);
+  assert.equal(created.editor_member_id, author);
+  success(await rpc(personB, 'upsert_records', { h, records: [{ ...edit, editor_member_id: author }] }));
+  const [updated] = success(await rpc(personA, 'pull_records', { h, after_seq: 1 }));
+  assert.equal(updated.author_member_id, author);
+  assert.equal(updated.editor_member_id, editor);
+  assert.equal(Object.hasOwn(updated, 'created_by'), false);
+  assert.equal(Object.hasOwn(updated, 'updated_by'), false);
+  assert.deepEqual(await decryptHouseholdRecord(key, h, updated), { kind: 'spending', id, data: { amount: 5500 } });
+
+  for (const actor of [personA, personB]) {
+    const account = actor.api;
+    assert.equal((await account.from('household_records').select('created_by,updated_by').eq('household_id', h)).error?.code, '42501');
+    assert.equal((await account.from('household_members').select('user_id').eq('household_id', h)).error?.code, '42501');
+    assert.equal((await account.from('household_members').select('member_id').eq('user_id', personB.id)).error?.code, '42501');
+    assert.equal((await account.from('households').select('id,household_members(user_id)').eq('id', h)).error?.code, '42501');
+    const [read] = success(await account.from('household_records').select('author_member_id,editor_member_id').eq('household_id', h));
+    assert.deepEqual(read, { author_member_id: author, editor_member_id: editor });
+    const own = success(await rpc(actor, 'list_my_households')).find(row => row.household_id === h);
+    assert.equal(own.member_id, actor === personA ? author : editor);
+    assert.deepEqual(new Set(own.active_member_ids), new Set([author, editor]));
+    assert.equal(Object.hasOwn(own, 'user_id'), false);
+  }
+  assert.ok((await anonymous.rpc('list_my_households')).error);
+  assert.equal(success(await rpc(personC, 'list_my_households')).some(row => row.household_id === h), false);
+  success(await rpc(personB, 'leave_household', { h }));
+  assert.equal(success(await rpc(personB, 'list_my_households')).some(row => row.household_id === h), false);
+  const listing = success(await rpc(personA, 'list_my_households')).find(row => row.household_id === h);
+  assert.deepEqual(listing.active_member_ids, [author]);
+  assert.equal((await rpc(personB, 'pull_records', { h, after_seq: 0 })).error?.code, '42501');
 });

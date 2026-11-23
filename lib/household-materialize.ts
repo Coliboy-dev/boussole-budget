@@ -42,8 +42,9 @@ export function materializeHousehold(rows: readonly SequencedHouseholdRecord[]):
     } else if (record.data === undefined) {
       continue;
     } else if (record.kind === 'settings') {
-      const { safetyReserve } = record.data as { safetyReserve?: number };
+      const { safetyReserve, hasJointAccount } = record.data as { safetyReserve?: number; hasJointAccount?: boolean };
       if (safetyReserve !== undefined) state.userProfile.safetyReserve = safetyReserve;
+      if (hasJointAccount !== undefined) state.hasJointAccount = hasJointAccount;
     } else if (record.kind === 'occurrence') {
       occurrences.push(record.data as HouseholdOccurrence);
     } else if (record.kind === 'merchant') {

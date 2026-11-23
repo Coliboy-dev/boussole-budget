@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { formatCurrency } from '@/lib/budget-calculations';
 import { useApp } from '@/lib/context/AppContext';
 import { spendingCategoryLabels } from '@/lib/spending';
+import { householdCopy } from '@/lib/household-copy';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
 import { Icon } from '@/components/ui/icons';
 import QuickSpendingSheet from './QuickSpendingSheet';
@@ -45,7 +46,7 @@ export default function NewSpendingAction({ onOpen, showTrigger = true }: { onOp
       {open && (
         <QuickSpendingSheet onClose={() => setOpen(false)} onSave={(spending) => {
           const id = addSpending(spending);
-          const label = spending.label ?? spendingCategoryLabels[spending.category];
+          const label = spending.label ?? (spending.category === 'household' ? householdCopy.transfers : spendingCategoryLabels[spending.category]);
           setReceipt({ id, label: `${label}, ${formatCurrency(spending.amount)}` });
           setUndone(false);
           setOpen(false);

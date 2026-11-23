@@ -14,7 +14,7 @@ export default function RevenusPage() {
   const { incomes, addIncome, updateIncome, deleteIncome } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Income | null>(null);
-  const regularIncomes = incomes.filter(({ type }) => type !== 'household_contribution');
+  const regularIncomes = incomes.filter(({ type }) => type !== 'household_contribution' && type !== 'household_transfer');
 
   const totalMonthly = calculateTotalMonthlyIncome(regularIncomes);
   const confirmedTotal = calculateTotalMonthlyIncome(regularIncomes.filter((i) => i.isConfirmed));

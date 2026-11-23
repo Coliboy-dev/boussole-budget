@@ -14,6 +14,8 @@ import { useFormValidation } from '@/components/forms/useFormValidation';
 import Modal from '@/components/ui/Modal';
 import { Icon } from '@/components/ui/icons';
 import { spendingCategoryIcons } from './category-icons';
+import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
+import { householdCopy } from '@/lib/household-copy';
 
 const categories = Object.keys(spendingCategoryLabels) as SpendingCategory[];
 const inputClass = 'w-full rounded-xl border border-gray-400 bg-white px-3 py-2 text-base';
@@ -27,11 +29,12 @@ interface Props {
 
 export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) {
   const state = useApp();
-  const { today, balanceDate, storageBlocked } = state;
+  const { today, balanceDate, storageBlocked, hasJointAccount } = state;
+  const household = useHouseholdMovements();
   const from = addDays(today, -59);
   const counts = new Map<SpendingCategory, number>();
   for (const { date, category } of spendingsOf(state)) {
-    if (date >= from && date <= today) counts.set(category, (counts.get(category) ?? 0) + 1);
+    if (category !== 'household' && date >= from && date <= today) counts.set(category, (counts.get(category) ?? 0) + 1);
   }
   const ranked = [...categories].sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
   const main = ranked.slice(0, 6);
@@ -39,19 +42,21 @@ export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) 
   const [form, setForm] = useState({
     quickEntry: '',
     amount: initial ? String(initial.amount) : '',
-    category: initial?.category ?? '' as SpendingCategory | '',
+    category: (initial?.category === 'household' ? '' : initial?.category ?? '') as SpendingCategory | '',
     label: initial?.label ?? '',
     date: initial?.date ?? today,
   });
-  const [expanded, setExpanded] = useState(Boolean(initial && !main.includes(initial.category)));
+  const [expanded, setExpanded] = useState(Boolean(initial && initial.category !== 'household' && !main.includes(initial.category)));
   const [included, setIncluded] = useState<boolean>();
+  const [paidPersonal, setPaidPersonal] = useState(false);
   const [saveError, setSaveError] = useState('');
   const manual = useRef({ amount: false, category: false, label: false });
   const amountRef = useRef<HTMLInputElement>(null);
   const groupId = useId();
   const balanceHint = useId();
   const { errors, validate, clearFieldError, reset } = useFormValidation();
-  const showIncluded = !initial && Boolean(balanceDate && isLocalDate(form.date) && form.date <= balanceDate);
+  const paidFromPersonal = !!household && (hasJointAccount === false || paidPersonal);
+  const showIncluded = !initial && !paidFromPersonal && Boolean(balanceDate && isLocalDate(form.date) && form.date <= balanceDate);
   const balanceIncluded = showIncluded && (included ?? (balanceDate !== undefined && form.date < balanceDate));
 
   function change(field: 'amount' | 'label' | 'category' | 'date', value: string) {
@@ -89,7 +94,8 @@ export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) 
     if (!valid || !form.category || storageBlocked) return;
 
     try {
-      onSave({ amount, category: form.category, date: form.date, label: form.label.trim() || undefined, balanceIncluded });
+      onSave({ amount, category: form.category, date: form.date, label: form.label.trim() || undefined, balanceIncluded,
+        ...(paidFromPersonal && { paidFrom: 'personal' }) });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Impossible d’enregistrer cette dépense.');
     }
@@ -143,6 +149,13 @@ export default function QuickSpendingSheet({ initial, onSave, onClose }: Props) 
           <input name="date" type="date" max={today} className={inputClass} required
             value={form.date} onChange={(event) => change('date', event.target.value)} />
         </FormField>
+        {!initial && household && (
+          <label className="mb-4 flex min-h-11 items-center gap-2 text-sm font-medium text-slate-800">
+            <input type="checkbox" className="size-5 accent-teal-700" checked={paidFromPersonal}
+              disabled={hasJointAccount === false} onChange={(event) => setPaidPersonal(event.target.checked)} />
+            {householdCopy.paidWithPersonal}
+          </label>
+        )}
         {showIncluded && (
           <div className="mb-3">
             <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-gray-800">

@@ -16,7 +16,7 @@ export function spentInMonth(spendings: Spending[], category: SpendingCategory, 
 export function monthlySpendingTotals(spendings: Spending[], envelopes: Envelope[], month: string) {
   const totals = new Map<SpendingCategory, number>();
   for (const item of spendings) {
-    if (item.date.slice(0, 7) !== month) continue;
+    if (item.date.slice(0, 7) !== month || item.category === 'household') continue;
     totals.set(item.category, (totals.get(item.category) ?? 0) + toCents(item.amount));
   }
 
