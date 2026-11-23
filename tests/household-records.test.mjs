@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { buildInvitationLink, createInvitationToken } from '../lib/household-invitations.ts';
+import { buildInvitationLink, createInvitationToken, parseInvitationHash } from '../lib/household-invitations.ts';
 import { decryptHouseholdRecord, derivedRecordId, encryptHouseholdRecord, householdRecordId } from '../lib/household-records.ts';
 
 const householdId = 'af55f7be-d503-4d48-9bf3-5a251237dcd0';
@@ -92,4 +92,15 @@ test('Le lien ne contient que l’identifiant d’invitation et le jeton aléato
   assert.equal(url.pathname, '/foyer/rejoindre');
   assert.equal(url.search, '');
   assert.deepEqual([...new URLSearchParams(url.hash.slice(1))], [['i', householdId], ['t', token]]);
+});
+
+test('PR 5a · le lien d’invitation se relit tel quel et un lien tronqué ou altéré est refusé', async () => {
+  const { token } = await createInvitationToken();
+  const link = new URL(buildInvitationLink('https://capiste.test', householdId, token));
+  assert.deepEqual(parseInvitationHash(link.hash), { invitationId: householdId, token });
+  assert.equal(parseInvitationHash(link.hash.slice(0, -1)), null, 'jeton tronqué');
+  assert.equal(parseInvitationHash(`#i=${householdId}`), null, 'jeton absent');
+  assert.equal(parseInvitationHash(`#i=pas-un-uuid&t=${token}`), null, 'identifiant invalide');
+  assert.equal(parseInvitationHash(`#i=${householdId}&t=${token.slice(0, 42)}+`), null, 'caractère hors base64url');
+  assert.equal(parseInvitationHash(''), null);
 });

@@ -18,7 +18,9 @@ import type { HouseholdRecord, SequencedHouseholdRecord } from '@/lib/household-
 import { householdCopy, householdMessages } from '@/lib/household-copy';
 import { fetchHouseholdKey } from '@/lib/household-key';
 import { assertHouseholdAccount, HouseholdAccessRevoked, householdRemote } from '@/lib/household-remote';
-import { emptyHouseholdQueue, readHouseholdCache, updateHouseholdCache, type StoredHousehold } from '@/lib/household-storage';
+import {
+  emptyHouseholdQueue, keepFormerHouseholdCopy, readHouseholdCache, updateHouseholdCache, type StoredHousehold,
+} from '@/lib/household-storage';
 import { decodeHouseholdView, encodeHouseholdWrites, reconcileHouseholdSync, syncHousehold } from '@/lib/household-sync';
 import { envelopesOf, spendingsOf } from '@/lib/spending';
 import { useBudgetAccess } from '@/lib/budget-access';
@@ -50,6 +52,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
   const personalBudgetAccessible = useBudgetAccess();
   const [view, setView] = useState<SavedView | null>(null);
   const [revoked, setRevoked] = useState(false);
+  const [unreadable, setUnreadable] = useState(0);
   const [network, setNetwork] = useState<'loading' | 'syncing' | 'offline' | 'saved' | 'error'>('loading');
   const [failure, setFailure] = useState('');
   const [lastSpending, setLastSpending] = useState<string>();
@@ -77,7 +80,8 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     const version = ++renderVersion.current;
     assertHouseholdAccount(userId);
     if (cache.userId !== userId || cache.householdId !== householdId) throw new Error(householdCopy.unavailable);
-    const rows = cache.revoked ? [] : await decodeHouseholdView(cache.key, householdId, cache);
+    let skipped = 0;
+    const rows = cache.revoked ? [] : await decodeHouseholdView(cache.key, householdId, cache, (count) => { skipped = count; });
     const budget = cache.revoked ? null : materializeHousehold(rows);
     const transfers = memberId ? await resolveHouseholdTransfers(rows, memberId, cache.cursor) : [];
     const names: Record<string, string> = Object.create(null);
@@ -88,6 +92,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     assertHouseholdAccount(userId);
     if (!initialized.current || version !== renderVersion.current) return;
     setRevoked(!!cache.revoked);
+    setUnreadable(skipped);
     setView(budget ? {
       budget, pending: cache.pending.length,
       mirrors: memberId ? contributionMirrorPlan(budget.incomes, rows, userId, memberId, cache.cursor) : undefined,
@@ -131,10 +136,8 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
       if (error instanceof HouseholdAccessRevoked) {
         setRevoked(true);
         setView(null);
-        const cached = await readHouseholdCache(userId, householdId).catch(() => undefined);
-        if (cached) {
-          await updateHouseholdCache(userId, householdId, current => ({ ...(current ?? cached), revoked: true })).catch(() => undefined);
-        }
+        // L'accès a été retiré : la synchronisation s'arrête et la copie chiffrée reste sur l'appareil.
+        await keepFormerHouseholdCopy(userId, householdId, new Date().toISOString()).catch(() => undefined);
       }
       setNetwork(navigator.onLine ? 'error' : 'offline');
     } finally {
@@ -351,7 +354,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     },
   };
   const notice = failure || (revoked ? householdCopy.revoked : network === 'offline' ? householdCopy.offline :
-    network === 'error' ? householdCopy.unavailable : view?.pending ? householdCopy.pending :
+    network === 'error' ? householdCopy.unavailable : unreadable > 0 ? householdCopy.unreadableItems : view?.pending ? householdCopy.pending :
     !view ? householdCopy.loading : network === 'syncing' ? householdCopy.syncing :
     !view.budget.balanceDate && view.budget.hasJointAccount !== false ? householdCopy.enterBalance : '');
 

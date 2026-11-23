@@ -16,6 +16,10 @@ const examples = {
   advanceMirror: [['Courses'], 'Avancé pour le foyer : Courses'],
   advancePaidBy: [['Sam'], 'Payé par Sam depuis son compte personnel'],
   transferConfirmedBy: [['Ancien membre'], 'Confirmé par Ancien membre'],
+  sharedWith: [['Sam'], 'Ce foyer est partagé avec Sam.'],
+  stopSharingWith: [['Sam'], 'Arrêter le partage avec Sam'],
+  formerHouseholdSince: [['23 nov.'], 'Accès au foyer terminé le 23 nov.'],
+  // La date abrégée garde un seul point final.
   contributionMirrorOffer: [[60000, 'monthly', false], `Versement au compte commun de ${currency(60000)} par mois. L’ajouter à ton budget personnel ?`],
 };
 
@@ -29,4 +33,14 @@ test('F-F · les textes du Foyer sont descriptifs et les formulations de référ
     assert.equal(message, expected, name);
     assert.doesNotMatch(message, prohibited, name);
   }
+});
+
+test('F-F · départ et arrêt du partage : textes exacts de la charte (§2.3)', () => {
+  assert.equal(householdCopy.sharingDisabled, 'Le partage de ce foyer a été désactivé.');
+  assert.equal(householdCopy.noLongerShared, 'Les nouvelles informations de ce foyer ne seront plus partagées avec ce compte.');
+  assert.equal(householdCopy.personalStaysPrivate, 'Les données personnelles de chaque membre restent privées.');
+  assert.equal(householdCopy.formerMemberMayKeep,
+    'Certaines informations déjà consultées ou enregistrées par un ancien membre peuvent rester en sa possession.');
+  assert.equal(householdCopy.inviteHelp,
+    'Envoie ce lien uniquement à la personne avec qui tu partages ce foyer. Il est valable 7 jours, une seule fois.');
 });
