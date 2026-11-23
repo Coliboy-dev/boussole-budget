@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Calculator } from 'lucide-react';
+import { CalendarDays, Calculator, CircleAlert, Info, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import SummaryCard from '@/components/dashboard/SummaryCard';
@@ -9,16 +9,16 @@ import BudgetOnboarding, { OnboardingResult } from '@/components/onboarding/Budg
 import AccountChoice from '@/components/onboarding/AccountChoice';
 import { accountSignupEnabled, useCloudSync } from '@/components/sync/CloudSyncProvider';
 import { VaultProgress } from '@/components/sync/CloudAccountSection';
-import DailyBalanceCurve from '@/components/dashboard/DailyBalanceCurve';
+import ProjectionCurve from '@/components/projection/ProjectionCurve';
 import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import BackupStatus from '@/components/dashboard/BackupStatus';
 import BalanceRows from '@/components/dashboard/BalanceRows';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
-import NewSpendingAction from '@/components/spending/NewSpendingAction';
+import NewSpendingAction, { quickActionTile } from '@/components/spending/NewSpendingAction';
 import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
-import { getUpcomingReminders, formatDate, hasUndatedPayments } from '@/lib/budget-calculations';
+import { getUpcomingReminders, formatCurrency, formatDate, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
 import type { Reminder } from '@/lib/types';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 import { HouseholdContributionList } from '@/components/household/HouseholdContributions';
@@ -60,8 +60,11 @@ function SavedBudgetDashboard() {
     if (paymentFeedback?.paid) undoButton.current?.focus({ preventScroll: true });
   }, [paymentFeedback]);
 
-  const reminders = getUpcomingReminders(expenses, debts, [], today, summary.availableForecast.horizon);
-  const hasAnnualProvision = summary.availableForecast.annualProvision > 0;
+  const forecast = summary.availableForecast;
+  const reminders = getUpcomingReminders(expenses, debts, [], today, forecast.horizon);
+  const hasAnnualProvision = forecast.annualProvision > 0;
+  const partial = hasUndatedPayments(expenses, debts);
+  const hasProjection = !summary.emptyBudget || Boolean(balanceDate);
   const attention = household && joint && balanceDate ? householdAttention(state, today) : null;
 
   function pay(reminder: Reminder) {
@@ -88,9 +91,11 @@ function SavedBudgetDashboard() {
 
   return (
     <div className={`space-y-4 px-4 py-4 ${paymentFeedback?.paid || paymentError || lastAddedSpendingId ? 'pb-28' : ''}`}>
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-bold text-gray-900">Aujourd’hui</h1>
-        <time dateTime={today} className="text-sm text-gray-600">{formatDate(today)}</time>
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold text-cap-text">Aujourd’hui</h1>
+        <p className="text-sm text-cap-text-muted">
+          Ton argent, en clair, au <time dateTime={today}>{formatDate(today)}</time>.
+        </p>
       </header>
 
       {storageBlocked && (
@@ -99,32 +104,46 @@ function SavedBudgetDashboard() {
         </AlertBanner>
       )}
 
-      {joint && <SummaryCard summary={summary} hasUndatedPayments={hasUndatedPayments(expenses, debts)}
+      {joint && <SummaryCard summary={summary} hasUndatedPayments={partial}
         hasRecordedBalance={Boolean(balanceDate)} inHousehold={household}>
         <BalanceRows />
       </SummaryCard>}
-      {!joint && <p className="text-sm text-slate-700">{householdCopy.noJointAccount}</p>}
+      {!joint && <p className="text-sm text-cap-text">{householdCopy.noJointAccount}</p>}
 
-      <div className="flex flex-wrap gap-2">
-        <NewSpendingAction onOpen={() => { setPaymentFeedback(undefined); setPaymentError(''); }} />
-        {joint && (!summary.emptyBudget || balanceDate) && (
-          <Link href="/simulation" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50">
-            <Icon icon={Calculator} />
+      {joint && partial && (
+        <div className="flex gap-2 rounded-2xl border border-cap-secondary/20 bg-cap-secondary-soft px-3 py-3 text-sm text-cap-text">
+          <Icon icon={Info} className="mt-0.5 size-4 shrink-0 text-cap-secondary-text" />
+          <p>
+            <strong>Projection à compléter.</strong> Renseigne les dates des charges et mensualités pour les inclure.{' '}
+            <Link href="/charges" className="font-semibold text-cap-secondary-text underline">Compléter les dates</Link>
+          </p>
+        </div>
+      )}
+
+      <nav aria-label="Actions rapides" className="grid grid-cols-3 gap-2">
+        <NewSpendingAction variant="tile" onOpen={() => { setPaymentFeedback(undefined); setPaymentError(''); }} />
+        {joint && hasProjection && (
+          <Link href="/simulation" className={`${quickActionTile} bg-cap-secondary-soft text-cap-secondary-text hover:bg-cap-border`}>
+            <Icon icon={Calculator} className="size-6" />
             Simuler un achat
           </Link>
         )}
-      </div>
+        <Link href="/projection" className={`${quickActionTile} bg-cap-warning-soft text-cap-warning-text hover:bg-cap-border`}>
+          <Icon icon={CalendarDays} className="size-6" />
+          Voir les échéances
+        </Link>
+      </nav>
 
       {attention && <AlertBanner variant="warning" title={householdCopy.attention}>{attention}</AlertBanner>}
-      {!household && summary.riskLevel === 'danger' && (
-        <AlertBanner variant="danger" title="Découvert prévu">
-          Le solde prévisionnel passe sous zéro sur la période.
-        </AlertBanner>
-      )}
-      {!household && summary.riskLevel === 'fragile' && (
-        <AlertBanner variant="warning" title={hasAnnualProvision ? 'Sous le montant à garder' : 'Sous la réserve de sécurité'}>
-          Ton solde prévu descend sous ta réserve{hasAnnualProvision && ' et tes provisions'}. Évite les dépenses imprévues.
-        </AlertBanner>
+      {!household && (summary.riskLevel === 'danger' || summary.riskLevel === 'fragile') && (
+        <RiskNotice
+          danger={summary.riskLevel === 'danger'}
+          lowest={forecast.balance}
+          date={forecast.date}
+          causes={forecast.causes.slice(0, 2).join(', ')}
+          reserve={forecast.reservedAmount}
+          withProvision={hasAnnualProvision}
+        />
       )}
 
       {household && joint && <HouseholdContributionList />}
@@ -132,20 +151,27 @@ function SavedBudgetDashboard() {
         <UpcomingDeadlines
           reminders={reminders}
           today={today}
-          horizon={summary.availableForecast.horizon}
+          horizon={forecast.horizon}
           onPay={pay}
           payDisabled={storageBlocked}
         />
       )}
-      {!household && <BackupStatus today={today} lastBackupDate={lastBackupDate} hasBudget={!summary.emptyBudget || Boolean(balanceDate) || goals.length > 0} />}
-      {joint && (!summary.emptyBudget || balanceDate) && (
-        <DailyBalanceCurve
-          points={summary.availableForecast.dailyBalances}
-          lowestDate={summary.availableForecast.date}
-          reserve={summary.availableForecast.reservedAmount}
-          includesAnnualProvision={hasAnnualProvision}
-        />
+      {joint && hasProjection && (
+        <section aria-labelledby="home-curve-heading" className="rounded-[19px] border border-cap-border bg-cap-surface p-4 shadow-[0_1px_2px_rgba(23,44,55,0.04)]">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 id="home-curve-heading" className="text-sm font-bold text-cap-text">Évolution du solde</h2>
+            <span className="rounded-full bg-cap-secondary-soft px-2 py-1 text-xs font-bold text-cap-secondary-text">{forecast.horizon} jours</span>
+          </div>
+          <ProjectionCurve
+            points={forecast.dailyBalances}
+            lowestDate={forecast.date}
+            lowestBalance={forecast.balance}
+            reserve={forecast.reservedAmount}
+            includesAnnualProvision={hasAnnualProvision}
+          />
+        </section>
       )}
+      {!household && <BackupStatus today={today} lastBackupDate={lastBackupDate} hasBudget={!summary.emptyBudget || Boolean(balanceDate) || goals.length > 0} />}
 
       {advice.length > 0 && <AdviceWidget advice={advice} />}
 
@@ -157,5 +183,27 @@ function SavedBudgetDashboard() {
         undoRef={undoButton}
       />
     </div>
+  );
+}
+
+/** Risque de l'accueil : le constat chiffré du moteur et le chemin vers l'écran Échéances, qui détaille les actions. */
+function RiskNotice({ danger, lowest, date, causes, reserve, withProvision }: {
+  danger: boolean; lowest: number; date: string; causes: string; reserve: number; withProvision: boolean;
+}) {
+  return (
+    <section aria-labelledby="home-risk-title" className={`rounded-2xl px-3 py-3 text-sm text-cap-text ${danger ? 'bg-cap-danger-soft' : 'bg-cap-warning-soft'}`}>
+      <h2 id="home-risk-title" className={`flex items-start gap-2 font-semibold ${danger ? 'text-cap-danger-text' : 'text-cap-warning-text'}`}>
+        <Icon icon={danger ? CircleAlert : TriangleAlert} className="mt-0.5 size-4 shrink-0" />
+        {danger ? 'Découvert prévu' : withProvision ? 'Sous le montant à garder' : 'Sous la réserve de sécurité'}
+      </h2>
+      <p className="mt-1 pl-6">
+        Ton solde descendrait à <strong className="tabular-nums">{formatCurrency(lowest)}</strong> le{' '}
+        <time dateTime={date}>{formatShortDate(date)}</time>{causes && <>, après {causes}</>}
+        {danger ? '.' : <>, sous ta réserve{withProvision && ' et tes provisions'} ({formatCurrency(reserve)}). Évite les dépenses imprévues.</>}
+      </p>
+      <p className="mt-2 pl-6">
+        <Link href="/projection" className="font-semibold text-cap-primary-text underline">Voir le détail et quoi vérifier</Link>
+      </p>
+    </section>
   );
 }
