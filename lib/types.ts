@@ -221,6 +221,8 @@ export interface BudgetSummary {
     optimisticAvailable: number;
     /** Le vrai disponible ligne par ligne, du solde au montant dépensable (voir lib/available-breakdown.ts). */
     breakdown: AvailableBreakdown;
+    /** Prochaine rentrée certaine de la période (jamais une rentrée en retard ni incertaine). */
+    nextIncome?: { label: string; amount: number; date: string };
   };
 }
 

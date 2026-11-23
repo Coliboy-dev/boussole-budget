@@ -1,4 +1,4 @@
-import { availableBreakdown } from './available-breakdown.ts';
+import { availableBreakdown, nextCertainIncome } from './available-breakdown.ts';
 import { goalReserveOnAccount } from './goals.ts';
 import type {
   Income,
@@ -198,6 +198,7 @@ export function calculateBudgetSummary(
       goalSavings: forecast.goalSavings,
       goalThisMonth: fromCents(goalReserveOnAccount(goals, today).thisMonthCents),
       breakdown: availableBreakdown(currentBalance, forecast, safetyReserve),
+      nextIncome: nextCertainIncome(forecast.events),
       reservedAmount: forecast.reservedAmount,
       optimisticAvailable: empty ? 0 : forecast.optimisticAvailable,
     },

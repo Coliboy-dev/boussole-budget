@@ -63,6 +63,11 @@ for (const [name, state] of Object.entries(scenarios)) {
         ? `Il te manque ${euro(-summary.trueAvailable)} pour couvrir tout ce qui est prévu jusqu’au ${until}.`
         : `Ce que tu peux dépenser jusqu’au ${until} en couvrant tes paiements prévus.`), `définition — « ${card} »`);
       assert.ok(card.includes(status[summary.riskLevel]), `statut ${summary.riskLevel}`);
+      // Prochaine rentrée certaine : le repère de chacun, quel que soit son jour de paie.
+      const next = forecast.nextIncome;
+      assert.ok(card.includes(next
+        ? `Prochaine rentrée : ${next.label}, ${euro(next.amount)} le ${clean(formatShortDate(next.date))}.`
+        : `Aucune rentrée certaine prévue d’ici le ${clean(formatShortDate(forecast.dailyBalances.at(-1).date))}.`), `rentrée — « ${card} »`);
       // L'escalier, replié par défaut sur l'accueil : chaque ligne affichée vient du moteur.
       await cardLocator.getByText('Comment c’est calculé').click();
       const steps = cardLocator.locator('dl > div');

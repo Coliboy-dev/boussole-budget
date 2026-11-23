@@ -1,5 +1,5 @@
 import { fromCents, toCents } from './money.ts';
-import type { ProjectionResult } from './projection.ts';
+import type { ProjectionEvent, ProjectionResult } from './projection.ts';
 import type { AvailableBreakdown } from './types.ts';
 
 /**
@@ -36,4 +36,15 @@ export function availableBreakdown(currentBalance: number, projection: Projectio
     goalSavings: fromCents(goalSavings),
     available: fromCents(lowest - reserve - provision - goalSavings),
   };
+}
+
+/**
+ * Prochaine rentrée certaine de la période : le repère de chacun (paie en début, en milieu ou en fin de mois),
+ * sans changer le calcul. Une rentrée en retard ou incertaine n'est pas un repère fiable.
+ */
+export function nextCertainIncome(events: readonly ProjectionEvent[]): { label: string; amount: number; date: string } | undefined {
+  const next = events
+    .filter(({ type, isEstimated, isLate, amount }) => (type === 'income') && !isEstimated && !isLate && amount > 0)
+    .sort((first, second) => first.date.localeCompare(second.date) || second.amount - first.amount)[0];
+  return next && { label: next.label, amount: next.amount, date: next.date };
 }
