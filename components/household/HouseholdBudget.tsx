@@ -43,8 +43,10 @@ type Options = {
   extraRecords?: (rows: SequencedHouseholdRecord[], cursor: number) => Promise<HouseholdRecord[]>;
 };
 
-export default function HouseholdBudget({ userId, householdId, memberId, activeMemberIds, onExit, children }: {
+export default function HouseholdBudget({ userId, householdId, memberId, activeMemberIds, onExit, onRevoked, children }: {
   userId: string; householdId: string; onExit: () => void; children: ReactNode;
+  /** Appelé une fois la copie mise de côté après un refus d'accès : l'espace referme ce foyer sans attendre le serveur. */
+  onRevoked?: () => void;
   memberId?: string;
   activeMemberIds?: string[];
 }) {
@@ -59,6 +61,8 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
   const [dismissedOffers, setDismissedOffers] = useState<ReadonlySet<number>>(() => new Set());
   const initialized = useRef(false);
   const inProgress = useRef(false);
+  // Un refus d'accès est définitif pour ce composant : plus aucune lecture ni écriture, quels que soient les événements.
+  const accessRevoked = useRef(false);
   const retrySync = useRef(false);
   const renderVersion = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
@@ -102,7 +106,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
   }, [householdId, memberId, userId]);
 
   const synchronize = useCallback(async function synchronize() {
-    if (!initialized.current) return;
+    if (!initialized.current || accessRevoked.current) return;
     if (inProgress.current) {
       retrySync.current = true;
       return;
@@ -134,10 +138,13 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     } catch (error) {
       if (!initialized.current) return;
       if (error instanceof HouseholdAccessRevoked) {
+        accessRevoked.current = true;
+        retrySync.current = false;
         setRevoked(true);
         setView(null);
         // L'accès a été retiré : la synchronisation s'arrête et la copie chiffrée reste sur l'appareil.
         await keepFormerHouseholdCopy(userId, householdId, new Date().toISOString()).catch(() => undefined);
+        onRevoked?.();
       }
       setNetwork(navigator.onLine ? 'error' : 'offline');
     } finally {
@@ -147,7 +154,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
         void synchronize();
       }
     }
-  }, [display, householdId, userId]);
+  }, [display, householdId, onRevoked, userId]);
 
   useEffect(() => {
     initialized.current = true;

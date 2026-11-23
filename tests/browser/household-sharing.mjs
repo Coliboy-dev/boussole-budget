@@ -37,7 +37,8 @@ function session(userId) {
 async function fixture(t, userId, members) {
   const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   t.after(() => context.close());
-  const server = { members: new Map(members), calls: [], invitation: null, seq: 0 };
+  // pullRefused : le serveur refuse lectures et écritures alors que la liste peut encore dire « membre » (ordre forcé).
+  const server = { members: new Map(members), calls: [], invitation: null, seq: 0, pullRefused: false };
   const own = () => (userId === A ? mA : mB);
   await context.route('**/api/household-key', (route) => route.fulfill({
     json: { material: randomBytes(32).toString('base64'), version: 1 },
@@ -58,10 +59,10 @@ async function fixture(t, userId, members) {
         household_id: H, key_version: 1, created_at: '2026-11-20T10:00:00Z', member_id: own(), active_member_ids: [...server.members.keys()],
       }] : [] });
       case 'pull_records':
-        if (!active) return route.fulfill({ status: 403, json: { code: '42501', message: 'Ce foyer est indisponible.' } });
+        if (!active || server.pullRefused) return route.fulfill({ status: 403, json: { code: '42501', message: 'Ce foyer est indisponible.' } });
         return route.fulfill({ json: [] });
       case 'upsert_records':
-        if (!active) return route.fulfill({ status: 403, json: { code: '42501', message: 'Ce foyer est indisponible.' } });
+        if (!active || server.pullRefused) return route.fulfill({ status: 403, json: { code: '42501', message: 'Ce foyer est indisponible.' } });
         return route.fulfill({ json: body.records.map((record) => ({ record_id: record.record_id, seq: ++server.seq })) });
       case 'create_invitation':
         server.invitation = { id: INVITATION, tokenHash: body.token_hash };
@@ -137,6 +138,20 @@ async function waitForEntry(page, id, predicate) {
   }
   assert.fail(`entrée ${id} absente`);
 }
+
+/** Déclenche « online » et « visible » puis attend que l'annuaire ait réellement interrogé le serveur. Aucune temporisation. */
+async function nudge(page, times) {
+  for (let index = 0; index < times; index++) {
+    const listed = page.waitForResponse((response) => response.url().endsWith('/rpc/list_my_households'));
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('online'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await listed;
+  }
+}
+
+const syncCalls = (server) => server.calls.filter(({ rpc }) => rpc === 'pull_records' || rpc === 'upsert_records').length;
 
 const button = (page, name) => page.getByRole('button', { name, exact: true });
 
@@ -238,12 +253,12 @@ test('5a · quitter : textes de la charte, synchronisation arrêtée, copie chif
   assert.equal(directory.selected, null);
 
   // Plus aucune lecture ni écriture du foyer, même au retour du réseau.
-  const before = server.calls.filter(({ rpc }) => rpc === 'pull_records' || rpc === 'upsert_records').length;
-  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  const before = syncCalls(server);
+  await nudge(page, 3);
   await page.goto('/dashboard');
   await page.getByRole('heading', { name: 'Aujourd’hui' }).waitFor();
-  await page.waitForTimeout(1500);
-  assert.equal(server.calls.filter(({ rpc }) => rpc === 'pull_records' || rpc === 'upsert_records').length, before);
+  await nudge(page, 2);
+  assert.equal(syncCalls(server), before);
 });
 
 test('5a · arrêter le partage : l’autre membre est retiré, ce compte garde son accès', async (t) => {
@@ -269,9 +284,28 @@ test('5a · accès retiré par l’autre membre : copie gardée, foyer noté com
   await waitForEntry(page, `household-directory:${B}`, (value) => value?.former?.length === 1);
   const cache = await idb(page, `household-v1:${B}:${H}`);
   assert.equal(cache.key, 'CryptoKey', 'la copie et sa clé restent sur l’appareil');
-  await page.waitForTimeout(800); // laisser se terminer une synchronisation déjà en route
-  const pulls = server.calls.filter(({ rpc }) => rpc === 'pull_records').length;
+  const calls = syncCalls(server);
+  await nudge(page, 4);
+  assert.equal(syncCalls(server), calls, 'plus aucune lecture ni écriture après le retrait');
+});
+
+test('5a · ordre forcé : refus de lecture alors que la liste dit encore « membre » — aucune synchronisation ensuite', async (t) => {
+  const { page, server } = await fixture(t, B, [[mA, A], [mB, B]]);
+  await openHousehold(page);
+  await waitForEntry(page, `household-v1:${B}:${H}`, (value) => Boolean(value?.key));
+  server.pullRefused = true; // la liste des foyers continue de répondre « membre »
+
+  const refused = page.waitForResponse((response) => response.url().endsWith('/rpc/pull_records') && response.status() === 403);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await page.waitForTimeout(1500);
-  assert.equal(server.calls.filter(({ rpc }) => rpc === 'pull_records').length, pulls, 'plus de synchronisation');
+  await refused;
+  await waitForEntry(page, `household-v1:${B}:${H}`, (value) => value?.revoked === true);
+  const afterRefusal = syncCalls(server);
+
+  // Cinq occasions de resynchroniser, chacune confirmée par une réponse du serveur : aucune lecture ni écriture.
+  await nudge(page, 5);
+  assert.equal(syncCalls(server), afterRefusal, 'le refus est définitif pour cet appareil');
+  const cache = await idb(page, `household-v1:${B}:${H}`);
+  assert.equal(cache.revoked, true);
+  assert.equal(cache.key, 'CryptoKey', 'la copie et sa clé restent sur l’appareil');
+  assert.equal((await idb(page, `household-directory:${B}`)).selected, null, 'le foyer est refermé sans attendre la liste du serveur');
 });

@@ -152,6 +152,12 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
     }
   }
 
+  // Après un refus d'accès, l'annuaire local a déjà été mis à jour : on le relit sans attendre la liste du serveur.
+  const reloadStoredDirectory = useCallback(() => {
+    if (!userId) return;
+    void householdDirectory(userId).then(directory => readDirectory(userId, directory)).catch(() => undefined);
+  }, [readDirectory, userId]);
+
   // Les actions de partage laissent l'appelant afficher l'erreur dans son propre formulaire.
   async function join(invitationId: string, token: string) {
     if (!userId) throw new Error(householdCopy.joinSignIn);
@@ -182,7 +188,8 @@ function EnabledHouseholdWorkspace({ children }: { children: ReactNode }) {
     }}>
       {active && userId && selected ? (
         <HouseholdBudget key={`${userId}:${selected}`} userId={userId} householdId={selected}
-          memberId={memberId} activeMemberIds={membership?.activeMemberIds} onExit={() => { void select(null); }}>
+          memberId={memberId} activeMemberIds={membership?.activeMemberIds} onExit={() => { void select(null); }}
+          onRevoked={reloadStoredDirectory}>
           {pathname === '/conseils' ? (
             <main id="contenu" className="mx-auto max-w-2xl px-4 py-6">
               <p>{householdCopy.advicePersonal}</p>
