@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 import { HouseholdContributionEditor } from '@/components/household/HouseholdContributions';
+import { useHouseholdMovements } from '@/components/household/HouseholdMovementsContext';
 import Card from '@/components/ui/Card';
 import { useApp } from '@/lib/context/AppContext';
 import { formatShortDate } from '@/lib/budget-calculations';
@@ -55,15 +56,29 @@ export default function HouseholdPage() {
             </div>
           </Card>}
           {active && (
-            <>
-              <HouseholdContributionEditor key={directory.selected} />
-              <Link href="/foyer/mouvements" className={primary}>{householdCopy.monthlyContributions}</Link>
-              <HouseholdReserve key={directory.selected} />
-            </>
+            <HouseholdOptions key={directory.selected} />
           )}
         </>
       )}
     </div>
+  );
+}
+
+function HouseholdOptions() {
+  const { hasJointAccount, storageBlocked } = useApp();
+  const household = useHouseholdMovements();
+  return (
+    <>
+      <Card>
+        <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-slate-900">
+          <input type="checkbox" className="size-5 accent-teal-700" checked={hasJointAccount === false}
+            disabled={!household || storageBlocked} onChange={(event) => household?.setHasJointAccount(!event.target.checked)} />
+          {householdCopy.jointAccountChoice}
+        </label>
+      </Card>
+      {hasJointAccount !== false && <><HouseholdContributionEditor /><HouseholdReserve /></>}
+      <Link href="/foyer/mouvements" className={primary}>{householdCopy.movements}</Link>
+    </>
   );
 }
 

@@ -29,6 +29,7 @@ type NewSpending = Omit<Spending, 'debited' | 'balanceRevision'>;
 type SpendingChanges = Partial<Pick<Spending, 'date' | 'amount' | 'category' | 'label'>>;
 
 function rememberCategory<T extends AppState>(state: T, spending: Spending): T {
+  if (spending.category === 'household') return state;
   const key = merchantKey(spending.label ?? '');
   return key
     ? { ...state, merchantCategories: { ...merchantCategoriesOf(state), [key]: spending.category } }
@@ -44,7 +45,8 @@ export function addSpending<T extends AppState>(state: T, input: NewSpending, to
   if (!isSpendingAmount(input.amount) || !isLocalDate(input.date) || input.date > today
     || !input.id.trim() || spendings.some(({ id }) => id === input.id)) return state;
 
-  const spending = { ...input, debited: !input.balanceIncluded, balanceRevision: balanceRevisionOf(state) };
+  const spending = { ...input, debited: !input.balanceIncluded && input.paidFrom !== 'personal',
+    balanceRevision: balanceRevisionOf(state) };
   return rememberCategory({
     ...state,
     currentBalance: spending.debited

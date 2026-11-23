@@ -11,6 +11,10 @@ import {
   contributionMirrorNeedsUpdate, contributionMirrorPlan, findContributionMirror, type ContributionMirrorPlan,
 } from '@/lib/household-contributions';
 import { materializeHousehold } from '@/lib/household-materialize';
+import {
+  movementMirrors, resolveHouseholdTransfers, type HouseholdTransfer, type MovementMirror, type TransferDeclaration,
+} from '@/lib/household-movements';
+import type { HouseholdRecord, SequencedHouseholdRecord } from '@/lib/household-records';
 import { householdCopy, householdMessages } from '@/lib/household-copy';
 import { fetchHouseholdKey } from '@/lib/household-key';
 import { assertHouseholdAccount, HouseholdAccessRevoked, householdRemote } from '@/lib/household-remote';
@@ -20,21 +24,29 @@ import { envelopesOf, spendingsOf } from '@/lib/spending';
 import { useBudgetAccess } from '@/lib/budget-access';
 import { toCents } from '@/lib/money';
 import Card from '@/components/ui/Card';
+import { isSpendingAmount } from '@/lib/budget-schema';
+import { isLocalDate } from '@/lib/local-date';
+import { HouseholdMovementsContext, type HouseholdMovements } from './HouseholdMovementsContext';
 
-type SavedView = { budget: AppState; pending: number; mirrors?: ContributionMirrorPlan };
+type SavedView = {
+  budget: AppState; pending: number; mirrors?: ContributionMirrorPlan;
+  transfers: HouseholdTransfer[]; movementMirrors: MovementMirror[]; names: Record<string, string>;
+};
 type Change = (budget: AppState) => AppState;
 type Options = {
   paymentDate?: string;
   unscheduledPayment?: { id: string; debtId: string; date: string };
   undo?: boolean;
   spendingId?: string;
+  extraRecords?: (rows: SequencedHouseholdRecord[], cursor: number) => Promise<HouseholdRecord[]>;
 };
 
-export default function HouseholdBudget({ userId, householdId, memberId, onExit, children }: {
+export default function HouseholdBudget({ userId, householdId, memberId, activeMemberIds, onExit, children }: {
   userId: string; householdId: string; onExit: () => void; children: ReactNode;
   memberId?: string;
+  activeMemberIds?: string[];
 }) {
-  const { today, syncContributionMirrors, isBudgetLoading, storageBlocked, expenses: personalExpenses } = useApp();
+  const { today, syncContributionMirrors, syncMovementMirrors, isBudgetLoading, storageBlocked, expenses: personalExpenses } = useApp();
   const personalBudgetAccessible = useBudgetAccess();
   const [view, setView] = useState<SavedView | null>(null);
   const [revoked, setRevoked] = useState(false);
@@ -50,12 +62,16 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
   const undo = useRef<{ before: AppState; after: string } | null>(null);
   const spendingUndo = useRef<string | null>(null);
   const automaticMirrors = view?.mirrors?.automatic;
+  const movementChanges = view?.movementMirrors;
   const canWriteMirrors = personalBudgetAccessible && !isBudgetLoading && !storageBlocked;
   useEffect(() => {
     if (memberId && automaticMirrors?.length && canWriteMirrors) {
       syncContributionMirrors(userId, householdId, memberId, automaticMirrors, today);
     }
   }, [automaticMirrors, canWriteMirrors, householdId, memberId, syncContributionMirrors, today, userId]);
+  useEffect(() => {
+    if (movementChanges?.length && canWriteMirrors) syncMovementMirrors(userId, movementChanges, today);
+  }, [canWriteMirrors, movementChanges, syncMovementMirrors, today, userId]);
 
   const display = useCallback(async (cache: StoredHousehold) => {
     const version = ++renderVersion.current;
@@ -63,12 +79,20 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
     if (cache.userId !== userId || cache.householdId !== householdId) throw new Error(householdCopy.unavailable);
     const rows = cache.revoked ? [] : await decodeHouseholdView(cache.key, householdId, cache);
     const budget = cache.revoked ? null : materializeHousehold(rows);
+    const transfers = memberId ? await resolveHouseholdTransfers(rows, memberId, cache.cursor) : [];
+    const names: Record<string, string> = Object.create(null);
+    for (const { record, authorMemberId } of rows) {
+      if (record.kind === 'member' && record.id === authorMemberId && record.data && typeof record.data === 'object'
+        && 'name' in record.data && typeof record.data.name === 'string') names[record.id] = record.data.name;
+    }
     assertHouseholdAccount(userId);
     if (!initialized.current || version !== renderVersion.current) return;
     setRevoked(!!cache.revoked);
     setView(budget ? {
       budget, pending: cache.pending.length,
       mirrors: memberId ? contributionMirrorPlan(budget.incomes, rows, userId, memberId, cache.cursor) : undefined,
+      transfers, names,
+      movementMirrors: memberId ? movementMirrors(rows, transfers, householdId, userId, memberId, cache.cursor) : [],
     } : null);
   }, [householdId, memberId, userId]);
 
@@ -160,6 +184,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
       const before = materializeHousehold(rows);
       const next = change(before);
       const changes = diffHousehold(before, next, { rows, newCheckpointId, ...options });
+      if (options.extraRecords) changes.push(...await options.extraRecords(rows, cache.cursor));
       if (!changes.length) return;
       const encrypted = await encodeHouseholdWrites(cache.key, cache, changes);
       const updated = await updateHouseholdCache(userId, householdId, current => {
@@ -180,8 +205,15 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
   }
 
   function dispatch(action: AppAction) {
+    if (view?.budget.hasJointAccount === false && (action.type === 'SET_BALANCE' || action.type === 'RECORD_PAYMENT')) {
+      throw new Error(householdCopy.noJointAccount);
+    }
+    if (action.type === 'ADD_SPENDING' && (action.spending.paidFrom === 'personal' || view?.budget.hasJointAccount === false)) {
+      if (!memberId) throw new Error(householdCopy.accountChanged);
+      action = { ...action, spending: { ...action.spending, paidFrom: 'personal', paidBy: memberId, balanceIncluded: false } };
+    }
     if (!view?.budget.balanceDate && (
-      (action.type === 'ADD_SPENDING' && !action.spending.balanceIncluded) ||
+      (action.type === 'ADD_SPENDING' && !action.spending.balanceIncluded && action.spending.paidFrom !== 'personal') ||
       (action.type === 'RECORD_PAYMENT' && !action.payload.balanceIncludesPayment)
     )) {
       throw new Error(householdCopy.enterBalance);
@@ -193,6 +225,50 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
 
   const unavailable = () => { throw new Error(householdCopy.unavailable); };
   const budget = view?.budget ?? emptyBudgetState;
+  const partnerId = activeMemberIds?.find((id) => id !== memberId);
+  function changeTransfer(transfer: HouseholdTransfer,
+    write: (current: HouseholdTransfer) => HouseholdRecord[] | undefined) {
+    if (!memberId) throw new Error(householdCopy.accountChanged);
+    const actor = memberId;
+    save((state) => state, { extraRecords: async (rows, cursor) => {
+      const current = (await resolveHouseholdTransfers(rows, actor, cursor)).find(({ transferId }) => transferId === transfer.transferId);
+      if (!current || current.hash !== transfer.hash) throw new Error(householdCopy.transferChanged);
+      const records = write(current);
+      if (!records) throw new Error(householdCopy.transferChanged);
+      return records;
+    } });
+  }
+  const movements: HouseholdMovements = {
+    memberId, partnerId, transfers: view?.transfers ?? [],
+    memberName: (id) => {
+      if (id === memberId) return view?.names[id] || householdCopy.memberYou;
+      if (!activeMemberIds?.includes(id)) return householdCopy.formerMember;
+      return view?.names[id] || householdCopy.otherMember;
+    },
+    setHasJointAccount: (enabled) => save((state) => ({ ...state, hasJointAccount: enabled })),
+    declare: ({ amount, date }, previous) => {
+      if (!memberId || !partnerId) throw new Error(householdCopy.transferPartnerNeeded);
+      if (!isSpendingAmount(amount) || !isLocalDate(date) || date > today) throw new Error(householdCopy.transferChanged);
+      const transferId = previous?.transferId ?? crypto.randomUUID();
+      const data: TransferDeclaration = {
+        transferId, fromMemberId: memberId, toMemberId: previous?.toMemberId ?? partnerId,
+        date, amount: toCents(amount), revision: crypto.randomUUID(),
+      };
+      const record: HouseholdRecord = { kind: 'transfer', id: transferId, data };
+      if (previous) changeTransfer(previous, (current) => current.fromMemberId === memberId ? [record] : undefined);
+      else save((state) => state, { extraRecords: async () => [record] });
+    },
+    reply: (transfer, status) => {
+      changeTransfer(transfer, (current) => current.toMemberId === memberId && current.status === 'declared' ? [{
+        kind: 'transfer-response', id: crypto.randomUUID(),
+        data: { transferId: current.transferId, declarationHash: current.hash, status },
+      }] : undefined);
+    },
+    remove: (transfer) => {
+      changeTransfer(transfer, (current) => current.fromMemberId === memberId && current.status !== 'confirmed'
+        ? [{ kind: 'transfer', id: current.transferId }] : undefined);
+    },
+  };
   const summary = calculateBudgetSummary(
     budget.currentBalance, budget.incomes, budget.expenses, budget.debts, budget.childExpenses,
     budget.userProfile.safetyReserve, budget.goals, today,
@@ -217,6 +293,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
     saveProfileSettings: ({ safetyReserve }) => dispatch({ type: 'UPDATE_PROFILE', payload: { safetyReserve } }),
     clearBudget: unavailable,
     syncContributionMirrors: unavailable,
+    syncMovementMirrors: unavailable,
     // eslint-disable-next-line react-hooks/refs -- Cette fonction construit uniquement les gestionnaires d’événements.
     ...budgetCommands(dispatch, today),
     addIncome: (income) => {
@@ -236,6 +313,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
       });
     },
     recordScheduledPayment: (payment) => {
+      if (budget.hasJointAccount === false) throw new Error(householdCopy.noJointAccount);
       if (!budget.balanceDate) throw new Error(householdCopy.enterBalance);
       save((previous) => {
         const next = recordPayment(previous, { ...payment, today, balanceIncludesPayment: false });
@@ -244,6 +322,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
       }, { paymentDate: today, undo: true });
     },
     recordUnscheduledDebtPayment: (payment) => {
+      if (budget.hasJointAccount === false) throw new Error(householdCopy.noJointAccount);
       if (!budget.balanceDate && !payment.balanceIncludesPayment) throw new Error(householdCopy.enterBalance);
       save((previous) => {
         const next = recordUnscheduledDebtPayment(previous, { ...payment, today });
@@ -274,10 +353,11 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
   const notice = failure || (revoked ? householdCopy.revoked : network === 'offline' ? householdCopy.offline :
     network === 'error' ? householdCopy.unavailable : view?.pending ? householdCopy.pending :
     !view ? householdCopy.loading : network === 'syncing' ? householdCopy.syncing :
-    !view.budget.balanceDate ? householdCopy.enterBalance : '');
+    !view.budget.balanceDate && view.budget.hasJointAccount !== false ? householdCopy.enterBalance : '');
 
   return (
     <AppContext.Provider value={context}>
+    <HouseholdMovementsContext.Provider value={movements}>
       {notice && (
         <div role={failure || revoked ? 'alert' : 'status'} className="mx-auto max-w-2xl px-4 pt-3 text-sm text-slate-700">
           <span>{notice}</span>
@@ -314,6 +394,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, onExit,
       {view ? children : <main id="contenu" className="mx-auto max-w-2xl px-4 py-3">
         <button type="button" onClick={onExit} className="min-h-11 font-semibold text-teal-800 underline">{householdCopy.personal}</button>
       </main>}
+    </HouseholdMovementsContext.Provider>
     </AppContext.Provider>
   );
 }
