@@ -132,7 +132,7 @@ export function idb(page, id) {
       request.onsuccess = () => {
         const value = request.result;
         open.result.close();
-        resolve(value ? { ...value, key: value.key ? 'CryptoKey' : undefined } : null);
+        resolve(value ? { ...value, key: value.key ? 'CryptoKey' : undefined, keyExtractable: value.key?.extractable } : null);
       };
       request.onerror = () => reject(request.error);
     };

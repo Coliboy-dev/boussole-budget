@@ -38,12 +38,25 @@ function watchNetwork(page) {
   return requests;
 }
 
+async function personalSnapshot(page) {
+  return {
+    budget: await page.evaluate(() => localStorage.getItem('boussole-budget-v2')),
+    key: await idb(page, 'budget'),
+  };
+}
+
 test('5b · la copie se consulte hors ligne, sans aucune requête, et reste chiffrée sur l’appareil', async (t) => {
   const { page } = await formerHousehold(t);
   const stored = await idb(page, `household-v1:${A}:${H}`);
-  const atRest = JSON.stringify(stored.confirmed);
-  assert.doesNotMatch(atRest, /checkpoint|50000|500,00/, 'aucun contenu en clair dans le stockage');
+  const atRest = JSON.stringify(stored);
+  const personal = await personalSnapshot(page);
+  assert.doesNotMatch(atRest, /checkpoint|50000|500,00/, 'aucun contenu en clair dans IndexedDB');
+  assert.doesNotMatch(await page.evaluate(() => JSON.stringify(Object.entries(localStorage))), /checkpoint|50000|500,00/,
+    'aucun contenu en clair dans localStorage');
   assert.equal(stored.key, 'CryptoKey');
+  assert.equal(stored.keyExtractable, false);
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download));
 
   const requests = watchNetwork(page);
   await page.context().setOffline(true);
@@ -51,13 +64,15 @@ test('5b · la copie se consulte hors ligne, sans aucune requête, et reste chif
   await page.getByRole('heading', { name: /^Copie en lecture seule, arrêtée le / }).waitFor();
   assert.match((await page.locator('main').innerText()).replace(/[  ]/g, ' '), /Solde du compte commun : 500,00 €/);
   assert.deepEqual(requests, [], 'consultation sans réseau');
-  assert.deepEqual(JSON.stringify((await idb(page, `household-v1:${A}:${H}`)).confirmed), atRest, 'la copie stockée n’est pas réécrite');
+  assert.equal(JSON.stringify(await idb(page, `household-v1:${A}:${H}`)), atRest, 'la copie stockée n’est pas réécrite');
+  assert.deepEqual(await personalSnapshot(page), personal, 'le budget Personnel et sa clé restent inchangés après consultation');
+  assert.deepEqual(downloads, [], 'consulter ne déclenche aucun export');
 });
 
 test('5b · l’export ne contient ni clé ni identifiant de compte et ne peut pas remplacer le budget Personnel', async (t) => {
   const { page } = await formerHousehold(t);
+  const personal = await personalSnapshot(page);
   const requests = watchNetwork(page);
-  await page.context().setOffline(true);
   await button(page, 'Consulter la copie').click();
   await page.getByText('Le fichier téléchargé n’est pas chiffré. Conserve-le dans un endroit sûr.').waitFor();
   const downloading = page.waitForEvent('download');
@@ -67,19 +82,20 @@ test('5b · l’export ne contient ni clé ni identifiant de compte et ne peut p
   const contents = await readFile(await file.path(), 'utf8');
   const exported = JSON.parse(contents);
   assert.equal(exported.format, 'capiste-copie-foyer');
+  assert.equal(exported.version, 1);
   assert.equal(exported.budget.state.currentBalance, 50000, 'montant en centimes');
   for (const secret of [A, B, 'CryptoKey', '"key"', 'ciphertext', 'access_token']) {
     assert.ok(!contents.includes(secret), `l’export ne contient pas ${secret}`);
   }
   assert.throws(() => deserializeBudget(contents), /ne contient pas de sauvegarde/, 'refusé par la restauration du budget Personnel');
-  assert.deepEqual(requests, [], 'export sans réseau');
+  assert.deepEqual(requests, [], 'export sans appel au serveur, même en ligne');
+  assert.deepEqual(await personalSnapshot(page), personal, 'le budget Personnel et sa clé restent inchangés après export');
 });
 
 test('5b · l’effacement demande une confirmation et ne touche jamais le budget Personnel', async (t) => {
   const { page } = await formerHousehold(t);
-  const personal = await page.evaluate(() => localStorage.getItem('boussole-budget-v2'));
-  const personalKey = await idb(page, 'budget');
-  assert.ok(personal && personalKey, 'budget Personnel présent avant l’effacement');
+  const personal = await personalSnapshot(page);
+  assert.ok(personal.budget && personal.key, 'budget Personnel présent avant l’effacement');
   const requests = watchNetwork(page);
   await page.context().setOffline(true);
 
@@ -88,13 +104,45 @@ test('5b · l’effacement demande une confirmation et ne touche jamais le budge
   await page.getByText('Ton budget Personnel et ses lignes liées au foyer ne sont pas modifiés.').waitFor();
   await button(page, 'Annuler').click();
   assert.equal((await idb(page, `household-v1:${A}:${H}`)).key, 'CryptoKey', 'annuler ne supprime rien');
+  assert.deepEqual(await personalSnapshot(page), personal, 'le budget Personnel reste inchangé après annulation');
 
   await button(page, 'Effacer la copie de cet appareil').click();
   await button(page, 'Effacer la copie').click();
   await page.getByText(/^Accès au foyer terminé le /).waitFor({ state: 'detached' });
   assert.equal(await idb(page, `household-v1:${A}:${H}`), null, 'copie effacée');
   assert.equal((await idb(page, `household-directory:${A}`)).former, undefined);
-  assert.equal(await page.evaluate(() => localStorage.getItem('boussole-budget-v2')), personal, 'budget Personnel inchangé');
-  assert.deepEqual(await idb(page, 'budget'), personalKey, 'clé du budget Personnel conservée');
+  assert.deepEqual(await personalSnapshot(page), personal, 'le budget Personnel et sa clé restent inchangés après effacement');
   assert.deepEqual(requests, [], 'effacement sans réseau');
+});
+
+test('5b · l’effacement est refusé si un autre onglet a réintégré le foyer', async (t) => {
+  const { page } = await formerHousehold(t);
+  const personal = await personalSnapshot(page);
+  const stored = await idb(page, `household-v1:${A}:${H}`);
+  const requests = watchNetwork(page);
+  await button(page, 'Effacer la copie de cet appareil').click();
+
+  // Réunion des deux états possibles à l'écran et dans le stockage après une réintégration ailleurs.
+  await page.evaluate(({ key, active }) => new Promise((resolve, reject) => {
+    const open = indexedDB.open('boussole-cloud', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const transaction = db.transaction('keys', 'readwrite');
+      const records = transaction.objectStore('keys');
+      const current = records.get(key);
+      current.onsuccess = () => records.put({ ...current.result, households: [active] }, key);
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onabort = () => { db.close(); reject(transaction.error); };
+    };
+  }), {
+    key: `household-directory:${A}`,
+    active: { id: H, keyVersion: 1, createdAt: '2026-11-20T10:00:00Z' },
+  });
+
+  await button(page, 'Effacer la copie').click();
+  await page.getByRole('alert').getByText('Seule la copie d’un ancien foyer peut être effacée.').waitFor();
+  assert.deepEqual(await idb(page, `household-v1:${A}:${H}`), stored, 'la copie du foyer actif est intacte');
+  assert.deepEqual(await personalSnapshot(page), personal, 'le budget Personnel reste inchangé après refus');
+  assert.deepEqual(requests, [], 'le refus reste local');
 });
