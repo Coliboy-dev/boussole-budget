@@ -97,7 +97,7 @@ test('C1 — le budget se crée avant de choisir la sauvegarde en ligne', async 
   assert.equal(await stored(page, authKey), null);
   assert.deepEqual(authRequests, []);
   assert.equal(await button(page, 'Voir mon tableau de bord').count(), 1);
-  assert.equal(await page.getByRole('link', { name: 'Verrouiller Boussole avec un code', exact: true }).count(), 1);
+  assert.equal(await page.getByRole('link', { name: /^Verrouiller (Boussole|Capiste) avec un code$/ }).count(), 1);
 
   await page.getByRole('link', { name: 'Sauvegarder en ligne', exact: true }).click();
   await heading(page, 'Créer mon compte').waitFor();
