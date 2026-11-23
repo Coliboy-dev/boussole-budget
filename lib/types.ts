@@ -40,7 +40,8 @@ export interface Income extends Schedule {
 }
 
 // Expense types
-export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions' | 'other' | 'household';
+export type ExpenseCategory = 'rent' | 'energy' | 'phone' | 'insurance' | 'groceries' | 'transport' | 'health' | 'school' | 'subscriptions'
+  | 'alimony' | 'taxes' | 'childcare' | 'other' | 'household';
 
 export interface Expense extends Schedule {
   id: string;
@@ -57,7 +58,7 @@ export interface Expense extends Schedule {
 }
 
 export type SpendingCategory = 'groceries' | 'restaurants' | 'transport' | 'health' | 'leisure'
-  | 'clothing' | 'home' | 'children' | 'cash' | 'other';
+  | 'clothing' | 'home' | 'children' | 'cash' | 'pets' | 'gifts' | 'beauty' | 'travel' | 'other';
 
 export interface Envelope {
   id: string;

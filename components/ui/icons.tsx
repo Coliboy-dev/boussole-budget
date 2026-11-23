@@ -1,11 +1,14 @@
 import {
   Banknote,
+  Blocks,
   BookOpen,
   Bus,
   CircleAlert,
   CircleCheck,
+  HandHeart,
   House,
   Info,
+  Landmark,
   Lightbulb,
   Package,
   Pill,
@@ -34,9 +37,20 @@ export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
   health: 'Santé',
   school: 'Scolarité',
   subscriptions: 'Abonnements',
+  alimony: 'Contribution alimentaire',
+  taxes: 'Impôts et taxes',
+  childcare: 'Garde d’enfants',
   other: 'Autre',
   household: householdCopy.transfers,
 };
+
+/**
+ * Catégories de charges lues mais pas encore proposées à la saisie (même règle que lib/spending.ts) ;
+ * « Courses » n'est plus proposé pour une nouvelle charge (enveloppe + dépenses), le transfert foyer jamais.
+ */
+const readOnlyExpenseCategories: ReadonlySet<ExpenseCategory> = new Set(['alimony', 'taxes', 'childcare']);
+export const selectableExpenseCategories = (Object.keys(expenseCategoryLabels) as ExpenseCategory[])
+  .filter((category) => category !== 'household' && category !== 'groceries' && !readOnlyExpenseCategories.has(category));
 
 export const expenseCategoryIcons: Record<ExpenseCategory, LucideIcon> = {
   rent: House,
@@ -48,6 +62,9 @@ export const expenseCategoryIcons: Record<ExpenseCategory, LucideIcon> = {
   health: Pill,
   school: BookOpen,
   subscriptions: Tv,
+  alimony: HandHeart,
+  taxes: Landmark,
+  childcare: Blocks,
   other: Banknote,
   household: Banknote,
 };
