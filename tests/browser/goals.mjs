@@ -52,16 +52,43 @@ test('La mise de côté du mois est retirée du vrai disponible et apparaît dan
   await echeances.getByText('Mise de côté : Voyage').first().waitFor();
 });
 
-test('« J’ai mis de côté » : épargne augmentée, mois marqué, vrai disponible recalculé', async (t) => {
-  const page = await open(t, base, '/objectifs');
+test('« J’ai mis de côté » vers un compte à part : « Non, déduis-le » retire le virement du solde, le vrai disponible ne monte pas (C01)', async (t) => {
+  const page = await open(t, base, '/dashboard');
+  const before = clean(await card(page).innerText());
+  assert.ok(before.includes(euro(available(base))));
+  await page.goto('/objectifs');
   await page.getByRole('button', { name: 'J’ai mis de côté 50,00 €' }).click();
-  await page.getByText('Mis de côté ce mois-ci.').waitFor();
-  const goal = (await stored(page)).goals[0];
-  assert.deepEqual([goal.savedAmount, goal.lastContributionMonth], [15000, today.slice(0, 7)]);
+  // Solde recopié ce mois-ci : le virement y figure peut-être déjà.
+  const question = page.getByRole('dialog', { name: 'Déjà débité ?' });
+  assert.ok(clean(await question.innerText()).includes(`comprend-il déjà ce virement : Mise de côté : Voyage, ${euro(50)}`));
+  await question.getByRole('button', { name: 'Non, déduis-le' }).click();
+  await page.getByText('Mis de côté ce mois-ci. Ton solde tient compte du virement.').waitFor();
+  const stateAfter = await stored(page);
+  assert.deepEqual([stateAfter.goals[0].savedAmount, stateAfter.goals[0].lastContributionMonth, stateAfter.currentBalance],
+    [15000, today.slice(0, 7), (base.currentBalance - 50) * 100]);
   assert.equal(await page.getByRole('button', { name: /J’ai mis de côté/ }).count(), 0);
   await page.goto('/dashboard');
-  const after = { ...base, goals: [{ ...voyage, savedAmount: 150, lastContributionMonth: today.slice(0, 7) }] };
-  assert.ok(clean(await card(page).innerText()).includes(euro(available(after))));
+  const after = { ...base, currentBalance: base.currentBalance - 50, goals: [{ ...voyage, savedAmount: 150, lastContributionMonth: today.slice(0, 7) }] };
+  // Le cas de l'audit : la sortie prévue disparaît ET le solde baisse d'autant, le vrai disponible reste le même.
+  assert.equal(available(after), available(base));
+  assert.ok(clean(await card(page).innerText()).includes(euro(available(base))));
+});
+
+test('« J’ai mis de côté » : « Oui, déjà débité » garde le solde recopié tel quel', async (t) => {
+  const page = await open(t, base, '/objectifs');
+  await page.getByRole('button', { name: 'J’ai mis de côté 50,00 €' }).click();
+  await page.getByRole('dialog', { name: 'Déjà débité ?' }).getByRole('button', { name: 'Oui, déjà débité' }).click();
+  await page.getByText('Mis de côté ce mois-ci.').waitFor();
+  const stateAfter = await stored(page);
+  assert.deepEqual([stateAfter.goals[0].savedAmount, stateAfter.currentBalance], [15000, base.currentBalance * 100]);
+});
+
+test('« J’ai mis de côté » sans solde recopié ce mois-ci : déduit directement, sans question', async (t) => {
+  const page = await open(t, { ...base, balanceDate: '2026-04-30' }, '/objectifs');
+  await page.getByRole('button', { name: 'J’ai mis de côté 50,00 €' }).click();
+  await page.getByText('Mis de côté ce mois-ci.').waitFor();
+  assert.equal(await page.getByRole('dialog').count(), 0);
+  assert.equal((await stored(page)).currentBalance, (base.currentBalance - 50) * 100);
 });
 
 test('Nouvel objectif : la question « Où gardes-tu cet argent ? » est obligatoire et réserve l’épargne sur le compte', async (t) => {

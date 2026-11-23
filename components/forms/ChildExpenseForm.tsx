@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import type { ChildExpense, ChildExpenseCategory, ChildExpenseStatus } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { amountInputValue, parseAmountInput, parseOptionalAmount } from '@/lib/money';
 import { isLocalDate, todayInBrussels } from '@/lib/local-date';
-import FormField from './FormField';
+import FormField, { amountField } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -22,9 +23,9 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
     childName: initial?.childName ?? '',
     label: initial?.label ?? '',
     category: (initial?.category ?? 'other') as ChildExpenseCategory,
-    totalAmount: initial?.totalAmount?.toString() ?? '',
-    paidByUser: initial?.paidByUser?.toString() ?? '',
-    shareAmount: initial?.shareAmount?.toString() ?? '0',
+    totalAmount: amountInputValue(initial?.totalAmount) ?? '',
+    paidByUser: amountInputValue(initial?.paidByUser) ?? '',
+    shareAmount: amountInputValue(initial?.shareAmount) ?? '0',
     status: (initial?.status ?? 'pending') as ChildExpenseStatus,
     date: initial?.date ?? todayInBrussels(),
     reimbursementDate: initial?.reimbursementDate ?? '',
@@ -37,9 +38,9 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const totalAmount = parseFloat(form.totalAmount);
-    const paidByUser = parseFloat(form.paidByUser);
-    const shareAmount = parseFloat(form.shareAmount) || 0;
+    const totalAmount = parseAmountInput(form.totalAmount);
+    const paidByUser = parseAmountInput(form.paidByUser);
+    const shareAmount = parseOptionalAmount(form.shareAmount, 0);
     if (!validate(e.currentTarget, {
       label: form.label.trim() ? undefined : 'Renseigne la description du frais.',
       totalAmount: isNonNegativeBudgetAmount(totalAmount) ? undefined : 'Saisis un montant total valide et positif ou nul.',
@@ -106,9 +107,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
         <FormField label="Montant total (€)" required error={errors.totalAmount}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="totalAmount"
             value={form.totalAmount}
             onChange={(e) => set('totalAmount', e.target.value)}
@@ -119,9 +118,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
         <FormField label="Payé par toi (€)" required error={errors.paidByUser}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="paidByUser"
             value={form.paidByUser}
             onChange={(e) => set('paidByUser', e.target.value)}
@@ -135,9 +132,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
         <FormField label="Part à partager (€)" hint="Montant à rembourser" error={errors.shareAmount}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="shareAmount"
             value={form.shareAmount}
             onChange={(e) => set('shareAmount', e.target.value)}
@@ -169,7 +164,7 @@ export default function ChildExpenseForm({ initial, onSubmit, onCancel }: Props)
         </select>
       </FormField>
 
-      {form.status !== 'reimbursed' && Number(form.shareAmount) > 0 && (
+      {form.status !== 'reimbursed' && parseAmountInput(form.shareAmount) > 0 && (
         <FormField label="Remboursement attendu le" hint="Optionnel, affiché comme revenu incertain" error={errors.reimbursementDate}>
           <input
             className={cls}

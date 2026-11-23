@@ -11,7 +11,7 @@ import { useApp } from '@/lib/context/AppContext';
 import { contributionOccurrences } from '@/lib/household-contributions';
 import { householdCopy, householdMessages } from '@/lib/household-copy';
 import { addDays, addMonths, isLocalDate } from '@/lib/local-date';
-import { fromCents } from '@/lib/money';
+import { amountInputValue, fromCents, parseAmountInput } from '@/lib/money';
 import type { Frequency } from '@/lib/types';
 import { useHouseholdWorkspace } from './HouseholdWorkspace';
 
@@ -30,7 +30,7 @@ export function HouseholdContributionEditor() {
   const [expected, setExpected] = useState<typeof draft>();
   const [failure, setFailure] = useState('');
   const { errors, validate, clearFieldError } = useFormValidation();
-  const amountText = draft.amount ?? own?.amount.toString() ?? '';
+  const amountText = draft.amount ?? amountInputValue(own?.amount) ?? '';
   const date = draft.date ?? own?.expectedDate ?? today;
   const frequency = draft.frequency ?? own?.frequency ?? 'monthly';
 
@@ -41,7 +41,7 @@ export function HouseholdContributionEditor() {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!memberId) return;
-    const amount = Number(amountText.replace(',', '.'));
+    const amount = parseAmountInput(amountText);
     if (!validate(event.currentTarget, {
       amount: isSpendingAmount(amount) ? undefined : householdCopy.contributionAmountInvalid,
       date: isLocalDate(date) ? undefined : householdCopy.contributionDateInvalid,

@@ -13,6 +13,8 @@ interface GoalCardProps {
   onDelete?: (id: string) => void;
   /** « J'ai mis de côté » : la mise de côté du mois est faite. */
   onContribute?: (goal: Goal) => void;
+  /** Le virement vers un compte à part est déduit du solde (hors foyer). */
+  transferDeducted?: boolean;
   currentMonth?: string;
 }
 
@@ -29,7 +31,7 @@ const statusConfig: Record<
   to_postpone: { label: 'À reporter', variant: 'neutral', progressColor: 'primary' },
 };
 
-export default function GoalCard({ goal, feasibility, onEdit, onDelete, onContribute, currentMonth }: GoalCardProps) {
+export default function GoalCard({ goal, feasibility, onEdit, onDelete, onContribute, currentMonth, transferDeducted = true }: GoalCardProps) {
   const status = statusConfig[feasibility.status];
   const percent =
     goal.targetAmount > 0 ? Math.min(100, (goal.savedAmount / goal.targetAmount) * 100) : 0;
@@ -89,7 +91,9 @@ export default function GoalCard({ goal, feasibility, onEdit, onDelete, onContri
       {onContribute && contribution > 0 && (
         contributedThisMonth ? (
           <p role="status" className="mt-2 text-sm font-semibold text-teal-800">
-            Mis de côté ce mois-ci.{!goal.onCurrentAccount && ' Pense à mettre ton solde bancaire à jour après le virement.'}
+            Mis de côté ce mois-ci.{!goal.onCurrentAccount && (transferDeducted
+              ? ' Ton solde tient compte du virement.'
+              : ' Pense à mettre ton solde bancaire à jour après le virement.')}
           </p>
         ) : (
           <button type="button" onClick={() => onContribute(goal)}

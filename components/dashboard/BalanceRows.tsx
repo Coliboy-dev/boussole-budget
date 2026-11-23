@@ -9,7 +9,8 @@ import { formatCurrency, formatShortDate } from '@/lib/budget-calculations';
 import { isBudgetAmount } from '@/lib/budget-schema';
 import { balanceFreshness, passedOccurrences, type PassedOccurrence } from '@/lib/balance-update';
 import { useApp } from '@/lib/context/AppContext';
-import { fromCents } from '@/lib/money';
+import { amountInputValue, fromCents, parseAmountInput } from '@/lib/money';
+import { amountField } from '@/components/forms/FormField';
 import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
 
 const keyOf = (item: PassedOccurrence) => `${item.type}:${item.id}:${item.dueDate}`;
@@ -37,7 +38,7 @@ export default function BalanceRows() {
   function startEdit() {
     validation.reset();
     setFeedback('');
-    setInput(currentBalance.toString());
+    setInput(amountInputValue(currentBalance) ?? '');
     setStep('amount');
   }
 
@@ -51,7 +52,7 @@ export default function BalanceRows() {
 
   function submitAmount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const value = parseFloat(input.replace(',', '.'));
+    const value = parseAmountInput(input);
     if (!validation.validate(event.currentTarget, {
       balance: isBudgetAmount(value) ? undefined : 'Saisis un montant de solde valide.',
     })) return;
@@ -87,9 +88,7 @@ export default function BalanceRows() {
                   id="bank-balance"
                   autoFocus
                   name="balance"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
+                  {...amountField}
                   required
                   value={input}
                   onChange={(event) => setInput(event.target.value)}

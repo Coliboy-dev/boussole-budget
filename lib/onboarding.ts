@@ -3,6 +3,9 @@ import type { AppState } from './budget-state.ts';
 import { isLocalDate } from './local-date.ts';
 import { fromCents, toCents } from './money.ts';
 
+/** Libellé de la rentrée saisie au premier budget : générique, on ne le répète pas après « Prochaine rentrée : ». */
+export const GENERIC_INCOME_LABEL = 'Prochaine rentrée d’argent';
+
 export interface FirstBudgetInput {
   balance: number;
   income?: { amount: number; date: string };
@@ -30,7 +33,7 @@ export function createFirstBudget(budget: AppState, input: FirstBudgetInput, tod
     balanceDate: today,
     incomes: income ? [{
       id: 'initial-income',
-      label: 'Prochaine rentrée d’argent',
+      label: GENERIC_INCOME_LABEL,
       type: 'other',
       amount: fromCents(toCents(income.amount)),
       frequency: 'one_time',

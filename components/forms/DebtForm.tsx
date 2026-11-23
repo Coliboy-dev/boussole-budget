@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import type { Debt, DebtStatus, DebtType } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { amountInputValue, parseAmountInput, parseOptionalAmount } from '@/lib/money';
 import { isLocalDate } from '@/lib/local-date';
-import FormField from './FormField';
+import FormField, { amountField } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -21,9 +22,9 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
   const [form, setForm] = useState({
     creditor: initial?.creditor ?? '',
     type: (initial?.type ?? 'personal') as DebtType,
-    initialAmount: initial?.initialAmount?.toString() ?? '',
-    remainingAmount: initial?.remainingAmount?.toString() ?? '',
-    monthlyPayment: initial?.monthlyPayment?.toString() ?? '',
+    initialAmount: amountInputValue(initial?.initialAmount) ?? '',
+    remainingAmount: amountInputValue(initial?.remainingAmount) ?? '',
+    monthlyPayment: amountInputValue(initial?.monthlyPayment) ?? '',
     status: (initial?.status ?? 'to_pay') as DebtStatus,
     nextDueDate: initial?.nextDueDate ?? '',
     isMediationIncluded: initial?.isMediationIncluded ?? false,
@@ -35,9 +36,9 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const initialAmount = parseFloat(form.initialAmount);
-    const remainingAmount = parseFloat(form.remainingAmount);
-    const monthlyPayment = form.monthlyPayment === '' ? 0 : parseFloat(form.monthlyPayment);
+    const initialAmount = parseAmountInput(form.initialAmount);
+    const remainingAmount = parseAmountInput(form.remainingAmount);
+    const monthlyPayment = parseOptionalAmount(form.monthlyPayment, 0);
     if (!validate(e.currentTarget, {
       creditor: form.creditor.trim() ? undefined : 'Renseigne le nom du créancier.',
       initialAmount: isNonNegativeBudgetAmount(initialAmount) ? undefined : 'Saisis un montant initial valide et positif ou nul.',
@@ -108,9 +109,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
         <FormField label="Montant initial (€)" required error={errors.initialAmount}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="initialAmount"
             value={form.initialAmount}
             onChange={(e) => set('initialAmount', e.target.value)}
@@ -121,9 +120,7 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
         <FormField label="Montant restant (€)" required error={errors.remainingAmount}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="remainingAmount"
             value={form.remainingAmount}
             onChange={(e) => set('remainingAmount', e.target.value)}
@@ -137,20 +134,18 @@ export default function DebtForm({ initial, onSubmit, onCancel }: Props) {
         <FormField label="Mensualité (€)" error={errors.monthlyPayment}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="monthlyPayment"
             value={form.monthlyPayment}
             onChange={(e) => set('monthlyPayment', e.target.value)}
             placeholder="0,00"
           />
         </FormField>
-        <FormField label="1re échéance" required={Number(form.monthlyPayment) > 0} error={errors.nextDueDate}>
+        <FormField label="1re échéance" required={parseAmountInput(form.monthlyPayment) > 0} error={errors.nextDueDate}>
           <input
             className={cls}
             type="date"
-            required={Number(form.monthlyPayment) > 0}
+            required={parseAmountInput(form.monthlyPayment) > 0}
             name="nextDueDate"
             value={form.nextDueDate}
             onChange={(e) => set('nextDueDate', e.target.value)}

@@ -4,10 +4,11 @@ import { useState } from 'react';
 import type { Expense, ExpenseCategory, Frequency } from '@/lib/types';
 import { formatCurrency, toMonthlyAmount } from '@/lib/budget-calculations';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { amountInputValue, parseAmountInput } from '@/lib/money';
 import { isLocalDate } from '@/lib/local-date';
 import { withCurrent } from '@/lib/spending';
 import { expenseCategoryLabels, selectableExpenseCategories } from '@/components/ui/icons';
-import FormField from './FormField';
+import FormField, { amountField } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -30,7 +31,7 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
   const [form, setForm] = useState({
     label: initial?.label ?? '',
     category: (initial?.category ?? 'other') as ExpenseCategory,
-    amount: initial?.amount?.toString() ?? '',
+    amount: amountInputValue(initial?.amount) ?? '',
     frequency: (initial && !initial.isRecurring ? 'one_time' : initial?.frequency ?? 'monthly') as Frequency,
     dueDate: initial?.dueDate ?? '',
     endDate: initial?.endDate ?? '',
@@ -40,7 +41,7 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
-  const amount = parseFloat(form.amount);
+  const amount = parseAmountInput(form.amount);
   const annualProvision = form.frequency === 'annual' && isNonNegativeBudgetAmount(amount)
     ? toMonthlyAmount(amount, 'annual') : 0;
 
@@ -104,9 +105,7 @@ export default function ExpenseForm({ initial, onSubmit, onCancel }: Props) {
         <FormField label="Montant (€)" required error={errors.amount}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="amount"
             value={form.amount}
             onChange={(e) => set('amount', e.target.value)}

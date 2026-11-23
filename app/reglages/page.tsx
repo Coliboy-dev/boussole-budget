@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
-import { fromCents, toCents } from '@/lib/money';
+import { amountInputValue, fromCents, parseAmountInput, toCents } from '@/lib/money';
 import { setPaymentRemindersEnabled, usePaymentReminders } from '@/lib/use-payment-reminders';
-import FormField from '@/components/forms/FormField';
+import FormField, { amountField } from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import PersistentStorage from '@/components/settings/PersistentStorage';
 import AlertBanner from '@/components/ui/AlertBanner';
@@ -30,7 +30,7 @@ export default function SettingsPage() {
     const data = new FormData(event.currentTarget);
     const firstName = String(data.get('firstName') ?? '').trim();
     const reserve = String(data.get('reserve') ?? '');
-    const amount = Number(reserve);
+    const amount = parseAmountInput(reserve);
     if (!validation.validate(event.currentTarget, {
       reserve: reserve !== '' && isNonNegativeBudgetAmount(amount) ? undefined : 'Saisis un montant valide et positif ou nul.',
     })) return;
@@ -96,7 +96,7 @@ export default function SettingsPage() {
           </FormField>
           <div id="reserve" tabIndex={-1} className="scroll-mt-4">
             <FormField label="Réserve de sécurité (€)" required error={validation.errors.reserve}>
-              <input name="reserve" type="number" min="0" step="0.01" required defaultValue={userProfile.safetyReserve}
+              <input name="reserve" {...amountField} required defaultValue={amountInputValue(userProfile.safetyReserve)}
                 className="min-h-11 w-full rounded-lg border border-gray-400 px-3 py-2 text-sm" />
             </FormField>
           </div>

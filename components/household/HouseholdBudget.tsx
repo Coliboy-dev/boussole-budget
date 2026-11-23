@@ -282,7 +282,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
   const summary = calculateBudgetSummary(
     budget.currentBalance, budget.incomes, budget.expenses, budget.debts, budget.childExpenses,
     budget.userProfile.safetyReserve, budget.goals, today,
-    { envelopes: envelopesOf(budget), spendings: spendingsOf(budget) },
+    { envelopes: envelopesOf(budget), spendings: spendingsOf(budget), balanceDate: budget.balanceDate },
   );
   const context: AppContextType = {
     ...budget,
@@ -306,6 +306,9 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
     syncMovementMirrors: unavailable,
     // eslint-disable-next-line react-hooks/refs -- Cette fonction construit uniquement les gestionnaires d’événements.
     ...budgetCommands(dispatch, today),
+    // Le solde du foyer se reconstruit à partir des relevés et des paiements partagés : un virement d'épargne n'y a pas
+    // encore d'écriture. On garde l'ancien comportement (épargne augmentée, solde inchangé) en attendant.
+    contributeToGoal: (id) => dispatch({ type: 'CONTRIBUTE_GOAL', payload: { id, today, balanceIncludesTransfer: true } }),
     addIncome: (income) => {
       if (income.type !== 'household_contribution') {
         dispatch({ type: 'ADD_INCOME', payload: income });
@@ -326,7 +329,7 @@ export default function HouseholdBudget({ userId, householdId, memberId, activeM
       if (budget.hasJointAccount === false) throw new Error(householdCopy.noJointAccount);
       if (!budget.balanceDate) throw new Error(householdCopy.enterBalance);
       save((previous) => {
-        const next = recordPayment(previous, { ...payment, today, balanceIncludesPayment: false });
+        const next = recordPayment(previous, { ...payment, today, balanceIncludesPayment: payment.balanceIncludesPayment ?? false });
         if (next === previous) throw new Error(householdCopy.paymentInvalid);
         return next;
       }, { paymentDate: today, undo: true });

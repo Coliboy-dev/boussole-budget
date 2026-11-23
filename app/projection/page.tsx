@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Info, ShieldCheck, TriangleAlert, CircleAlert } from 'lucide-react';
 import { useApp } from '@/lib/context/AppContext';
 import { AVAILABLE_HORIZON, buildProjection, type ProjectionEvent } from '@/lib/projection';
-import { formatCurrency, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
+import { endOfSentence, formatCurrency, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
 import { addDays } from '@/lib/local-date';
 import { fromCents, toCents } from '@/lib/money';
 import { envelopesOf, spendingsOf } from '@/lib/spending';
@@ -16,6 +16,8 @@ import ProjectionCurve from '@/components/projection/ProjectionCurve';
 import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
+import PaymentBalanceQuestion from '@/components/budget/PaymentBalanceQuestion';
+import { paymentMayBeInBalance } from '@/lib/budget-state';
 
 const HORIZONS = [7, 15, 30, AVAILABLE_HORIZON] as const;
 type Horizon = (typeof HORIZONS)[number];
@@ -31,6 +33,7 @@ export default function ProjectionPage() {
   const [horizon, setHorizon] = useState<Horizon>(AVAILABLE_HORIZON);
   const [paymentFeedback, setPaymentFeedback] = useState<{ event: ProjectionEvent; paid: boolean }>();
   const [paymentError, setPaymentError] = useState('');
+  const [asking, setAsking] = useState<ProjectionEvent>();
   const undoButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -41,10 +44,16 @@ export default function ProjectionPage() {
     target?.focus({ preventScroll: true });
   }, [paymentFeedback]);
 
-  function pay(event: ProjectionEvent) {
+  function pay(event: ProjectionEvent, balanceIncludesPayment?: boolean) {
     if (event.type !== 'expense' && event.type !== 'debt') return;
+    setAsking(undefined);
+    // Échéance due au plus tard le jour du solde recopié : peut-être déjà débitée, on demande avant de déduire.
+    if (balanceIncludesPayment === undefined && paymentMayBeInBalance(event.dueDate, balanceDate)) {
+      setAsking(event);
+      return;
+    }
     try {
-      recordScheduledPayment({ type: event.type, id: event.sourceId, dueDate: event.dueDate });
+      recordScheduledPayment({ type: event.type, id: event.sourceId, dueDate: event.dueDate, balanceIncludesPayment });
       setPaymentFeedback({ event, paid: true });
       setPaymentError('');
     } catch (error) {
@@ -208,7 +217,7 @@ export default function ProjectionPage() {
               <Icon icon={ShieldCheck} className="mt-0.5 size-4 shrink-0 text-cap-success-text" />
               <p>
                 Point bas : <strong className="tabular-nums">{formatCurrency(projection.lowestBalance)}</strong> le{' '}
-                <time dateTime={projection.lowestDate}>{formatShortDate(projection.lowestDate)}</time>.
+                <time dateTime={projection.lowestDate}>{formatShortDate(projection.lowestDate)}</time>{endOfSentence(formatShortDate(projection.lowestDate))}
                 Disponible prudent sur {horizon} jours : <strong className="tabular-nums">{formatCurrency(projection.available)}</strong> après{' '}
                 {reserveLabel}.
               </p>
@@ -273,9 +282,8 @@ export default function ProjectionPage() {
 
       {events.some((event) => event.amount < 0 && (event.type === 'expense' || event.type === 'debt')) && (
         <p className="px-1 text-xs leading-relaxed text-cap-text-muted">
-          « Payé » déduit le montant du solde. Si le paiement y figure déjà, enregistre-le depuis{' '}
-          <Link href="/charges" className="font-medium text-cap-primary-text underline">Charges</Link> ou{' '}
-          <Link href="/dettes" className="font-medium text-cap-primary-text underline">Dettes</Link>.
+          « Payé » déduit le montant de ton solde. Pour une échéance due avant ton dernier solde recopié,
+          Capiste te demande d’abord si ce solde la comprend déjà : elle n’est jamais déduite deux fois.
         </p>
       )}
       <ProjectionEventList events={events} today={today} horizon={horizon} onPay={pay} storageBlocked={storageBlocked} />
@@ -323,6 +331,10 @@ export default function ProjectionPage() {
         Ne prends pas de décision financière importante basée uniquement sur cette projection.
       </p>
 
+      {asking && balanceDate && (
+        <PaymentBalanceQuestion label={asking.label} amount={asking.amount} balanceDate={balanceDate}
+          onAnswer={(included) => pay(asking, included)} onClose={() => setAsking(undefined)} />
+      )}
       <PaymentUndoToast
         label={paymentFeedback?.event.label}
         paid={Boolean(paymentFeedback?.paid)}

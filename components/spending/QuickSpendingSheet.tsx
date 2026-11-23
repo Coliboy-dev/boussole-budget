@@ -5,12 +5,12 @@ import { useApp } from '@/lib/context/AppContext';
 import { isSpendingAmount } from '@/lib/budget-schema';
 import { addDays, isLocalDate } from '@/lib/local-date';
 import { suggestCategory } from '@/lib/merchants';
-import { parseAmountInput } from '@/lib/money';
+import { amountInputValue, parseAmountInput } from '@/lib/money';
 import { parseQuickEntry } from '@/lib/quick-entry';
 import { labelSuggestions } from '@/lib/label-breakdown';
 import { merchantCategoriesOf, selectableSpendingCategories, spendingCategoryLabels, spendingsOf, withCurrent } from '@/lib/spending';
 import type { Spending, SpendingCategory } from '@/lib/types';
-import FormField from '@/components/forms/FormField';
+import FormField, { amountField } from '@/components/forms/FormField';
 import { useFormValidation } from '@/components/forms/useFormValidation';
 import Modal from '@/components/ui/Modal';
 import { Icon } from '@/components/ui/icons';
@@ -45,7 +45,7 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
   const more = ranked.slice(6);
   const [form, setForm] = useState({
     quickEntry: '',
-    amount: initial ? String(initial.amount) : prefill ? String(prefill.amount) : '',
+    amount: amountInputValue(initial?.amount ?? prefill?.amount) ?? '',
     category: (initial?.category === 'household' ? '' : initial?.category ?? prefill?.category ?? '') as SpendingCategory | '',
     label: initial?.label ?? prefill?.label ?? '',
     date: initial?.date ?? prefill?.date ?? today,
@@ -82,7 +82,7 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
       quickEntry: text,
       label,
       category,
-      amount: manual.current.amount ? form.amount : entry.amount?.toString() ?? '',
+      amount: manual.current.amount ? form.amount : amountInputValue(entry.amount) ?? '',
     });
     reset();
   }
@@ -131,7 +131,7 @@ export default function QuickSpendingSheet({ initial, prefill, onSave, onClose }
           </FormField>
         )}
         <FormField label="Montant (€)" required error={errors.amount}>
-          <input ref={amountRef} name="amount" type="number" inputMode="decimal" step="0.01" min="0.01"
+          <input ref={amountRef} name="amount" {...amountField}
             className={inputClass} required value={form.amount} onChange={(event) => change('amount', event.target.value)} />
         </FormField>
         <div className="mb-4">

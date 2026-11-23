@@ -28,10 +28,24 @@ export function monthlyCents(amount: number, frequency: Frequency): number {
   }
 }
 
+/**
+ * Montant saisi au clavier, en notation belge ou internationale : « 12,34 », « 12.34 », « 1 234,50 ».
+ * Deux décimales au maximum ; tout le reste (« 12,345 », « 1.234,5 », lettres) donne NaN.
+ */
 export function parseAmountInput(text: string): number {
   const value = text.trim();
   if (!/^[+-]?(?:(?:\d+|\d{1,3}(?:[ \u00a0\u202f]\d{3})+)(?:[.,]\d{1,2})?|[.,]\d{1,2})$/.test(value)) {
     return NaN;
   }
   return Number(value.replace(/[ \u00a0\u202f]/g, '').replace(',', '.'));
+}
+
+/** Montant facultatif : champ vide = `empty`, sinon même lecture stricte que parseAmountInput. */
+export function parseOptionalAmount(text: string, empty: number): number {
+  return text.trim() === '' ? empty : parseAmountInput(text);
+}
+
+/** Montant prêt à être retouché dans un champ texte : « 12,34 » plutôt que « 12.34 ». */
+export function amountInputValue(amount: number | undefined): string | undefined {
+  return amount === undefined || !Number.isFinite(amount) ? undefined : String(amount).replace('.', ',');
 }

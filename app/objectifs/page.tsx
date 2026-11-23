@@ -14,11 +14,16 @@ import {
   calculateSavingsCapacity,
   formatCurrency,
 } from '@/lib/budget-calculations';
-import { recordGoalContribution } from '@/lib/goals';
+import { goalTransferMayBeInBalance, recordGoalContribution } from '@/lib/goals';
+import { useHouseholdWorkspace } from '@/components/household/HouseholdWorkspace';
+import PaymentBalanceQuestion from '@/components/budget/PaymentBalanceQuestion';
+import { fromCents, toCents } from '@/lib/money';
 import type { Goal } from '@/lib/types';
 
 export default function ObjectifsPage() {
-  const { goals, summary, today, addGoal, updateGoal, deleteGoal, storageBlocked, currentBalance } = useApp();
+  const { goals, summary, today, addGoal, updateGoal, deleteGoal, contributeToGoal, storageBlocked, currentBalance, balanceDate } = useApp();
+  const { active: household } = useHouseholdWorkspace();
+  const [asking, setAsking] = useState<Goal>();
   const savedOnAccount = goals.filter(({ onCurrentAccount }) => onCurrentAccount).reduce((sum, { savedAmount }) => sum + savedAmount, 0);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Goal | null>(null);
@@ -44,6 +49,16 @@ export default function ObjectifsPage() {
     }
     setShowForm(false);
     setEditItem(null);
+  }
+
+  /** Compte à part : le virement quitte le compte courant ; s'il a pu partir avant le dernier solde recopié, on demande. */
+  function contribute(goal: Goal, balanceIncludesTransfer?: boolean) {
+    setAsking(undefined);
+    if (balanceIncludesTransfer === undefined && !household && goalTransferMayBeInBalance(goal, balanceDate, today)) {
+      setAsking(goal);
+      return;
+    }
+    contributeToGoal(goal.id, balanceIncludesTransfer ?? false);
   }
 
   function handleClose() {
@@ -106,8 +121,13 @@ export default function ObjectifsPage() {
           </AlertBanner>
         )}
 
-        <GoalList goals={assessedGoals} onEdit={handleEdit} onDelete={deleteGoal} currentMonth={today.slice(0, 7)}
-          onContribute={storageBlocked ? undefined : (goal) => updateGoal(goal.id, recordGoalContribution(goal, today))} />
+        <GoalList goals={assessedGoals} onEdit={handleEdit} onDelete={deleteGoal} currentMonth={today.slice(0, 7)} transferDeducted={!household}
+          onContribute={storageBlocked ? undefined : (goal) => contribute(goal)} />
+        {asking && balanceDate && (
+          <PaymentBalanceQuestion subject="ce virement" label={`Mise de côté : ${asking.label}`} balanceDate={balanceDate}
+            amount={fromCents(toCents(recordGoalContribution(asking, today).savedAmount) - toCents(asking.savedAmount))}
+            onAnswer={(included) => contribute(asking, included)} onClose={() => setAsking(undefined)} />
+        )}
 
         {goals.length === 0 && (
           <button

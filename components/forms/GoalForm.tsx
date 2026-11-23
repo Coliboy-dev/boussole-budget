@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import type { Goal } from '@/lib/types';
 import { isNonNegativeBudgetAmount } from '@/lib/budget-schema';
+import { amountInputValue, parseAmountInput, parseOptionalAmount } from '@/lib/money';
 import { isLocalDate } from '@/lib/local-date';
-import FormField from './FormField';
+import FormField, { amountField } from './FormField';
 import { useFormValidation } from './useFormValidation';
 
 const cls =
@@ -20,10 +21,10 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
   const { errors, validate, clearFieldError } = useFormValidation();
   const [form, setForm] = useState({
     label: initial?.label ?? '',
-    targetAmount: initial?.targetAmount?.toString() ?? '',
-    savedAmount: initial?.savedAmount?.toString() ?? '0',
+    targetAmount: amountInputValue(initial?.targetAmount) ?? '',
+    savedAmount: amountInputValue(initial?.savedAmount) ?? '0',
     targetDate: initial?.targetDate ?? '',
-    monthlyContribution: initial?.monthlyContribution?.toString() ?? '',
+    monthlyContribution: amountInputValue(initial?.monthlyContribution) ?? '',
     // Objectif existant sans réponse : épargne considérée à part, comme avant.
     place: (initial ? (initial.onCurrentAccount ? 'current' : 'separate') : '') as '' | 'current' | 'separate',
     notes: initial?.notes ?? '',
@@ -34,9 +35,9 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const targetAmount = parseFloat(form.targetAmount);
-    const savedAmount = parseFloat(form.savedAmount) || 0;
-    const monthlyContribution = form.monthlyContribution === '' ? undefined : parseFloat(form.monthlyContribution);
+    const targetAmount = parseAmountInput(form.targetAmount);
+    const savedAmount = parseOptionalAmount(form.savedAmount, 0);
+    const monthlyContribution = form.monthlyContribution.trim() === '' ? undefined : parseAmountInput(form.monthlyContribution);
     if (!validate(e.currentTarget, {
       label: form.label.trim() ? undefined : 'Renseigne le nom de l’objectif.',
       targetAmount: isNonNegativeBudgetAmount(targetAmount) && targetAmount > 0 ? undefined : 'Saisis un montant cible valide supérieur à zéro.',
@@ -74,9 +75,7 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
         <FormField label="Montant cible (€)" required error={errors.targetAmount}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="targetAmount"
             value={form.targetAmount}
             onChange={(e) => set('targetAmount', e.target.value)}
@@ -87,9 +86,7 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
         <FormField label="Déjà épargné (€)" error={errors.savedAmount}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="savedAmount"
             value={form.savedAmount}
             onChange={(e) => set('savedAmount', e.target.value)}
@@ -102,9 +99,7 @@ export default function GoalForm({ initial, onSubmit, onCancel }: Props) {
         <FormField label="Mise de côté /mois (€)" hint="Optionnel" error={errors.monthlyContribution}>
           <input
             className={cls}
-            type="number"
-            min="0"
-            step="0.01"
+            {...amountField}
             name="monthlyContribution"
             value={form.monthlyContribution}
             onChange={(e) => set('monthlyContribution', e.target.value)}
