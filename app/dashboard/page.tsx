@@ -14,6 +14,7 @@ import UpcomingDeadlines from '@/components/dashboard/UpcomingDeadlines';
 import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import BackupStatus from '@/components/dashboard/BackupStatus';
 import BalanceRows from '@/components/dashboard/BalanceRows';
+import SavingsTipCard from '@/components/dashboard/SavingsTipCard';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
 import { NEW_SPENDING_EVENT, quickActionTile, UNDO_TOAST_MS } from '@/components/spending/NewSpendingAction';
 import AlertBanner from '@/components/ui/AlertBanner';
@@ -163,6 +164,9 @@ function SavedBudgetDashboard() {
           Voir les échéances
         </Link>
       </nav>}
+
+      {/* Une seule piste, fondée sur les dépenses encodées ; rien si aucune habitude ne ressort. */}
+      {!household && <SavingsTipCard />}
 
       {household && joint && <HouseholdContributionList />}
       {joint && !summary.emptyBudget && (
