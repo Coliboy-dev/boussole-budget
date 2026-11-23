@@ -104,6 +104,7 @@ export default function ProjectionPage() {
   const missingForReserve = fromCents(toCents(projection.reservedAmount) - toCents(projection.lowestBalance));
   const causes = projection.lowestCauses.slice(0, 3).join(', ');
   const optimisticHelps = projection.optimisticLowestBalance > projection.lowestBalance;
+  const hasLate = events.some((event) => event.isLate);
 
   return (
     <div className={`space-y-3 px-4 py-4 ${paymentFeedback?.paid || paymentError ? 'pb-28' : ''}`}>
@@ -240,10 +241,29 @@ export default function ProjectionPage() {
                     <strong className="tabular-nums">{formatCurrency(projection.optimisticLowestBalance)}</strong>.
                   </li>
                 )}
+              </ul>
+              <p className="mt-3 pl-6 font-semibold">À vérifier d’abord</p>
+              <ul className="mt-1.5 space-y-1.5 pl-6">
+                {hasLate && (
+                  <li>
+                    Des échéances en retard sont comptées aujourd’hui.{' '}
+                    <a href="#en-retard" className="font-semibold text-cap-primary-text underline">Marque-les payées</a> si c’est déjà fait.
+                  </li>
+                )}
                 <li>
-                  Pour l’éviter : décaler une charge, reporter une dépense, ou{' '}
-                  <Link href="/simulation" className="font-semibold text-cap-primary-text underline">simuler un achat</Link> avant de le faire.
+                  <Link href="/charges" className="font-semibold text-cap-primary-text underline">Tes charges</Link> : une date ou un
+                  montant à corriger, une charge que tu peux décaler ?
                 </li>
+                <li>
+                  <Link href="/revenus" className="font-semibold text-cap-primary-text underline">Tes revenus attendus</Link> : les dates
+                  d’arrivée sont-elles justes, un revenu incertain est-il confirmé ?
+                </li>
+                {projection.lowestRisk === 'fragile' && (
+                  <li>
+                    Avant un nouvel achat,{' '}
+                    <Link href="/simulation" className="font-semibold text-cap-primary-text underline">simule-le</Link> pour voir son effet sur ta réserve.
+                  </li>
+                )}
               </ul>
             </div>
           )}

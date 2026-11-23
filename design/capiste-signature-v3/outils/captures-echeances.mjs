@@ -7,8 +7,8 @@ import { serializeBudget } from '../../../lib/budget-state.ts';
 import { scenarios, today } from '../../../tests/browser/projection-scenarios.mjs';
 
 const clean = (text) => text.replace(/[  ]/g, ' ').replace(/\s+/g, ' ').trim();
-// Montants en valeur absolue : la nouvelle liste n’affiche plus le signe « - » devant les sorties.
-const amounts = (text) => [...new Set([...clean(text).matchAll(/-?\d{1,3}(?: \d{3})*,\d{2} €/g)].map(([value]) => value.replace(/^-/, '')))].sort();
+// Montants signés : « -650,00 € » avant doit rester « -650,00 € » après.
+const amounts = (text) => [...new Set([...clean(text).matchAll(/[-+]?\d{1,3}(?: \d{3})*,\d{2} €/g)].map(([value]) => value))].sort();
 
 if (process.argv[2] === '--comparer') {
   const [before, after] = process.argv.slice(3).map((file) => JSON.parse(readFileSync(file, 'utf8')));

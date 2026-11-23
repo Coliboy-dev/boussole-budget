@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
 import { serializeBudget } from '../../lib/budget-state.ts';
-import { formatCurrency, formatShortDate } from '../../lib/budget-calculations.ts';
+import { formatCurrency, formatDate, formatShortDate } from '../../lib/budget-calculations.ts';
 import { AVAILABLE_HORIZON, buildProjection } from '../../lib/projection.ts';
 import { scenarios, today } from './projection-scenarios.mjs';
 
@@ -56,15 +56,28 @@ for (const [name, state] of Object.entries(scenarios)) {
       assert.equal(await page.locator('#en-retard li').count(), projection.events.filter((event) => event.isLate).length);
       assert.equal(await upcoming.locator('li').count(), projection.events.filter((event) => !event.isLate).length);
       assert.match(clean(await upcoming.innerText()), new RegExp(`${projection.events.filter((event) => !event.isLate).length} sur ${horizon} jours`));
+      // Les jours à venir sont groupés une seule fois chacun, dans l’ordre chronologique.
+      const upcomingDays = [...new Set(projection.events.filter((event) => !event.isLate).map((event) => event.dueDate))];
+      assert.deepEqual(await upcoming.locator('[data-day]').evaluateAll((groups) => groups.map((group) => group.dataset.day)), upcomingDays);
       for (const event of projection.events) {
-        const day = event.isLate && event.dueDate === today ? 'Date non renseignée'
-          : event.dueDate === today ? 'Aujourd’hui' : clean(formatShortDate(event.dueDate));
-        const rows = [];
-        for (const item of await (event.isLate ? late : upcoming).locator('li').all()) {
-          const text = clean(await item.innerText());
-          if (text.includes(event.label) && text.includes(euro(Math.abs(event.amount))) && text.includes(day)) rows.push(text);
+        // Le montant est signé comme sur l’ancien écran : « -650,00 € » pour une sortie, « +200,00 € » pour une entrée.
+        const signed = `${event.amount > 0 ? '+' : ''}${euro(event.amount)}`;
+        assert.equal(signed.startsWith(event.amount < 0 ? '-' : '+'), true, `signe attendu pour ${event.label}`);
+        const group = event.isLate ? late : upcoming.locator(`[data-day="${event.dueDate}"]`);
+        if (!event.isLate) {
+          const heading = clean(await group.locator('h3').innerText());
+          assert.ok(heading.includes(clean(formatDate(event.dueDate))), `${event.label} : bandeau du ${event.dueDate}`);
+          assert.equal(heading.startsWith('Aujourd’hui'), event.dueDate === today);
         }
-        assert.ok(rows.length >= 1, `${name} ${horizon} j : ${event.label} ${event.amount} le ${day}`);
+        const rows = [];
+        for (const item of await group.locator('li').all()) {
+          const text = clean(await item.innerText());
+          const amount = clean(await item.locator('span.tabular-nums').innerText());
+          const day = !event.isLate ? true
+            : event.dueDate === today ? text.includes('Date non renseignée') : text.includes(clean(formatShortDate(event.dueDate)));
+          if (text.includes(event.label) && day && amount === signed) rows.push(text);
+        }
+        assert.ok(rows.length >= 1, `${name} ${horizon} j : ${event.label} affiché ${signed} le ${event.dueDate}`);
         const text = rows[0];
         assert.equal(text.includes('Montant incertain'), event.isEstimated);
         const payable = event.amount < 0 && (event.type === 'expense' || event.type === 'debt');
@@ -102,6 +115,12 @@ for (const [name, state] of Object.entries(scenarios)) {
         if (projection.lowestRisk === 'danger') assert.ok(projected.includes(euro(-projection.lowestBalance)), 'montant manquant pour zéro');
         for (const cause of projection.lowestCauses.slice(0, 3)) assert.ok(projected.includes(cause), `cause ${cause}`);
         if (projection.optimisticLowestBalance > projection.lowestBalance) assert.ok(projected.includes(euro(projection.optimisticLowestBalance)));
+        // Actions proposées : vérifier charges et revenus ; la simulation d’un achat seulement si le solde reste positif.
+        const note = page.getByRole('note');
+        const links = await note.locator('a').evaluateAll((anchors) => anchors.map((anchor) => anchor.getAttribute('href')));
+        assert.ok(links.includes('/charges') && links.includes('/revenus'), `${name} : liens ${links}`);
+        assert.equal(links.includes('/simulation'), projection.lowestRisk === 'fragile', `${name} : simulation ${links}`);
+        assert.equal(links.includes('#en-retard'), projection.events.some((event) => event.isLate));
       }
 
       // Curseur : chaque jour affiche le solde du moteur.
