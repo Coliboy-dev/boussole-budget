@@ -27,8 +27,8 @@ test('Catégories · toutes les catégories de dépenses et de charges sont lues
   for (const category of newSpending) assert.ok(spendingCategories.includes(category), category);
 });
 
-test('Catégories · lues avant d’être proposées : aucune nouvelle catégorie à la saisie dans cette version', () => {
-  for (const category of newSpending) assert.ok(!selectableSpendingCategories.includes(category), category);
+test('Catégories · deuxième mise en ligne : les nouvelles catégories sont proposées à la saisie', () => {
+  for (const category of newSpending) assert.ok(selectableSpendingCategories.includes(category), category);
   assert.equal(spendingCategoryLabels.leisure, 'Loisirs, sport et sorties');
 });
 
