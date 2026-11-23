@@ -170,3 +170,39 @@ test('Frais à partager · le suivi ne retire rien, la dépense est proposée et
   assert.deepEqual(spendings.filter(({ category }) => category === 'children').map(({ amount, label, date }) => [amount, label, date]),
     [[12000, 'Stage de foot', today]]);
 });
+
+test('Bulle « Dépense ajoutée » : se ferme après 10 secondes et ne suit pas d’un écran à l’autre', async (t) => {
+  const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  t.after(() => context.close());
+  // Horloge pilotée : on avance le temps au lieu d'attendre.
+  await context.clock.install({ time: new Date(`${today}T10:00:00+02:00`) });
+  await context.addInitScript(([value]) => {
+    if (!localStorage.getItem('boussole-budget-v2')) {
+      localStorage.setItem('boussole-budget-v2', value);
+      localStorage.setItem('boussole-budget-owner-v1', JSON.stringify({ type: 'guest' }));
+    }
+  }, [serializeBudget(scenarios.depenses)]);
+  const page = await context.newPage();
+  const nav = page.getByRole('navigation', { name: 'Navigation principale' });
+  const undo = page.getByRole('button', { name: 'Annuler', exact: true });
+  const add = async () => {
+    await nav.getByRole('button', { name: 'Ajouter une dépense' }).click();
+    await page.locator('input[name=amount]').fill('3.20');
+    await page.getByRole('radio', { name: 'Restaurants et snacks', exact: true }).check();
+    await page.getByRole('button', { name: 'Ajouter la dépense' }).click();
+    await undo.waitFor();
+  };
+  await page.goto('/budget');
+  await page.locator('h1').first().waitFor();
+
+  await add();
+  await page.clock.runFor(9_000);
+  assert.equal(await undo.isVisible(), true, 'encore là après 9 s');
+  await page.clock.runFor(1_500);
+  await undo.waitFor({ state: 'detached' });
+
+  await add();
+  await nav.getByRole('link', { name: 'Aujourd’hui' }).click();
+  await page.getByRole('heading', { name: 'Aujourd’hui', level: 1 }).waitFor();
+  assert.equal(await undo.count(), 0, 'pas de bulle sur l’écran suivant');
+});

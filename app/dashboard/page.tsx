@@ -15,7 +15,7 @@ import AdviceWidget from '@/components/dashboard/AdviceWidget';
 import BackupStatus from '@/components/dashboard/BackupStatus';
 import BalanceRows from '@/components/dashboard/BalanceRows';
 import PaymentUndoToast from '@/components/budget/PaymentUndoToast';
-import { NEW_SPENDING_EVENT, quickActionTile } from '@/components/spending/NewSpendingAction';
+import { NEW_SPENDING_EVENT, quickActionTile, UNDO_TOAST_MS } from '@/components/spending/NewSpendingAction';
 import AlertBanner from '@/components/ui/AlertBanner';
 import { Icon } from '@/components/ui/icons';
 import { getUpcomingReminders, formatCurrency, formatDate, formatShortDate, hasUndatedPayments } from '@/lib/budget-calculations';
@@ -58,6 +58,13 @@ function SavedBudgetDashboard() {
 
   useEffect(() => {
     if (paymentFeedback?.paid) undoButton.current?.focus({ preventScroll: true });
+  }, [paymentFeedback]);
+
+  // Comme pour une dépense, la bulle « Paiement enregistré · Annuler » se ferme seule.
+  useEffect(() => {
+    if (!paymentFeedback) return;
+    const timer = setTimeout(() => setPaymentFeedback(undefined), UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
   }, [paymentFeedback]);
 
   // Une seule annonce à la fois en bas d'écran : ouvrir la saisie d'une dépense ferme celle du paiement.

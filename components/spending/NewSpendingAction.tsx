@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { formatCurrency } from '@/lib/budget-calculations';
 import { useApp } from '@/lib/context/AppContext';
@@ -13,6 +14,9 @@ import QuickSpendingSheet from './QuickSpendingSheet';
 /** Tuile des actions rapides de l'accueil (Élan V3). */
 export const quickActionTile = 'flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl px-2 py-3 text-center text-xs font-semibold leading-tight';
 
+/** Durée d'affichage de la bulle « Dépense ajoutée · Annuler ». La dépense reste modifiable dans Dépenses du mois. */
+export const UNDO_TOAST_MS = 10_000;
+
 /** Émis à l'ouverture de la saisie, pour que l'écran en cours ferme ses propres messages (accueil). */
 export const NEW_SPENDING_EVENT = 'capiste:nouvelle-depense';
 
@@ -21,12 +25,23 @@ export default function NewSpendingAction({ onOpen, showTrigger = true, variant 
 }) {
   const { addSpending, undoLastSpending, lastAddedSpendingId, storageBlocked } = useApp();
   const [open, setOpen] = useState(false);
-  const [receipt, setReceipt] = useState<{ id: string; label: string }>();
+  const pathname = usePathname();
+  const [receipt, setReceipt] = useState<{ id: string; label: string; path: string }>();
   const [undone, setUndone] = useState(false);
   const [error, setError] = useState('');
   const trigger = useRef<HTMLButtonElement>(null);
   const undoButton = useRef<HTMLButtonElement>(null);
-  const canUndo = Boolean(receipt && receipt.id === lastAddedSpendingId && !storageBlocked && !open);
+  // La bulle ne suit pas la personne d'un écran à l'autre : le bouton vit dans la barre du bas, toujours montée.
+  const here = receipt?.path === pathname;
+  const canUndo = Boolean(here && receipt && receipt.id === lastAddedSpendingId && !storageBlocked && !open);
+  const showUndone = here && undone;
+
+  // Elle se ferme seule après quelques secondes.
+  useEffect(() => {
+    if (!canUndo && !showUndone) return;
+    const timer = setTimeout(() => { setReceipt(undefined); setUndone(false); }, UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [canUndo, showUndone, receipt]);
 
   useEffect(() => {
     if (canUndo) undoButton.current?.focus({ preventScroll: true });
@@ -66,12 +81,12 @@ export default function NewSpendingAction({ onOpen, showTrigger = true, variant 
         <QuickSpendingSheet onClose={() => setOpen(false)} onSave={(spending) => {
           const id = addSpending(spending);
           const label = spending.label ?? (spending.category === 'household' ? householdCopy.transfers : spendingCategoryLabels[spending.category]);
-          setReceipt({ id, label: `${label}, ${formatCurrency(spending.amount)}` });
+          setReceipt({ id, label: `${label}, ${formatCurrency(spending.amount)}`, path: pathname });
           setUndone(false);
           setOpen(false);
         }} />
       )}
-      <PaymentUndoToast spending paid={canUndo} label={canUndo || undone ? receipt?.label : undefined}
+      <PaymentUndoToast spending paid={canUndo} label={canUndo || showUndone ? receipt?.label : undefined}
         error={error} onUndo={undo} undoRef={undoButton} />
     </>
   );
