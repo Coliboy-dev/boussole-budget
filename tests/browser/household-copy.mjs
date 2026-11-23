@@ -1,11 +1,13 @@
 // Foyer PR 5b : copie d'un ancien foyer — consultation hors ligne, export, effacement confirmé.
-// Même build que household-sharing.mjs (Foyer activé, Supabase simulé).
+// Utilise le même drapeau Foyer pour le build et pour la recette sur l’API simulée.
 // BOUSSOLE_TEST_URL=http://localhost:3000 node --experimental-strip-types --test tests/browser/household-copy.mjs
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { deserializeBudget } from '../../lib/budget-state.ts';
 import { A, B, H, button, fixture, idb, mA, mB, openHousehold, origin, waitForEntry } from './household-mock.mjs';
+
+const sharingEnabled = process.env.NEXT_PUBLIC_HOUSEHOLD_ENABLED !== 'false';
 
 /** A enregistre un solde commun de 500 €, attend qu'il soit envoyé, puis quitte le foyer. */
 async function formerHousehold(t, removedByPartner = false) {
@@ -52,7 +54,42 @@ async function personalSnapshot(page) {
   };
 }
 
-test('5b · la copie se consulte hors ligne, sans aucune requête, et reste chiffrée sur l’appareil', async (t) => {
+test('5b · Foyer désactivé : une ancienne copie reste inaccessible et aucune requête Foyer ne part', { skip: sharingEnabled }, async (t) => {
+  const { page, server } = await fixture(t, A, []);
+  const copyKey = `household-v1:${A}:${H}`;
+  await page.evaluate(async ({ userId, householdId, copyKey }) => {
+    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    await new Promise((resolve, reject) => {
+      const open = indexedDB.open('boussole-cloud', 1);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const transaction = db.transaction('keys', 'readwrite');
+        const store = transaction.objectStore('keys');
+        store.put({ selected: null, households: [], former: [{ id: householdId, leftAt: '2026-11-21T12:00:00Z' }] },
+          `household-directory:${userId}`);
+        store.put({ userId, householdId, key, keyVersion: 1, cursor: 0, confirmed: [], pending: [], revoked: true }, copyKey);
+        transaction.oncomplete = () => { db.close(); resolve(); };
+        transaction.onabort = () => { db.close(); reject(transaction.error); };
+      };
+    });
+  }, { userId: A, householdId: H, copyKey });
+  const savedCopy = await idb(page, copyKey);
+  assert.equal(savedCopy?.key, 'CryptoKey');
+  const requests = watchNetwork(page);
+
+  await page.goto('/foyer');
+  await page.getByText('Bientôt disponible').waitFor();
+  assert.equal(await page.getByText(/^Accès au foyer terminé le /).count(), 0);
+  for (const name of ['Consulter la copie', 'Télécharger la copie', 'Effacer la copie de cet appareil']) {
+    assert.equal(await button(page, name).count(), 0);
+  }
+  assert.deepEqual(await idb(page, copyKey), savedCopy);
+  assert.deepEqual(server.calls, [], 'aucune RPC du Foyer');
+  assert.deepEqual(requests.filter(url => /\/api\/household-key|\/rest\/v1\/household/.test(url)), []);
+});
+
+test('5b · la copie se consulte hors ligne, sans aucune requête, et reste chiffrée sur l’appareil', { skip: !sharingEnabled }, async (t) => {
   const { page } = await formerHousehold(t);
   const stored = await idb(page, `household-v1:${A}:${H}`);
   const atRest = JSON.stringify(stored);
@@ -76,7 +113,7 @@ test('5b · la copie se consulte hors ligne, sans aucune requête, et reste chif
   assert.deepEqual(downloads, [], 'consulter ne déclenche aucun export');
 });
 
-test('5b · l’export ne contient ni clé ni identifiant de compte et ne peut pas remplacer le budget Personnel', async (t) => {
+test('5b · l’export ne contient ni clé ni identifiant de compte et ne peut pas remplacer le budget Personnel', { skip: !sharingEnabled }, async (t) => {
   const { page } = await formerHousehold(t);
   const personal = await personalSnapshot(page);
   const requests = watchNetwork(page);
@@ -99,7 +136,7 @@ test('5b · l’export ne contient ni clé ni identifiant de compte et ne peut p
   assert.deepEqual(await personalSnapshot(page), personal, 'le budget Personnel et sa clé restent inchangés après export');
 });
 
-test('5b · l’effacement demande une confirmation et ne touche jamais le budget Personnel', async (t) => {
+test('5b · l’effacement demande une confirmation et ne touche jamais le budget Personnel', { skip: !sharingEnabled }, async (t) => {
   const { page } = await formerHousehold(t);
   const personal = await personalSnapshot(page);
   assert.ok(personal.budget && personal.key, 'budget Personnel présent avant l’effacement');
@@ -122,7 +159,7 @@ test('5b · l’effacement demande une confirmation et ne touche jamais le budge
   assert.deepEqual(requests, [], 'effacement sans réseau');
 });
 
-test('5b · l’effacement est refusé si un autre onglet a réintégré le foyer', async (t) => {
+test('5b · l’effacement est refusé si un autre onglet a réintégré le foyer', { skip: !sharingEnabled }, async (t) => {
   const { page } = await formerHousehold(t);
   const personal = await personalSnapshot(page);
   const stored = await idb(page, `household-v1:${A}:${H}`);
@@ -154,7 +191,7 @@ test('5b · l’effacement est refusé si un autre onglet a réintégré le foye
   assert.deepEqual(requests, [], 'le refus reste local');
 });
 
-test('5b · après un retrait distant, la consultation, l’export et l’effacement restent locaux', async (t) => {
+test('5b · après un retrait distant, la consultation, l’export et l’effacement restent locaux', { skip: !sharingEnabled }, async (t) => {
   const { page } = await formerHousehold(t, true);
   const personal = await personalSnapshot(page);
   const requests = watchNetwork(page);
