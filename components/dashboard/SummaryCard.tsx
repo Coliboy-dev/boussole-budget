@@ -74,6 +74,17 @@ export default function SummaryCard({
               )}
             </p>
           )}
+          {end && !empty && (
+            // Le repère de chacun, quel que soit son jour de paie ; le calcul, lui, couvre toujours un mois complet.
+            <p className="mt-1 text-sm text-white/90">
+              {forecast.nextIncome ? (
+                <>Prochaine rentrée : <strong className="text-white">{forecast.nextIncome.label}</strong>,{' '}
+                  {formatCurrency(forecast.nextIncome.amount)} le <time dateTime={forecast.nextIncome.date}>{formatShortDate(forecast.nextIncome.date)}</time>.</>
+              ) : (
+                <>Aucune rentrée certaine prévue d’ici le <time dateTime={end.date}>{formatShortDate(end.date)}</time>.</>
+              )}
+            </p>
+          )}
           {(!summary.emptyBudget || hasUndatedPayments) && (
             <div className="mt-3 flex flex-wrap gap-2">
               {!summary.emptyBudget && <RiskChip risk={summary.riskLevel} />}

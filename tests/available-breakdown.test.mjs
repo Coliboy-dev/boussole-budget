@@ -31,3 +31,21 @@ test('Vrai disponible en escalier : les lignes retombent au centime sur le moteu
     for (const key of ['incomes', 'charges', 'envelopes', 'savingsTransfers']) assert.ok(b[key] >= 0, `${name} : ${key} positif`);
   }
 });
+
+test('Prochaine rentrée : la première rentrée certaine à venir, jamais une rentrée incertaine ou en retard', async () => {
+  const { nextCertainIncome } = await import('../lib/available-breakdown.ts');
+  const event = (date, amount, fields = {}) => ({ id: date, sourceId: 's', date, dueDate: date, label: `R ${date}`, amount, type: 'income', isEstimated: false, isLate: false, ...fields });
+  assert.deepEqual(nextCertainIncome([
+    event('2026-06-15', 300),
+    event('2026-06-01', 1600, { label: 'Salaire' }),
+    event('2026-05-29', 200, { isLate: true }),
+    event('2026-05-30', 500, { isEstimated: true }),
+    { ...event('2026-05-31', -650), type: 'expense' },
+  ]), { label: 'Salaire', amount: 1600, date: '2026-06-01' });
+  assert.equal(nextCertainIncome([event('2026-06-01', 500, { isEstimated: true })]), undefined);
+  // Sur les budgets de test : cohérent avec les revenus confirmés.
+  for (const [name, s] of Object.entries(projectionScenarios)) {
+    const next = summaryOf(s).availableForecast.nextIncome;
+    if (next) assert.ok(s.incomes.some(({ label, isConfirmed }) => isConfirmed && next.label.includes(label)), `${name} : ${next.label}`);
+  }
+});
