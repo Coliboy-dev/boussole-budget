@@ -20,7 +20,8 @@ export default function DonutChart({ title, scope, parts, colors, totalCents, to
   totalCents: number;
   totalLabel: string;
 }) {
-  let offset = 0;
+  // Début de chaque segment sur le cercle, calculé avant le rendu.
+  const starts = parts.map((_, index) => parts.slice(0, index).reduce((sum, { share }) => sum + share * CIRCUMFERENCE, 0));
   const gap = parts.length > 1 ? 0.8 : 0;
   const summary = parts.map(({ label, cents, share }) => `${label} ${formatCurrency(fromCents(cents))} (${percent.format(share)})`).join(', ');
 
@@ -37,12 +38,10 @@ export default function DonutChart({ title, scope, parts, colors, totalCents, to
             <circle cx="50" cy="50" r={RADIUS} fill="none" stroke="var(--cap-border)" strokeWidth="14" />
             {parts.map(({ label, share }, index) => {
               const length = Math.max(share * CIRCUMFERENCE - gap, 0.01);
-              const segment = (
+              return (
                 <circle key={label} cx="50" cy="50" r={RADIUS} fill="none" stroke={colors[index % colors.length]} strokeWidth="14"
-                  strokeDasharray={`${length} ${CIRCUMFERENCE - length}`} strokeDashoffset={-offset} />
+                  strokeDasharray={`${length} ${CIRCUMFERENCE - length}`} strokeDashoffset={-starts[index]} />
               );
-              offset += share * CIRCUMFERENCE;
-              return segment;
             })}
           </svg>
           <div aria-hidden="true" className="absolute inset-0 flex flex-col items-center justify-center text-center">
