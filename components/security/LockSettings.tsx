@@ -108,7 +108,7 @@ export function InitialLockSetup({ onComplete }: { onComplete: () => void }) {
 function DelaySelect({ value, onChange }: { value: LockDelay; onChange: (delay: LockDelay) => void }) {
   return (
     <div>
-      <label htmlFor="lock-delay" className="mb-1.5 block text-sm font-semibold text-slate-700">Verrouiller en quittant Boussole</label>
+      <label htmlFor="lock-delay" className="mb-1.5 block text-sm font-semibold text-slate-700">Verrouiller en quittant Capiste</label>
       <select id="lock-delay" value={value} onChange={(event) => onChange(Number(event.target.value) as LockDelay)} className={fieldClass}>
         {LOCK_DELAYS.map((delay) => <option key={delay} value={delay}>{delayLabels[delay]}</option>)}
       </select>
@@ -159,7 +159,7 @@ export default function LockSettings() {
       }
       const ok = await lock.authorizeDeviceEnrollment(devicePin);
       if (!ok) {
-        setDeviceError('Code Boussole incorrect. Réessaie.');
+        setDeviceError('Code Capiste incorrect. Réessaie.');
         return;
       }
       setDevicePin('');
@@ -175,7 +175,7 @@ export default function LockSettings() {
     try {
       const ok = await lock.enrollDevice();
       if (!ok) {
-        setDeviceError('Activation annulée ou incompatible avec ce téléphone. Ton code Boussole reste valable.');
+        setDeviceError('Activation annulée ou incompatible avec ce téléphone. Ton code Capiste reste valable.');
         setDeviceMode('idle');
         return;
       }
@@ -235,11 +235,11 @@ export default function LockSettings() {
         Verrouillage
       </h2>
       <p className="text-sm text-slate-700">
-        Le verrou empêche une personne qui a ton téléphone en main de voir tes finances dans Boussole.
+        Le verrou empêche une personne qui a ton téléphone en main de voir tes finances dans Capiste.
         Il ne chiffre pas les données enregistrées sur ce téléphone et ne remplace pas le code de ton téléphone.
       </p>
       <p className="text-sm text-slate-700">
-        Sur iPhone, l’aperçu du sélecteur d’applications montre ce qui était à l’écran quand tu as quitté Boussole, montants compris. Pour l’éviter, appuie sur le cadenas avant de quitter Boussole.
+        Sur iPhone, l’aperçu du sélecteur d’applications montre ce qui était à l’écran quand tu as quitté Capiste, montants compris. Pour l’éviter, appuie sur le cadenas avant de quitter Capiste.
       </p>
       {notice && <p role="status" className="text-sm font-medium text-green-800">{notice}</p>}
 
@@ -263,7 +263,7 @@ export default function LockSettings() {
             <p className="text-sm text-slate-700">Face ID, empreinte ou code du téléphone, selon l’appareil. L’option est facultative.</p>
             {lock.deviceStatus === 'invalid' && (
               <p role="status" className="text-sm text-amber-900">
-                Cette méthode est devenue inutilisable. Tu peux la réactiver ; ton code Boussole fonctionne toujours.
+                Cette méthode est devenue inutilisable. Tu peux la réactiver ; ton code Capiste fonctionne toujours.
               </p>
             )}
             {lock.deviceStatus === 'valid' && <p role="status" className="text-sm text-green-800">Méthode du téléphone activée.</p>}
@@ -283,17 +283,17 @@ export default function LockSettings() {
               </button>
             )}
             {deviceMode === 'idle' && lock.deviceStatus !== 'valid' && deviceAvailable === false && (
-              <p className="text-sm text-slate-600">Méthode indisponible dans ce navigateur. Le code Boussole reste disponible.</p>
+              <p className="text-sm text-slate-600">Méthode indisponible dans ce navigateur. Le code Capiste reste disponible.</p>
             )}
             {deviceMode === 'authorize' && (
               <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">
-                Toute personne qui connaît le code de déverrouillage de ce téléphone pourrait aussi ouvrir Boussole.
-                Ton code Boussole restera nécessaire si le téléphone refuse.
+                Toute personne qui connaît le code de déverrouillage de ce téléphone pourrait aussi ouvrir Capiste.
+                Ton code Capiste restera nécessaire si le téléphone refuse.
               </p>
             )}
             {(deviceMode === 'authorize' || deviceMode === 'remove') && (
               <form onSubmit={(event) => void authorizePhone(event)} className="space-y-2">
-                <PinField id="phone-pin" label="Confirme ton code Boussole actuel" value={devicePin} onChange={setDevicePin} />
+                <PinField id="phone-pin" label="Confirme ton code Capiste actuel" value={devicePin} onChange={setDevicePin} />
                 {deviceError && <p role="alert" className="text-sm text-red-700">{deviceError}</p>}
                 <div className="flex flex-wrap gap-2">
                   <button type="submit" className={primaryButton} disabled={devicePending || devicePin.length !== PIN_LENGTH}>

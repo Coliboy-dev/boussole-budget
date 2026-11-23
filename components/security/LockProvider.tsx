@@ -444,7 +444,7 @@ export function LockProvider({ children }: { children: ReactNode }) {
 function NeutralScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center" role="status">
-      <span className="sr-only">Chargement de Boussole</span>
+      <span className="sr-only">Chargement de Capiste</span>
     </div>
   );
 }

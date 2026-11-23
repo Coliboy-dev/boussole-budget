@@ -905,7 +905,7 @@ test('P2-1 — le seuil exact, le dernier jour et les saisies invalides sont tra
 test('Un fichier tronqué, incompatible ou incohérent est refusé', () => {
   const contents = serializeBudget(emptyBudgetState);
   assert.throws(() => deserializeBudget(contents.slice(0, -1)), /JSON valide/);
-  assert.throws(() => deserializeBudget('{}'), /sauvegarde Boussole/);
+  assert.throws(() => deserializeBudget('{}'), /sauvegarde Capiste/);
   assert.throws(
     () => deserializeBudget(JSON.stringify({ ...JSON.parse(contents), version: 3 })),
     /version de sauvegarde/,

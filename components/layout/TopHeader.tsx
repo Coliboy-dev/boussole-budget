@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Compass, LockKeyhole, Settings } from 'lucide-react';
+import { LockKeyhole, Settings } from 'lucide-react';
+import BrandLogo from '@/components/ui/BrandLogo';
 import { Icon } from '@/components/ui/icons';
 import { useApp } from '@/lib/context/AppContext';
 import { useLock } from '@/components/security/LockProvider';
@@ -19,18 +20,15 @@ export default function TopHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
       <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-8 items-center justify-center rounded-[10px] border border-teal-200 bg-teal-50 text-teal-700">
-            <Icon icon={Compass} />
-          </span>
-          <span className="font-display text-lg font-bold tracking-tight text-teal-800">Boussole Budget</span>
+        <div className="flex items-center">
+          <BrandLogo height={34} priority />
         </div>
         <div className="flex items-center gap-1">
         {lock.enabled && (
           <button
             type="button"
             onClick={lock.lockNow}
-            aria-label="Verrouiller Boussole"
+            aria-label="Verrouiller Capiste"
             className="flex size-11 items-center justify-center rounded-full text-teal-800 hover:bg-teal-50"
           >
             <Icon icon={LockKeyhole} className="size-5" />

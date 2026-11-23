@@ -93,12 +93,12 @@ export default function EnvelopeForm({ initial, prefill, onClose }: {
         </FormField>
         {expense && (
           <div className="mb-4 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-            <p>Si tu gardes la charge « {expense.label} », Boussole comptera la charge et l’enveloppe dans ton budget.</p>
+            <p>Si tu gardes la charge « {expense.label} », Capiste comptera la charge et l’enveloppe dans ton budget.</p>
             {replacement ? (
               <>
                 <p>{category === 'groceries'
-                  ? 'Avec une enveloppe, Boussole met de côté tes courses du mois prochain dès le 1ᵉʳ.'
-                  : 'Avec une enveloppe, Boussole met de côté le montant du mois prochain dès le 1ᵉʳ.'}</p>
+                  ? 'Avec une enveloppe, Capiste met de côté tes courses du mois prochain dès le 1ᵉʳ.'
+                  : 'Avec une enveloppe, Capiste met de côté le montant du mois prochain dès le 1ᵉʳ.'}</p>
                 <dl className="space-y-1">
                   <div className="flex flex-wrap justify-between gap-x-3"><dt>Vrai disponible actuel</dt>
                     <dd className="font-bold">{formatCurrency(state.summary.trueAvailable)}</dd></div>
