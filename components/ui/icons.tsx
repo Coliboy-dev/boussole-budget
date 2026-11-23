@@ -5,6 +5,7 @@ import {
   Bus,
   CircleAlert,
   CircleCheck,
+  Dumbbell,
   HandHeart,
   House,
   Info,
@@ -40,6 +41,7 @@ export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
   alimony: 'Contribution alimentaire',
   taxes: 'Impôts et taxes',
   childcare: 'Garde d’enfants',
+  activities: 'Sport, loisirs et cours',
   other: 'Autre',
   household: householdCopy.transfers,
 };
@@ -64,6 +66,7 @@ export const expenseCategoryIcons: Record<ExpenseCategory, LucideIcon> = {
   alimony: HandHeart,
   taxes: Landmark,
   childcare: Blocks,
+  activities: Dumbbell,
   other: Banknote,
   household: Banknote,
 };

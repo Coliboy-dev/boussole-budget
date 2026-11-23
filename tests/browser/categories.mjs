@@ -16,7 +16,8 @@ const state = {
     { id: 'v1', date: '2026-05-20', amount: 84, category: 'travel', label: 'Hôtel Ostende', balanceIncluded: false, debited: true, balanceRevision: 0 },
     { id: 'p1', date: '2026-05-21', amount: 23.5, category: 'pets', label: 'Croquettes', balanceIncluded: false, debited: true, balanceRevision: 0 }],
   expenses: [...base.expenses,
-    { id: 'tx', label: 'Précompte immobilier', category: 'taxes', amount: 480, frequency: 'annual', dueDate: '2026-09-15', isPaid: false, isRecurring: true }],
+    { id: 'tx', label: 'Précompte immobilier', category: 'taxes', amount: 480, frequency: 'annual', dueDate: '2026-09-15', isPaid: false, isRecurring: true },
+    { id: 'jjb', label: 'JJB', category: 'activities', amount: 45, frequency: 'monthly', dueDate: '2026-06-05', isPaid: false, isRecurring: true }],
 };
 const stored = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('boussole-budget-v2')).state);
 
@@ -47,6 +48,9 @@ test('Le budget s’ouvre et les nouvelles catégories sont affichées avec leur
   const charges = await open(t, '/charges');
   await charges.getByRole('button', { name: /Précompte immobilier/ }).click();
   await charges.getByRole('dialog').getByText('Impôts et taxes').waitFor();
+  await charges.getByRole('button', { name: 'Fermer' }).click().catch(() => charges.keyboard.press('Escape'));
+  await charges.getByRole('button', { name: /^JJB/ }).click();
+  await charges.getByRole('dialog').getByText('Sport, loisirs et cours').waitFor();
 });
 
 test('Modifier une dépense « Vacances et voyages » garde sa catégorie', async (t) => {
@@ -95,6 +99,6 @@ test('Nouvelle dépense ou charge : les nouvelles catégories sont proposées', 
   const charges = await open(t, '/charges');
   await charges.getByRole('button', { name: /Ajouter/ }).first().click();
   const options = await charges.getByRole('dialog').locator('select').first().locator('option').allInnerTexts();
-  for (const name of ['Contribution alimentaire', 'Impôts et taxes', 'Garde d’enfants']) assert.ok(options.includes(name), name);
+  for (const name of ['Contribution alimentaire', 'Impôts et taxes', 'Garde d’enfants', 'Sport, loisirs et cours']) assert.ok(options.includes(name), name);
   assert.ok(!options.includes('Courses alimentaires'), 'Courses reste réservé aux charges déjà encodées');
 });
