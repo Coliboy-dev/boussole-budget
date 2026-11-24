@@ -8,10 +8,9 @@ import GoalList from '@/components/goals/GoalList';
 import Card from '@/components/ui/Card';
 import AlertBanner from '@/components/ui/AlertBanner';
 import {
-  assessGoalFeasibility,
+  assessBudgetGoals,
   calculateGoalFeasibility,
   calculateGoalTotals,
-  calculateSavingsCapacity,
   formatCurrency,
 } from '@/lib/budget-calculations';
 import { goalTransferMayBeInBalance, recordGoalContribution } from '@/lib/goals';
@@ -24,15 +23,12 @@ export default function ObjectifsPage() {
   const { goals, summary, today, addGoal, updateGoal, deleteGoal, contributeToGoal, storageBlocked, currentBalance, balanceDate } = useApp();
   const { active: household } = useHouseholdWorkspace();
   const [asking, setAsking] = useState<Goal>();
-  const savedOnAccount = goals.filter(({ onCurrentAccount }) => onCurrentAccount).reduce((sum, { savedAmount }) => sum + savedAmount, 0);
+  const savedOnAccount = goals.filter(({ onCurrentAccount }) => onCurrentAccount).reduce((sum, { savedAmount }) => sum + toCents(savedAmount), 0);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Goal | null>(null);
 
   const totals = calculateGoalTotals(goals);
-  const assessedGoals = goals.map((goal) => ({
-    goal,
-    feasibility: assessGoalFeasibility(goal, summary.savingsCapacity, today),
-  }));
+  const assessedGoals = assessBudgetGoals(goals, summary.monthlyMargin, today);
   const hasRealisticGoal = assessedGoals.some(({ feasibility }) => feasibility.status === 'realistic');
 
   function handleEdit(goal: Goal) {
@@ -44,8 +40,7 @@ export default function ObjectifsPage() {
     if (editItem) {
       updateGoal(editItem.id, data);
     } else {
-      const savingsAfterAddition = calculateSavingsCapacity(summary.savingsCapacity, [data]);
-      addGoal({ ...data, status: calculateGoalFeasibility(data, savingsAfterAddition, today) });
+      addGoal({ ...data, status: calculateGoalFeasibility(data, summary.savingsCapacity, today) });
     }
     setShowForm(false);
     setEditItem(null);
@@ -108,9 +103,9 @@ export default function ObjectifsPage() {
           </div>
         </Card>
 
-        {savedOnAccount > currentBalance && (
+        {savedOnAccount > toCents(currentBalance) && (
           <AlertBanner variant="warning" title="Épargne plus élevée que ton solde">
-            Tu indiques {formatCurrency(savedOnAccount)} épargnés sur ton compte courant, mais ton solde est de {formatCurrency(currentBalance)}.
+            Tu indiques {formatCurrency(fromCents(savedOnAccount))} épargnés sur ton compte courant, mais ton solde est de {formatCurrency(currentBalance)}.
             Vérifie ton solde, ou modifie l’objectif si cet argent est sur un compte à part.
           </AlertBanner>
         )}

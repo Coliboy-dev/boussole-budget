@@ -129,3 +129,37 @@ test('Cas du fondateur : 50 € sur le compte, 250 € « épargnés sur le comp
   const goals = await open(t, state, '/objectifs');
   await goals.getByText('Épargne plus élevée que ton solde').waitFor();
 });
+
+const salary = { id: 'salaire', label: 'Salaire', type: 'salary', amount: 100, frequency: 'monthly', expectedDate: today, isConfirmed: true };
+const target = { ...voyage, savedAmount: 0, monthlyContribution: 60, status: 'fragile' };
+
+test('C13 · 60 € sur 100 € : l’objectif enregistré est Réaliste', async (t) => {
+  const state = { ...base, incomes: [salary], goals: [target] };
+  assert.equal(calculateBudgetSummary(state.currentBalance, state.incomes, [], [], [], 0, state.goals, today).savingsCapacity, 40);
+  const page = await open(t, state, '/objectifs');
+  await page.getByText('Voyage', { exact: true }).waitFor();
+  const badge = page.getByText(/^(Réaliste|Réalisable|Fragile|À reporter)$/);
+  assert.equal(await badge.innerText(), 'Réaliste');
+});
+
+test('C13 · à la création, la mensualité du nouvel objectif ne réduit pas sa propre base', async (t) => {
+  const page = await open(t, { ...base, incomes: [salary], goals: [] }, '/objectifs');
+  await page.getByRole('button', { name: '+ Ajouter', exact: true }).click();
+  const form = page.getByRole('dialog');
+  await form.locator('input[name=label]').fill('Voyage');
+  await form.locator('input[name=targetAmount]').fill('600');
+  await form.locator('input[name=monthlyContribution]').fill('60');
+  await form.getByRole('radio', { name: /Sur mon compte courant/ }).check();
+  await form.locator('button[type=submit]').click();
+  await page.getByText('Voyage', { exact: true }).waitFor();
+  assert.equal((await stored(page)).goals[0].status, 'realistic');
+  assert.equal(await page.getByText(/^(Réaliste|Réalisable|Fragile|À reporter)$/).innerText(), 'Réaliste');
+});
+
+test('C13 · deux objectifs trop ambitieux affichent la marge après l’autre objectif', async (t) => {
+  const other = { ...target, id: 'g2', label: 'Vélo', monthlyContribution: 70 };
+  const page = await open(t, { ...base, incomes: [salary], goals: [target, other] }, '/objectifs');
+  await page.getByText('Vélo', { exact: true }).waitFor();
+  const reasons = (await page.getByText(/^Tu prévois/).allTextContents()).map(clean);
+  assert.deepEqual(reasons, ['Tu prévois 60,00 €/mois pour 30,00 €/mois disponibles.', 'Tu prévois 70,00 €/mois pour 40,00 €/mois disponibles.']);
+});

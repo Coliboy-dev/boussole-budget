@@ -1,4 +1,4 @@
-// Build avec les inscriptions et les clés gérées activées. Les API sont simulées dans Chromium.
+// Build avec les inscriptions et les clés gérées activées. Exporte le même drapeau d’inscription pour les tests. Les API sont simulées dans Chromium.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
@@ -9,6 +9,7 @@ import { deriveKey, encryptText, newSalt } from '../../lib/cloud-crypto.ts';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const baseURL = process.env.BOUSSOLE_TEST_URL ?? 'http://localhost:3000';
 const origin = 'https://c0-test.supabase.test';
+const signupEnabled = process.env.NEXT_PUBLIC_ACCOUNT_SIGNUP_ENABLED === 'true';
 const userId = '11111111-1111-4111-8111-111111111111';
 const material = Buffer.alloc(32, 93).toString('base64');
 const budgetKey = 'boussole-budget-v2';
@@ -83,7 +84,7 @@ async function device(t, copy) {
 
 // Le budget se crée d’abord sur l’appareil, puis « Sauvegarder en ligne » ouvre l’inscription.
 async function startGuestBudget(page) {
-  await button(page, 'Commencer mon budget').click();
+  if (signupEnabled) await button(page, 'Commencer mon budget').click();
   await firstBudget(page);
   await heading(page, 'Ton premier budget').waitFor();
 }
@@ -104,7 +105,14 @@ async function associateBudget(page, copy) {
   assert.ok(copy.vault, 'la copie en ligne a été créée');
 }
 
-const alreadyHaveAccount = (page) => page.getByRole('link', { name: 'J’ai déjà un compte', exact: true });
+async function openSignIn(page) {
+  if (signupEnabled) {
+    await page.getByRole('link', { name: 'J’ai déjà un compte', exact: true }).click();
+  } else {
+    await page.goto('/synchronisation');
+  }
+  await heading(page, 'Te connecter').waitFor();
+}
 
 // « J’ai déjà un compte » mène à Compte et sécurité ; une fois le budget récupéré, on revient sur l’accueil.
 async function openTodayAfterRestore(page) {
@@ -123,8 +131,7 @@ async function choosePassword(page, password = 'un mot de passe long') {
 }
 
 async function signIn(page, password) {
-  await alreadyHaveAccount(page).click();
-  await heading(page, 'Te connecter').waitFor();
+  await openSignIn(page);
   await page.locator('input[name=email]').fill('capiste@example.test');
   await page.locator('input[name=password]').fill(password);
   await button(page, 'Me connecter').click();
@@ -132,7 +139,7 @@ async function signIn(page, password) {
 
 async function openRecovery(page) {
   await page.goto('/dashboard');
-  await alreadyHaveAccount(page).click();
+  await openSignIn(page);
   await button(page, 'Mot de passe oublié ou pas encore créé ?').click();
   await page.locator('input[name=email]').fill('capiste@example.test');
   await button(page, 'Recevoir un code').click();
@@ -161,7 +168,12 @@ test('le risque lié au mot de passe et à la messagerie figure dans la confiden
   const notice = page.getByText(/Toute personne qui a accès à ta boîte e-mail peut ouvrir ta copie en ligne/);
   await page.goto('/dashboard');
   await startGuestBudget(page);
-  await page.getByRole('link', { name: 'Sauvegarder en ligne', exact: true }).click();
+  const onlineBackup = page.getByRole('link', { name: 'Sauvegarder en ligne', exact: true });
+  if (!signupEnabled) {
+    assert.equal(await onlineBackup.count(), 0);
+    return;
+  }
+  await onlineBackup.click();
   await heading(page, 'Créer mon compte').waitFor();
   await notice.waitFor();
   await button(page, 'J’ai déjà un compte').click();
@@ -169,7 +181,7 @@ test('le risque lié au mot de passe et à la messagerie figure dans la confiden
   assert.equal(await notice.count(), 0);
 });
 
-test('inscription par code puis mot de passe, et connexion par mot de passe sur un autre appareil, sans code local imposé', async (t) => {
+test('inscription par code puis mot de passe, et connexion par mot de passe sur un autre appareil, sans code local imposé', { skip: !signupEnabled }, async (t) => {
   const copy = { otp: [], keyRequests: 0 };
   const first = await device(t, copy);
   await first.goto('/dashboard');
@@ -206,7 +218,7 @@ test('mot de passe oublié : code e-mail sans création de compte, puis nouveau 
   const copy = { otp: [], keyRequests: 0, password: 'ancien mot de passe' };
   const page = await device(t, copy);
   await page.goto('/dashboard');
-  await alreadyHaveAccount(page).click();
+  await openSignIn(page);
   await button(page, 'Mot de passe oublié ou pas encore créé ?').click();
   await page.locator('input[name=email]').fill('capiste@example.test');
   await button(page, 'Recevoir un code').click();
@@ -318,7 +330,7 @@ async function withAuthenticator(page) {
   return { cdp, authenticatorId };
 }
 
-test('Face ID et le code sont proposés une fois après la connexion, puis activés', async (t) => {
+test('Face ID et le code sont proposés une fois après la connexion, puis activés', { skip: !signupEnabled }, async (t) => {
   const copy = { otp: [], keyRequests: 0 };
   const page = await device(t, copy);
   const { cdp, authenticatorId } = await withAuthenticator(page);

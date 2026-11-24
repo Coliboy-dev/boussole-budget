@@ -77,7 +77,7 @@ for (const [name, state] of Object.entries(scenarios)) {
     await views.getByRole('button', { name: 'Charges' }).click();
     assert.equal(await views.getByRole('button', { name: 'Charges' }).getAttribute('aria-pressed'), 'true');
     assert.equal(await spendingRegion.count(), 0);
-    const rows = monthlyChargesByCategory(state.expenses);
+    const rows = monthlyChargesByCategory(state.expenses, today);
     const parts = chartParts(rows, ({ category }) => category);
     const section = page.getByRole('region', { name: 'Répartition des charges' });
     await section.waitFor();
@@ -90,7 +90,7 @@ for (const [name, state] of Object.entries(scenarios)) {
 
       // Répartition du mois : mêmes montants qu'avant la refonte.
       const month = clean(await page.getByRole('region', { name: 'Répartition du mois' }).innerText());
-      const certain = toCents(calculateTotalMonthlyIncome(state.incomes.filter((income) => income.isConfirmed)));
+      const certain = toCents(calculateTotalMonthlyIncome(state.incomes.filter((income) => income.isConfirmed), today));
       const charges = toCents(summary.totalMonthlyExpenses);
       const debts = toCents(summary.totalMonthlyDebts);
       const envelopes = toCents(summary.totalMonthlyEnvelopes);
@@ -205,4 +205,25 @@ test('Bulle « Dépense ajoutée » : se ferme après 10 secondes et ne suit pas
   await nav.getByRole('link', { name: 'Aujourd’hui' }).click();
   await page.getByRole('heading', { name: 'Aujourd’hui', level: 1 }).waitFor();
   assert.equal(await undo.count(), 0, 'pas de bulle sur l’écran suivant');
+});
+
+
+test('C08 · Budget aligne le total du graphique des charges et la répartition sur les séries actives', async (t) => {
+  const state = {
+    ...scenarios['sans-echeance'],
+    incomes: [
+      { id: 'salaire', label: 'Salaire', type: 'salary', amount: 100, frequency: 'monthly', expectedDate: today, isConfirmed: true },
+      { id: 'ancien', label: 'Ancien revenu', type: 'other', amount: 200, frequency: 'monthly', expectedDate: '2026-05-01', endDate: '2026-05-01', isConfirmed: true },
+    ],
+    expenses: [
+      { id: 'courante', label: 'Énergie', category: 'energy', amount: 20, frequency: 'monthly', dueDate: today, isRecurring: true, isPaid: false },
+      { id: 'terminee', label: 'Ancienne charge', category: 'rent', amount: 80, frequency: 'monthly', dueDate: '2026-05-01', endDate: '2026-05-01', isRecurring: true, isPaid: false },
+    ],
+  };
+  const page = await open(t, state, '/budget');
+  await page.getByRole('group', { name: 'Vue' }).getByRole('button', { name: 'Charges', exact: true }).click();
+  const chart = page.getByRole('region', { name: 'Répartition des charges' });
+  const breakdown = page.getByRole('region', { name: 'Répartition du mois' });
+  assert.match(clean(await chart.getByRole('img').getAttribute('aria-label')), /Total 20,00 €/);
+  assert.match(clean(await breakdown.innerText()), /Revenus certains : 100,00 €.*Charges 20,00 €.*Reste 80,00 €/);
 });

@@ -6,23 +6,23 @@ import Modal from '@/components/ui/Modal';
 import ExpenseForm from '@/components/forms/ExpenseForm';
 import ExpenseList from '@/components/budget/ExpenseList';
 import Card from '@/components/ui/Card';
-import { calculateTotalMonthlyExpenses, calculateTotalMonthlyIncome, formatCurrency } from '@/lib/budget-calculations';
+import { calculateTotalMonthlyExpenses, formatCurrency } from '@/lib/budget-calculations';
 import type { Expense, ExpenseCategory } from '@/lib/types';
+import { toCents } from '@/lib/money';
 import { expenseCategoryLabels } from '@/components/ui/icons';
 
 export default function ChargesPage() {
-  const { expenses, incomes, summary, addExpense, updateExpense, deleteExpense } = useApp();
+  const { expenses, summary, today, addExpense, updateExpense, deleteExpense } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<Expense | null>(null);
 
-  const totalExpenses = calculateTotalMonthlyExpenses(expenses);
-  const totalIncome = calculateTotalMonthlyIncome(incomes);
-  const ratio = totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0;
-
+  const totalExpenses = summary.totalMonthlyExpenses;
+  const totalIncome = summary.totalMonthlyIncome;
+  const ratio = totalIncome > 0 ? (toCents(totalExpenses) / toCents(totalIncome)) * 100 : 0;
   const topCategory = Object.keys(expenseCategoryLabels)
     .map((category) => ({
       name: expenseCategoryLabels[category as ExpenseCategory],
-      amount: calculateTotalMonthlyExpenses(expenses.filter((expense) => expense.category === category)),
+      amount: calculateTotalMonthlyExpenses(expenses.filter((expense) => expense.category === category), today),
     }))
     .filter(({ amount }) => amount > 0)
     .sort((a, b) => b.amount - a.amount)[0];

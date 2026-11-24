@@ -203,6 +203,8 @@ export interface BudgetSummary {
   totalMonthlyChildExpenses: number;
   safetyReserve: number;
   trueAvailable: number; // vraiDisponible
+  /** Marge mensuelle prudente avant les objectifs, éventuellement négative. */
+  monthlyMargin: number;
   savingsCapacity: number;
   emptyBudget: boolean;
   riskLevel: 'safe' | 'fragile' | 'danger';
